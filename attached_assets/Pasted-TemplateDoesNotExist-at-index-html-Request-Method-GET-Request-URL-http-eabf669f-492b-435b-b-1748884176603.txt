@@ -1,0 +1,457 @@
+TemplateDoesNotExist at /
+index.html
+Request Method:	GET
+Request URL:	http://eabf669f-492b-435b-b85a-6332b4265af5-00-2jrzkcqoqv3wb.riker.replit.dev/
+Django Version:	5.0.2
+Exception Type:	TemplateDoesNotExist
+Exception Value:	
+index.html
+Exception Location:	/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/template/loader.py, line 47, in select_template
+Raised during:	django.views.generic.base.TemplateView
+Python Executable:	/home/runner/workspace/.pythonlibs/bin/python
+Python Version:	3.12.7
+Python Path:	
+['/home/runner/workspace/backend',
+ '/nix/store/lc7qv2ldzrs1aq3hbyzmbgvn0h2w26pl-sitecustomize/lib/python/site-packages',
+ '/nix/store/z0gpy18cc2s8i3y31vhad6acqvcaw6c9-python3.12-pip-24.0/lib/python3.12/site-packages',
+ '/nix/store/nb21sc3npfc8gvazwnrjxpvb5d48jysx-python3-3.12.7/lib/python312.zip',
+ '/nix/store/nb21sc3npfc8gvazwnrjxpvb5d48jysx-python3-3.12.7/lib/python3.12',
+ '/nix/store/nb21sc3npfc8gvazwnrjxpvb5d48jysx-python3-3.12.7/lib/python3.12/lib-dynload',
+ '/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages',
+ '/nix/store/nb21sc3npfc8gvazwnrjxpvb5d48jysx-python3-3.12.7/lib/python3.12/site-packages',
+ '/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages',
+ '/nix/store/h25lasfc88hing94ks429x393chr9jci-python3.12-setuptools-75.1.1/lib/python3.12/site-packages']
+Server time:	Tue, 03 Jun 2025 02:08:16 +0900
+Template-loader postmortem
+Django tried loading these templates, in this order:
+
+Using engine django:
+
+django.template.loaders.filesystem.Loader: /home/runner/workspace/frontend/build/index.html (Source does not exist)
+django.template.loaders.app_directories.Loader: /home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/contrib/admin/templates/index.html (Source does not exist)
+django.template.loaders.app_directories.Loader: /home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/contrib/auth/templates/index.html (Source does not exist)
+django.template.loaders.app_directories.Loader: /home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/rest_framework/templates/index.html (Source does not exist)
+Traceback Switch to copy-and-paste view
+/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/core/handlers/exception.py, line 55, in inner
+                response = get_response(request)
+                               ^^^^^^^^^^^^^^^^^^^^^ …
+Local vars
+/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/core/handlers/base.py, line 220, in _get_response
+                response = response.render()
+                                ^^^^^^^^^^^^^^^^^ …
+Local vars
+/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/template/response.py, line 114, in render
+            self.content = self.rendered_content
+                                ^^^^^^^^^^^^^^^^^^^^^ …
+Local vars
+/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/template/response.py, line 90, in rendered_content
+        template = self.resolve_template(self.template_name)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ …
+Local vars
+/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/template/response.py, line 72, in resolve_template
+            return select_template(template, using=self.using)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ …
+Local vars
+/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/template/loader.py, line 47, in select_template
+        raise TemplateDoesNotExist(", ".join(template_name_list), chain=chain)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ …
+Local vars
+Request information
+USER
+AnonymousUser
+
+GET
+No GET data
+
+POST
+No POST data
+
+FILES
+No FILES data
+
+COOKIES
+No cookie data
+
+META
+Variable	Value
+CFLAGS	
+('-isystem '
+ '/nix/store/1m3qlydy99kanbnlrqh489hhzgz7ryrd-Toolchains/XcodeDefault.xctoolchain/include '
+ '-isystem /nix/store/qj9byzfvh7dd61kk0aglj7cwqj1xqg6l-zlib-1.3.1-dev/include')
+COLORTERM	
+'truecolor'
+CONTENT_LENGTH	
+''
+CONTENT_TYPE	
+'text/plain'
+DATABASE_URL	
+'postgresql://neondb_owner:npg_i9ZVtCv5XqIE@ep-late-art-a674e54l.us-west-2.aws.neon.tech/neondb?sslmode=require'
+DISPLAY	
+':0'
+DJANGO_SETTINGS_MODULE	
+'backend.settings'
+DOCKER_CONFIG	
+'/home/runner/workspace/.config/docker'
+GATEWAY_INTERFACE	
+'CGI/1.1'
+GIT_ASKPASS	
+'********************'
+GIT_CONFIG_GLOBAL	
+'/run/replit/user/13787682/.config/git/config'
+GIT_EDITOR	
+'replit-git-editor'
+GI_TYPELIB_PATH	
+''
+HISTCONTROL	
+'ignoredups'
+HISTFILE	
+'/run/replit/user/13787682/.bash_history'
+HISTFILESIZE	
+'100000'
+HISTSIZE	
+'10000'
+HOME	
+'/home/runner'
+HOSTNAME	
+'9760cbd064f5'
+HTTP_ACCEPT	
+'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7'
+HTTP_ACCEPT_ENCODING	
+'identity, gzip, deflate, br, zstd'
+HTTP_ACCEPT_LANGUAGE	
+'ko,en;q=0.9,ja;q=0.8'
+HTTP_HOST	
+'eabf669f-492b-435b-b85a-6332b4265af5-00-2jrzkcqoqv3wb.riker.replit.dev'
+HTTP_REFERER	
+'https://eabf669f-492b-435b-b85a-6332b4265af5-00-2jrzkcqoqv3wb.riker.replit.dev:3000/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar44b%3A'
+HTTP_SEC_CH_UA	
+'"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"'
+HTTP_SEC_CH_UA_MOBILE	
+'?0'
+HTTP_SEC_CH_UA_PLATFORM	
+'"Windows"'
+HTTP_SEC_FETCH_DEST	
+'iframe'
+HTTP_SEC_FETCH_MODE	
+'navigate'
+HTTP_SEC_FETCH_SITE	
+'same-origin'
+HTTP_SEC_FETCH_STORAGE_ACCESS	
+'active'
+HTTP_UPGRADE_INSECURE_REQUESTS	
+'1'
+HTTP_USER_AGENT	
+('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like '
+ 'Gecko) Chrome/137.0.0.0 Safari/537.36')
+HTTP_X_FORWARDED_FOR	
+'113.198.180.213, 10.81.3.23'
+HTTP_X_FORWARDED_PROTO	
+'https'
+HTTP_X_REPLIT_USER_BIO	
+''
+HTTP_X_REPLIT_USER_ID	
+''
+HTTP_X_REPLIT_USER_NAME	
+''
+HTTP_X_REPLIT_USER_PROFILE_IMAGE	
+''
+HTTP_X_REPLIT_USER_ROLES	
+''
+HTTP_X_REPLIT_USER_TEAMS	
+''
+HTTP_X_REPLIT_USER_URL	
+''
+LANG	
+'en_US.UTF-8'
+LDFLAGS	
+('-L/nix/store/lv6nackqis28gg7l2ic43f6nk52hb39g-zlib-1.3.1/lib '
+ '-L/nix/store/ys2ll3pdiv6a4ynb0qwskncmrh5a2ypf-zlib-1.3.1-static/lib '
+ '-L/nix/store/1m3qlydy99kanbnlrqh489hhzgz7ryrd-Toolchains/XcodeDefault.xctoolchain/lib '
+ '-L/nix/store/qj9byzfvh7dd61kk0aglj7cwqj1xqg6l-zlib-1.3.1-dev/lib')
+LD_AUDIT	
+'/nix/store/n5x1kgbz8zjh63ymsijbislyi1n1hir6-replit_rtld_loader-1/rtld_loader.so'
+LIBGL_DRIVERS_PATH	
+'/nix/store/1z62rda9iqnxi4ryvgmyvfaj979hgk7s-mesa-24.2.8-drivers/lib/dri'
+LOCALE_ARCHIVE	
+'/usr/lib/locale/locale-archive'
+LS_COLORS	
+'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.7z=01;31:*.ace=01;31:*.alz=01;31:*.apk=01;31:*.arc=01;31:*.arj=01;31:*.bz=01;31:*.bz2=01;31:*.cab=01;31:*.cpio=01;31:*.crate=01;31:*.deb=01;31:*.drpm=01;31:*.dwm=01;31:*.dz=01;31:*.ear=01;31:*.egg=01;31:*.esd=01;31:*.gz=01;31:*.jar=01;31:*.lha=01;31:*.lrz=01;31:*.lz=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.lzo=01;31:*.pyz=01;31:*.rar=01;31:*.rpm=01;31:*.rz=01;31:*.sar=01;31:*.swm=01;31:*.t7z=01;31:*.tar=01;31:*.taz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tgz=01;31:*.tlz=01;31:*.txz=01;31:*.tz=01;31:*.tzo=01;31:*.tzst=01;31:*.udeb=01;31:*.war=01;31:*.whl=01;31:*.wim=01;31:*.xz=01;31:*.z=01;31:*.zip=01;31:*.zoo=01;31:*.zst=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:'
+MPLBACKEND	
+'Agg'
+NIXPKGS_ALLOW_UNFREE	
+'1'
+NIX_CFLAGS_COMPILE	
+('-isystem '
+ '/nix/store/1m3qlydy99kanbnlrqh489hhzgz7ryrd-Toolchains/XcodeDefault.xctoolchain/include '
+ '-isystem /nix/store/qj9byzfvh7dd61kk0aglj7cwqj1xqg6l-zlib-1.3.1-dev/include')
+NIX_LDFLAGS	
+('-L/nix/store/lv6nackqis28gg7l2ic43f6nk52hb39g-zlib-1.3.1/lib '
+ '-L/nix/store/ys2ll3pdiv6a4ynb0qwskncmrh5a2ypf-zlib-1.3.1-static/lib '
+ '-L/nix/store/1m3qlydy99kanbnlrqh489hhzgz7ryrd-Toolchains/XcodeDefault.xctoolchain/lib '
+ '-L/nix/store/qj9byzfvh7dd61kk0aglj7cwqj1xqg6l-zlib-1.3.1-dev/lib')
+NIX_PATH	
+'nixpkgs=/home/runner/.nix-defexpr/channels/nixpkgs-stable-24_05:/home/runner/.nix-defexpr/channels'
+NIX_PROFILES	
+'/nix/var/nix/profiles/default /home/runner/.nix-profile'
+NIX_PS1	
+'\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ '
+OLDPWD	
+'/home/runner/workspace'
+PATH	
+'/nix/store/1m3qlydy99kanbnlrqh489hhzgz7ryrd-Toolchains/XcodeDefault.xctoolchain/bin:/nix/store/xlvzg81dgimxfjxpxwr2w3q1ca3l5lwa-redis-7.2.4/bin:/nix/store/i0xdhksf6v2a5kmwylwavnl8bkfi0f2p-xcodebuild-0.1.2-pre/bin:/home/runner/workspace/.pythonlibs/bin:/nix/store/nqlc7ymyglrsfx1hlssssq6zzy0hmk2c-python-wrapped-0.1.0/bin:/nix/store/9b3allf9ff0mvgmvd168jzkxmbp4gcz6-pip-wrapper/bin:/nix/store/jb13pgzm1zxyzi4b17p6daf8hl2grrr5-poetry-wrapper/bin:/nix/store/kmh81wija3rfppc2nmffwr07j5vmiz9z-uv-0.5.11/bin:/nix/store/r2wrscmjzn4f2f7wk7q2ms2h96mjwzv7-npx/bin:/home/runner/workspace/.config/npm/node_global/bin:/home/runner/workspace/node_modules/.bin:/nix/store/rrz8cqhldyl17bbs60g7d8vbaadkxc40-nodejs-20.18.1-wrapped/bin:/nix/store/5q4dz85wgqhifng1fk2xy85pslkmiqvs-bun-1.2.12/bin:/nix/store/z8s3r4vwf4r26g2d7shnw5lva6ihim8f-pnpm-9.15.0/bin:/nix/store/jcgdksj946l5l42c2y9ks2l4g6n74h3f-yarn-1.22.22/bin:/nix/store/2s17mrby0ph00z22rkabfs9vzpzx1r70-prettier-3.3.3/bin:/nix/store/0z5iwcvalafm3j2c5pfhllsfbxrbyzf4-postgresql-16.5/bin:/nix/store/sww4j97gzg3wl9rykrmjfy8736iiz11n-pid1/bin:/nix/store/iz3j6pp7zlvk5kzwfiawz6g4lph67vji-replit-runtime-path/bin:/home/runner/.nix-profile/bin:/home/runner/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+PATH_INFO	
+'/'
+PGDATABASE	
+'neondb'
+PGHOST	
+'ep-late-art-a674e54l.us-west-2.aws.neon.tech'
+PGPASSWORD	
+'********************'
+PGPORT	
+'5432'
+PGUSER	
+'neondb_owner'
+PKG_CONFIG_PATH	
+'/nix/store/qj9byzfvh7dd61kk0aglj7cwqj1xqg6l-zlib-1.3.1-dev/lib/pkgconfig'
+PKG_CONFIG_PATH_FOR_TARGET	
+'/nix/store/qj9byzfvh7dd61kk0aglj7cwqj1xqg6l-zlib-1.3.1-dev/lib/pkgconfig'
+POETRY_CACHE_DIR	
+'/home/runner/workspace/.cache/pypoetry'
+POETRY_CONFIG_DIR	
+'/nix/store/9yrffddwdb6k6i5nxjh8ardgmclc3c5y-poetry-config'
+POETRY_DOWNLOAD_WITH_CURL	
+'1'
+POETRY_INSTALLER_MODERN_INSTALLATION	
+'1'
+POETRY_PIP_FROM_PATH	
+'1'
+POETRY_PIP_NO_ISOLATE	
+'1'
+POETRY_PIP_NO_PREFIX	
+'1'
+POETRY_PIP_USE_PIP_CACHE	
+'1'
+POETRY_USE_USER_SITE	
+'1'
+POETRY_VIRTUALENVS_CREATE	
+'0'
+PROMPT_DIRTRIM	
+'2'
+PWD	
+'/home/runner/workspace/backend'
+PYTHONPATH	
+'/nix/store/lc7qv2ldzrs1aq3hbyzmbgvn0h2w26pl-sitecustomize/lib/python/site-packages:/nix/store/z0gpy18cc2s8i3y31vhad6acqvcaw6c9-python3.12-pip-24.0/lib/python3.12/site-packages'
+PYTHONUSERBASE	
+'/home/runner/workspace/.pythonlibs'
+QUERY_STRING	
+''
+REMOTE_ADDR	
+'172.31.128.80'
+REMOTE_HOST	
+''
+REPLIT_BASHRC	
+'/nix/store/7mbv5hcsh9cj7pk4maggp301fma07cm0-replit-bashrc/bashrc'
+REPLIT_CLI	
+'/nix/store/kg7y2cbq8jfcs6qj2hikk83q594qnzpc-pid1-0.0.1/bin/replit'
+REPLIT_CLUSTER	
+'riker'
+REPLIT_DB_URL	
+'https://kv.replit.com/v0/eyJhbGciOiJIUzUxMiIsImlzcyI6ImNvbm1hbiIsImtpZCI6InByb2Q6MSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjb25tYW4iLCJleHAiOjE3NDg5OTM3OTUsImlhdCI6MTc0ODg4MjE5NSwiZGF0YWJhc2VfaWQiOiJlYWJmNjY5Zi00OTJiLTQzNWItYjg1YS02MzMyYjQyNjVhZjUifQ.St14PbQ92UGrNwmUYXD4Cfunwnp5UY-lLM4JIqBJKW7utfD01SA5CaG4Dd14l6bq2Gk8N8AkIi8hb-3ra0touw'
+REPLIT_DEV_DOMAIN	
+'eabf669f-492b-435b-b85a-6332b4265af5-00-2jrzkcqoqv3wb.riker.replit.dev'
+REPLIT_DOMAINS	
+'eabf669f-492b-435b-b85a-6332b4265af5-00-2jrzkcqoqv3wb.riker.replit.dev'
+REPLIT_ENVIRONMENT	
+'production'
+REPLIT_LD_AUDIT	
+'/nix/store/n5x1kgbz8zjh63ymsijbislyi1n1hir6-replit_rtld_loader-1/rtld_loader.so'
+REPLIT_LD_LIBRARY_PATH	
+'/nix/store/cgac6vgdqpymd47frmlgv85ckhy85zs7-cpplibs/lib:/nix/store/bzk3q2l71qwhycsip23y6rl5n881la4n-zlib-1.3.1/lib:/nix/store/26hcp8h792wl0h52c5r94qakhvk6q717-glib-2.82.1/lib:/nix/store/ikjw6a952jd9wn5k06mkj710xzabssr0-libX11-1.8.10/lib:/nix/store/d5y0sl4vwsb9m99r18zh1mx4fw9y70g6-libXext-1.3.6/lib:/nix/store/zz9384x4kbwanpviwwm5lkh3cvnh4nix-libXinerama-1.1.5/lib:/nix/store/622maagcm5lmh4g21y0ks10zgrkjwq4y-libXcursor-1.2.2/lib:/nix/store/1741axgq503c1r4bzwy1ysp847rsfrf0-libXrandr-1.5.4/lib:/nix/store/mcr8zrlyg2r6idl6ks60858q5q0i6i2a-libXi-1.8.2/lib:/nix/store/y0qjc54zqhb8ksc8iddsadmddkg9vyk9-libXxf86vm-1.1.5/lib:/nix/store/cgac6vgdqpymd47frmlgv85ckhy85zs7-cpplibs/lib:/nix/store/bzk3q2l71qwhycsip23y6rl5n881la4n-zlib-1.3.1/lib:/nix/store/26hcp8h792wl0h52c5r94qakhvk6q717-glib-2.82.1/lib:/nix/store/ikjw6a952jd9wn5k06mkj710xzabssr0-libX11-1.8.10/lib:/nix/store/d5y0sl4vwsb9m99r18zh1mx4fw9y70g6-libXext-1.3.6/lib:/nix/store/zz9384x4kbwanpviwwm5lkh3cvnh4nix-libXinerama-1.1.5/lib:/nix/store/622maagcm5lmh4g21y0ks10zgrkjwq4y-libXcursor-1.2.2/lib:/nix/store/1741axgq503c1r4bzwy1ysp847rsfrf0-libXrandr-1.5.4/lib:/nix/store/mcr8zrlyg2r6idl6ks60858q5q0i6i2a-libXi-1.8.2/lib:/nix/store/y0qjc54zqhb8ksc8iddsadmddkg9vyk9-libXxf86vm-1.1.5/lib:/nix/store/cgac6vgdqpymd47frmlgv85ckhy85zs7-cpplibs/lib:/nix/store/bzk3q2l71qwhycsip23y6rl5n881la4n-zlib-1.3.1/lib:/nix/store/26hcp8h792wl0h52c5r94qakhvk6q717-glib-2.82.1/lib:/nix/store/ikjw6a952jd9wn5k06mkj710xzabssr0-libX11-1.8.10/lib:/nix/store/d5y0sl4vwsb9m99r18zh1mx4fw9y70g6-libXext-1.3.6/lib:/nix/store/zz9384x4kbwanpviwwm5lkh3cvnh4nix-libXinerama-1.1.5/lib:/nix/store/622maagcm5lmh4g21y0ks10zgrkjwq4y-libXcursor-1.2.2/lib:/nix/store/1741axgq503c1r4bzwy1ysp847rsfrf0-libXrandr-1.5.4/lib:/nix/store/mcr8zrlyg2r6idl6ks60858q5q0i6i2a-libXi-1.8.2/lib:/nix/store/y0qjc54zqhb8ksc8iddsadmddkg9vyk9-libXxf86vm-1.1.5/lib:/nix/store/lv6nackqis28gg7l2ic43f6nk52hb39g-zlib-1.3.1/lib:/nix/store/ys2ll3pdiv6a4ynb0qwskncmrh5a2ypf-zlib-1.3.1-static/lib:/nix/store/1m3qlydy99kanbnlrqh489hhzgz7ryrd-Toolchains/XcodeDefault.xctoolchain/lib:/nix/store/qj9byzfvh7dd61kk0aglj7cwqj1xqg6l-zlib-1.3.1-dev/lib'
+REPLIT_NIX_CHANNEL	
+'stable-24_05'
+REPLIT_PID1_FLAG_NIXMODULES_BEFORE_REPLIT_NIX	
+'1'
+REPLIT_PID1_FLAG_REPLIT_RTLD_LOADER	
+'1'
+REPLIT_PID1_VERSION	
+'0.0.0-b1d6c11'
+REPLIT_PID2	
+'true'
+REPLIT_PYTHONPATH	
+'/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages:/nix/store/h25lasfc88hing94ks429x393chr9jci-python3.12-setuptools-75.1.1/lib/python3.12/site-packages'
+REPLIT_PYTHON_LD_LIBRARY_PATH	
+'/nix/store/cgac6vgdqpymd47frmlgv85ckhy85zs7-cpplibs/lib:/nix/store/bzk3q2l71qwhycsip23y6rl5n881la4n-zlib-1.3.1/lib:/nix/store/26hcp8h792wl0h52c5r94qakhvk6q717-glib-2.82.1/lib:/nix/store/ikjw6a952jd9wn5k06mkj710xzabssr0-libX11-1.8.10/lib:/nix/store/d5y0sl4vwsb9m99r18zh1mx4fw9y70g6-libXext-1.3.6/lib:/nix/store/zz9384x4kbwanpviwwm5lkh3cvnh4nix-libXinerama-1.1.5/lib:/nix/store/622maagcm5lmh4g21y0ks10zgrkjwq4y-libXcursor-1.2.2/lib:/nix/store/1741axgq503c1r4bzwy1ysp847rsfrf0-libXrandr-1.5.4/lib:/nix/store/mcr8zrlyg2r6idl6ks60858q5q0i6i2a-libXi-1.8.2/lib:/nix/store/y0qjc54zqhb8ksc8iddsadmddkg9vyk9-libXxf86vm-1.1.5/lib'
+REPLIT_RIPPKGS_INDICES	
+'/nix/store/l5gcmdp908sji4wchfp8csflhjcgnmm3-rippkgs-indices'
+REPLIT_RTLD_LOADER	
+'1'
+REPLIT_RUN_PATH	
+'/run/replit'
+REPLIT_SESSION	
+'nasuka-lDfU'
+REPLIT_SUBCLUSTER	
+'paid'
+REPLIT_USER	
+'nasuka'
+REPLIT_USERID	
+'13787682'
+REPLIT_USER_RUN	
+'/run/replit/user/13787682'
+REPL_HOME	
+'/home/runner/workspace'
+REPL_ID	
+'eabf669f-492b-435b-b85a-6332b4265af5'
+REPL_IDENTITY	
+'v2.public.Q2lSbFlXSm1Oalk1WmkwME9USmlMVFF6TldJdFlqZzFZUzAyTXpNeVlqUXlOalZoWmpVU0JtNWhjM1ZyWVJvT1RtRnlZWFJPYVcxVGFYTmxiMjRpSkdWaFltWTJOamxtTFRRNU1tSXRORE0xWWkxaU9EVmhMVFl6TXpKaU5ESTJOV0ZtTlRpaXhNa0dXZzBLQlhKcGEyVnlFZ1J3WVdsa6N4m80PDzTbmKvWNEbkpXtr53CDjJ9qZTw0jiZmpCQ32QhErpSSncrSowjMMhr_ds96oD_yve9eftPJ_euQTgs.R0FFaUJtTnZibTFoYmhLQkNIWXlMbkIxWW14cFl5NVJNbVF6VTFkb1RGbHFUak5WVm14U1pHMU9hV0Z1UWpOVFZrNUZVVmR3VldKWVdYWlJhMHB2VWtaU05sUXdPWFZSVjJoMlVUQmtRbFpYUmt0YU1qbHlWMnhrUjJGV2NIRlhWRXBRVmpGc01GUnJVbkpsVm14d1RVUkNUbVZzV25CVVJtUktUa1UxV0ZKWVVrOWhhekUyVkZjeFNrMUZNWEZYVkVaYVZqRnJlRkl5Wkc1Vk1FcDBUbGRvYWsweFdubFhWa3AyVW1zNVRGUkZWalZWVm14b1VXNXNTbEp0VG5SaVNFcGhWMFZzYUZGdGJIWlNWMDVJVW01Q1lWRXdhM2haV0hCS1pGZE9TVlp0YkdsU01uaHhWRWMxWVZac2IzcFhhelZOVmtaYVExWkZaRVpOTWtwWFlrWk9WMDB5ZUZCWGJuQnpUa1pHYzFkdVJtdGhNbWQ2VjJ4amVHUkdaRmxVV0doVlZsaENTbFpXV25abFJUbFZWMjB4VjJKdFRUazFVVmhaV1VkRFUwRlRhWEpNYkhWWmR6aHhiR3h3YkMxMVZFdDJPR3N0ZGxrd1RrVlRhSFF3VWpobkxWWmFNazFJVEZGemJHZGZRa3BpVm1ZNFRtY3laMDVxUzJsV2FWTkJTalExUTE4MFoyODFUMUZCZHk1U01FWkdZVlZLZEZSdVdtbGlWRVp2V1cxb1RWbHJSblZYV0d4TlltdEplRmRYTVRSalJtdzFUbFpLVG1KV1NUSldWRVpyVFVkV2RGTnNXbFJpYmtKWFZtMHhORlV4VW5KVmJVWk9WbTVDVjFVeWRFOVdSbHBaWVVWV1ZtVnJTbkpWYWtFeFUxWkdjbE5zV2s1U2JIQlRWbTF3VDFsWFVsZGlNMmhUWWxkb1UxWnFTbTlrVmxaWVpFZDBhV0pGTlZoWmExWlBWbTFLVldKRlZsWmhhMHBJV2tkNGMxWnNTblZTYkVwWFZsaENTbFl5Y0VOak1XUnpVbXhvYUZOR2NGTlVWV1JUVVRGYVIxcEZaRkppVlZwSlYydFZlRlV3TVhSVmEzUlhUVlphVkZWVVNrcGtNVkp5WVVaS1YyRXhjSFpXVmxwcllqSktjMVJ1U21sVFJWcFlXVzEwZDFReGJGZFZiR1JPVFZoQ1NGZHJWakJoYXpGeVYyeHNWMUp0YUZoV1JFWmhaRWRXU1dOR1pGZGlWa3BKVmtaU1MxUXlUWGxUYWxwV1lYcHNXRlJYZUV0aU1WbDVUVlJTVkUxcldrZFVWbFpyVmtkS1JsZHNXbHBXZWtVd1YxWmFjMDVzUmxWU2JYQnBVbGhDTmxaRVJsZFpWMFY1VTJ4c1ZsWkZXbGRaYTFwaFkyeHdTR1ZGV214U2JrSkdWakl4ZDJGSFJYaGpSemxYWVd0YVZGVjZSazVsUmxwelUyeEdWMUpGU2pOV01uUmhWMjFPZEdORk1WQlhSVFI2V2tWV1drNVdjRVZTV0ZKcFlsUldVVlF3WkdGVmJVcFlZVVJLVkZKV2NIaFdhMVp5WkVkU1JXRkZjR2xpVm5CUlYwUkplRlpWTVhSWmVsSnFWMGhDUmxWclpGWk9SbHBGWWtaU2FFMVdTalpYYlhodllsZFdjbUo2UWxoV1ZURTJWMjF6ZDJWc1pGWk9XRXBVVmtkU1dWZFhhM2RPVmtweVZXMDVUMkZVUmt4VWFrazFVa1Y0YzFOWVpGTmhNWEJ2Vm14V2QwMUdXa2hPVjBab1ZqQndWbFZ0TURWWGJVcFlWV3BLVm1GcmNGQlZNVnBQWkZaa2RGSnNUbE5sYldjdw'
+REPL_IDENTITY_KEY	
+'********************'
+REPL_IMAGE	
+'gcr.io/marine-cycle-160323/nix:bf8590a3e2f0a8b70b7ca175eeed9074dffbfca9'
+REPL_LANGUAGE	
+'nix'
+REPL_OWNER	
+'nasuka'
+REPL_OWNER_ID	
+'13787682'
+REPL_PUBKEYS	
+'********************'
+REPL_SLUG	
+'workspace'
+REQUEST_METHOD	
+'GET'
+RUN_MAIN	
+'true'
+SCRIPT_NAME	
+''
+SERVER_NAME	
+'9760cbd064f5'
+SERVER_PORT	
+'3000'
+SERVER_PROTOCOL	
+'HTTP/1.1'
+SERVER_SOFTWARE	
+'WSGIServer/0.2'
+SHLVL	
+'1'
+TERM	
+'xterm-256color'
+TZ	
+'Asia/Seoul'
+USER	
+'runner'
+UV_PROJECT_ENVIRONMENT	
+'/home/runner/workspace/.pythonlibs'
+UV_PYTHON_DOWNLOADS	
+'never'
+UV_PYTHON_PREFERENCE	
+'only-system'
+XDG_CACHE_HOME	
+'/home/runner/workspace/.cache'
+XDG_CONFIG_HOME	
+'/home/runner/workspace/.config'
+XDG_DATA_DIRS	
+'/nix/store/lv6nackqis28gg7l2ic43f6nk52hb39g-zlib-1.3.1/share:/nix/store/1m3qlydy99kanbnlrqh489hhzgz7ryrd-Toolchains/XcodeDefault.xctoolchain/share:/nix/store/iz3j6pp7zlvk5kzwfiawz6g4lph67vji-replit-runtime-path/share'
+XDG_DATA_HOME	
+'/home/runner/workspace/.local/share'
+_	
+'/home/runner/workspace/.pythonlibs/bin/python'
+__EGL_VENDOR_LIBRARY_FILENAMES	
+'/nix/store/1z62rda9iqnxi4ryvgmyvfaj979hgk7s-mesa-24.2.8-drivers/share/glvnd/egl_vendor.d/50_mesa.json'
+npm_config_prefix	
+'/home/runner/workspace/.config/npm/node_global'
+wsgi.errors	
+<_io.TextIOWrapper name='<stderr>' mode='w' encoding='utf-8'>
+wsgi.file_wrapper	
+<class 'wsgiref.util.FileWrapper'>
+wsgi.input	
+<django.core.handlers.wsgi.LimitedStream object at 0x7fde94dcbdc0>
+wsgi.multiprocess	
+False
+wsgi.multithread	
+True
+wsgi.run_once	
+False
+wsgi.url_scheme	
+'http'
+wsgi.version	
+(1, 0)
+Settings
+Using settings module backend.settings
+Setting	Value
+ABSOLUTE_URL_OVERRIDES	
+{}
+ADMINS	
+[]
+ALLOWED_HOSTS	
+['*']
+APPEND_SLASH	
+True
+ASSEMBLY_API_KEY	
+'********************'
+AUTHENTICATION_BACKENDS	
+['django.contrib.auth.backends.ModelBackend']
+AUTH_PASSWORD_VALIDATORS	
+'********************'
+AUTH_USER_MODEL	
+'auth.User'
+BASE_DIR	
+PosixPath('/home/runner/workspace/backend')
+CACHES	
+{'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+CACHE_MIDDLEWARE_ALIAS	
+'default'
+CACHE_MIDDLEWARE_KEY_PREFIX	
+'********************'
+CACHE_MIDDLEWARE_SECONDS	
+600
+CELERY_ACCEPT_CONTENT	
+['json']
+CELERY_BROKER_URL	
+'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND	
+'redis://localhost:6379/0'
+CELERY_RESULT_SERIALIZER	
+'json'
+CELERY_TASK_SERIALIZER	
+'json'
+CELERY_TIMEZONE	
+'Asia/Seoul'
+CORS_ALLOWED_ORIGINS	
+[]
+CORS_ALLOW_ALL_ORIGINS	
+True
+CSRF_COOKIE_AGE	
+31449600
+CSRF_COOKIE_DOMAIN	
+None
+CSRF_COOKIE_HTTPONLY	
+False
+CSRF_COOKIE_NAME	
+'csrftoken'
+CSRF_COOKIE_PATH	
+'/'
+CSRF_COOKIE_SAMESITE	
+'Lax'
+CSRF_COOKIE_SECURE	
+False
+CSRF_FAILURE_VIEW	
+'django.views.csrf.csrf_failure'
+CSRF_HEADER_NAME	
+'HTTP_X_CSRFTOKEN'
+CSRF_TRUSTED_ORIGINS	
+[]
+CSRF_USE_SESSIONS	
+False
+DATABASES	
+{'default': {'ATOMIC_REQUESTS': False,
+             'AUTOCOMMIT': True,
+             'CONN_HEALTH_CHECKS': False,
+             'CONN_MAX_AGE': 0,
+             'ENGINE': 'django.db.backends.postgresql',
+             'HOST': 'ep-late-art-a674e54l.us-west-2.aws.neon.tech',
+             'NAME': 'neondb',
+             'OPTIONS': {},
+             'PASSWORD': '********************',
+             'PORT': '5432',
+             'TEST': {'CHARSET': None,
+                      'COLLATION': None,
