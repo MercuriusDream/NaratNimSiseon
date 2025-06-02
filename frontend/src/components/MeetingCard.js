@@ -1,24 +1,46 @@
-import React from 'react';
 
-const MeetingCard = ({ title, date, description }) => {
+import React from 'react';
+import { Link } from 'react-router-dom';
+
+const MeetingCard = ({ id, title, date, description }) => {
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('ko-KR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return dateString;
+    }
+  };
+
   return (
-    <article className="flex flex-wrap flex-1 shrink gap-4 justify-center items-start self-stretch p-4 my-auto rounded-md border border-solid basis-0 border-black border-opacity-10 min-w-60 max-md:max-w-full">
-      <div className="flex overflow-hidden min-h-[100px] w-[100px]">
-        <div className="flex flex-1 shrink basis-0 bg-zinc-300 bg-opacity-50 h-[100px] min-h-[100px] w-[100px]" />
+    <Link 
+      to={`/sessions/${id}`}
+      className="flex flex-col min-w-[240px] w-[300px] hover:shadow-lg transition-shadow"
+    >
+      <div className="flex flex-col p-6 w-full bg-white rounded-lg border border-gray-200 border-solid">
+        <div className="flex flex-col w-full">
+          <div className="flex flex-col w-full">
+            <h3 className="text-lg font-semibold leading-7 text-gray-900">
+              {title}
+            </h3>
+            <time className="mt-1 text-sm leading-5 text-gray-500">
+              {formatDate(date)}
+            </time>
+          </div>
+          {description && (
+            <p className="mt-2 text-base leading-6 text-gray-600 line-clamp-3">
+              {description}
+            </p>
+          )}
+        </div>
       </div>
-      <div className="flex-1 shrink text-black basis-0 min-w-60">
-        <h3 className="text-xl font-medium leading-snug">
-          {title}
-        </h3>
-        <p className="mt-2 text-sm leading-none text-black">
-          {date}
-        </p>
-        <p className="mt-2 text-base">
-          {description}
-        </p>
-      </div>
-    </article>
+    </Link>
   );
 };
 
-export default MeetingCard; 
+export default MeetingCard;

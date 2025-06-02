@@ -1,28 +1,42 @@
-import React from 'react';
 
-const PartyCard = ({ image, title, subtitle, description }) => {
+import React from 'react';
+import { Link } from 'react-router-dom';
+
+const PartyCard = ({ id, image, title, subtitle, description }) => {
   return (
-    <article className="flex flex-wrap flex-1 shrink gap-4 justify-center items-start self-stretch p-4 my-auto rounded-md border border-solid basis-0 border-black border-opacity-10 min-w-60 max-md:max-w-full">
-      <div className="flex overflow-hidden min-h-[100px] w-[100px]">
-        <img
-          src={image}
-          alt={title}
-          className="object-contain flex-1 shrink aspect-square basis-0 w-[100px]"
-        />
+    <Link 
+      to={`/parties/${id}`}
+      className="flex flex-col min-w-[240px] w-[300px] hover:shadow-lg transition-shadow"
+    >
+      <div className="flex flex-col w-full">
+        <div className="flex overflow-hidden flex-col justify-center items-center px-20 py-16 w-full bg-gray-50 rounded-lg max-md:px-5">
+          <img
+            loading="lazy"
+            src={image}
+            alt={`${title} 로고`}
+            className="object-contain w-20 aspect-square"
+          />
+        </div>
+        <div className="flex flex-col mt-6 w-full">
+          <div className="flex flex-col w-full">
+            <h3 className="text-lg font-semibold leading-7 text-gray-900">
+              {title}
+            </h3>
+            {subtitle && (
+              <p className="mt-1 text-base leading-6 text-gray-600">
+                {subtitle}
+              </p>
+            )}
+          </div>
+          {description && (
+            <p className="mt-2 text-base leading-6 text-gray-600">
+              {description}
+            </p>
+          )}
+        </div>
       </div>
-      <div className="flex-1 shrink text-black basis-0 min-w-60">
-        <h3 className="text-xl font-medium leading-snug">
-          {title}
-        </h3>
-        <p className="mt-2 text-sm leading-none text-black">
-          {subtitle}
-        </p>
-        <p className="mt-2 text-base">
-          {description}
-        </p>
-      </div>
-    </article>
+    </Link>
   );
 };
 
-export default PartyCard; 
+export default PartyCard;

@@ -1,31 +1,35 @@
-import React from 'react';
 
-const ContentSection = ({ title, description, buttonText, children }) => {
+import React from 'react';
+import { Link } from 'react-router-dom';
+
+const ContentSection = ({ title, description, buttonText, buttonLink, children }) => {
   return (
-    <section className="flex overflow-hidden relative z-0 flex-col justify-center px-44 py-16 w-full max-md:px-5 max-md:max-w-full">
-      <div className="flex z-0 flex-col items-center w-full text-base text-black max-md:max-w-full">
-        <h2 className="text-4xl font-bold leading-tight text-center max-md:max-w-full">
-          {title}
-        </h2>
-        <p className="mt-6 text-center max-md:max-w-full">
-          {description}
-        </p>
-        <div className="flex overflow-hidden gap-3 items-start mt-6 w-60 max-w-full font-medium text-white">
-          <button className="p-3 w-60 bg-black rounded-lg">
-            {buttonText}
-          </button>
+    <section className="flex overflow-hidden flex-col justify-center px-20 py-24 w-full bg-white max-md:px-5 max-md:max-w-full">
+      <div className="flex flex-col w-full max-md:max-w-full">
+        <div className="flex flex-wrap gap-10 justify-between items-center w-full max-md:max-w-full">
+          <div className="flex flex-col self-stretch my-auto min-w-[240px] w-[626px] max-md:max-w-full">
+            <h2 className="text-4xl font-bold leading-none text-black max-md:max-w-full">
+              {title}
+            </h2>
+            <p className="mt-4 text-xl leading-7 text-gray-600 max-md:max-w-full">
+              {description}
+            </p>
+          </div>
+          {buttonText && buttonLink && (
+            <Link
+              to={buttonLink}
+              className="gap-2 self-stretch px-6 py-3 my-auto text-base font-medium leading-6 text-white bg-blue-600 rounded-lg border border-blue-600 border-solid min-h-[44px] hover:bg-blue-700 transition-colors"
+            >
+              {buttonText}
+            </Link>
+          )}
+        </div>
+        <div className="mt-16 w-full max-md:mt-10 max-md:max-w-full">
+          {children}
         </div>
       </div>
-      <div className="flex z-0 flex-col justify-center py-5 mt-16 w-full max-md:mt-10 max-md:max-w-full">
-        {children}
-      </div>
-      <img
-        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
-        alt="Background"
-        className="object-contain absolute inset-x-0 bottom-0 z-0 w-full h-0 max-md:max-w-full"
-      />
     </section>
   );
 };
 
-export default ContentSection; 
+export default ContentSection;

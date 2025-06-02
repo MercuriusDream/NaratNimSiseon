@@ -1,69 +1,35 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-const HeroSection = ({ onFilterChange }) => {
-  const [activeFilter, setActiveFilter] = useState('all');
-
-  const handleFilterClick = (filter) => {
-    setActiveFilter(filter);
-    if (onFilterChange) {
-      onFilterChange(filter);
-    }
-  };
-
+const HeroSection = () => {
   return (
-    <section className="relative min-h-[600px] bg-gradient-to-b from-white to-gray-50">
-      <div className="container mx-auto px-4 py-20">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-5xl font-bold text-gray-900 mb-6">
-            모든 의안에 대한 자세한 분석
-          </h2>
-          <p className="text-xl text-gray-600 mb-8">
-            각 의안의 발전 추이와 정당별 입장 변화를 확인해보세요.
-          </p>
-          <button 
-            className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors mb-12"
-            onClick={() => window.location.href = '/important-topics'}
+    <section className="flex overflow-hidden flex-col justify-center items-center px-20 py-24 w-full text-center text-black bg-white max-md:px-5 max-md:max-w-full">
+      <div className="flex flex-col items-center max-w-4xl">
+        <h1 className="text-6xl font-bold leading-tight max-md:text-4xl max-md:leading-10">
+          투명한 정치, 
+          <br />
+          명확한 시선
+        </h1>
+        <p className="mt-6 text-xl leading-8 text-gray-600 max-w-2xl">
+          국회의 모든 활동을 한눈에 보고, 정치인들의 진짜 목소리를 들어보세요.
+          데이터로 보는 투명한 정치의 시작입니다.
+        </p>
+        <div className="flex gap-4 mt-10">
+          <a 
+            href="#latest-bills"
+            className="gap-2 px-8 py-4 text-lg font-medium leading-7 text-white bg-blue-600 rounded-lg border border-blue-600 border-solid hover:bg-blue-700 transition-colors"
           >
-            중요 주제 보기
-          </button>
-          
-          <div className="flex flex-wrap justify-center gap-4">
-            <button
-              onClick={() => handleFilterClick('all')}
-              className={`px-6 py-2 rounded-full transition-colors ${
-                activeFilter === 'all'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              전체 의안
-            </button>
-            <button
-              onClick={() => handleFilterClick('in-progress')}
-              className={`px-6 py-2 rounded-full transition-colors ${
-                activeFilter === 'in-progress'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              진행 중
-            </button>
-            <button
-              onClick={() => handleFilterClick('completed')}
-              className={`px-6 py-2 rounded-full transition-colors ${
-                activeFilter === 'completed'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              완료된
-            </button>
-          </div>
+            최신 의안 보기
+          </a>
+          <a 
+            href="#about"
+            className="gap-2 px-8 py-4 text-lg font-medium leading-7 text-gray-900 bg-white rounded-lg border border-gray-300 border-solid hover:bg-gray-50 transition-colors"
+          >
+            더 알아보기
+          </a>
         </div>
       </div>
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white to-transparent" />
     </section>
   );
 };
 
-export default HeroSection; 
+export default HeroSection;
