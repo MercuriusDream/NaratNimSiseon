@@ -41,6 +41,15 @@ args = "cd backend && python manage.py collectstatic --noinput"
 task = "shell.exec"
 args = "cd backend && python manage.py runserver 0.0.0.0:3000"
 
+[[workflows.workflow]]
+name = "Frontend Dev Server"
+author = 13787682
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm start"
+
 [[ports]]
 localPort = 3000
 externalPort = 3000
