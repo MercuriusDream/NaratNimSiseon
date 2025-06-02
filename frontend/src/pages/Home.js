@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import NavigationHeader from '../components/NavigationHeader';
 import HeroSection from '../components/HeroSection';
 import ContentSection from '../components/ContentSection';
@@ -8,6 +8,53 @@ import MeetingCard from '../components/MeetingCard';
 import BillCard from '../components/BillCard';
 
 const Home = () => {
+  const [parties, setParties] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const [bills, setBills] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [partyRes, meetingRes, billRes] = await Promise.all([
+          fetch('/api/parties/?page_size=4'),
+          fetch('/api/sessions/?page_size=3'),
+          fetch('/api/bills/?page_size=3'),
+        ]);
+        const partyData = await partyRes.json();
+        const meetingData = await meetingRes.json();
+        const billData = await billRes.json();
+        setParties(partyData.results || []);
+        setMeetings(meetingData.results || []);
+        setBills(billData.results || []);
+      } catch (err) {
+        setError('데이터를 불러오는 중 오류가 발생했습니다.');
+        console.error('Error fetching home data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <main className="relative pt-20 bg-white min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="relative pt-20 bg-white min-h-screen flex items-center justify-center">
+        <div className="text-red-600">{error}</div>
+      </main>
+    );
+  }
+
   return (
     <main className="relative pt-20 bg-white">
       <NavigationHeader />
@@ -19,32 +66,15 @@ const Home = () => {
         buttonText="모든 정당 보기"
       >
         <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
-          <PartyCard
-            image="https://cdn.builder.io/api/v1/image/assets/TEMP/c0bb71264a8878b6280234dd445a420e7dc20eaf?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
-            title="국민의힘"
-            subtitle="국민의힘의 정체성"
-            description="국민의힘은 시민의 권리를 최우선으로 생각합니다."
-          />
-          <PartyCard
-            image="https://cdn.builder.io/api/v1/image/assets/TEMP/3af21a0427fc6d2844d5840d98ae9a20c37dc761?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
-            title="더불어민주당"
-            subtitle="더불어민주당의 목표"
-            description="더불어민주당는 경제 발전에 중점을 두고 있습니다."
-          />
-        </div>
-        <div className="flex flex-wrap gap-10 items-center mt-10 w-full max-md:max-w-full">
-          <PartyCard
-            image="https://cdn.builder.io/api/v1/image/assets/TEMP/e82aeb2dbc7d60844b3cb2e4efeea51dc3d5d3d7?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
-            title="진보당"
-            subtitle="진보당의 비전"
-            description="진보당은 사회적 평등을 추구합니다."
-          />
-          <PartyCard
-            image="https://cdn.builder.io/api/v1/image/assets/TEMP/98663e14a2ae5aab73e71b25ee6ed71114519fd8?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
-            title="기본소득당"
-            subtitle="기본소득당의 약속"
-            description="기본소득당은 청년층의 목소리를 대변합니다."
-          />
+          {parties.map((party) => (
+            <PartyCard
+              key={party.id}
+              image={party.logo_url || '/default-party.png'}
+              title={party.name}
+              subtitle={party.slogan || ''}
+              description={party.description || ''}
+            />
+          ))}
         </div>
       </ContentSection>
 
@@ -54,23 +84,14 @@ const Home = () => {
         buttonText="모든 회의록 보기"
       >
         <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
-          <MeetingCard
-            title="회의 제목 A"
-            date="2023-10-01"
-            description="회의에서 논의된 주요 이슈: 정당 A의 정책 발표."
-          />
-          <MeetingCard
-            title="회의 제목 B"
-            date="2023-10-02"
-            description="회의에서 논의된 주요 사항: 긴급 경제 회의."
-          />
-        </div>
-        <div className="flex gap-10 items-center mt-10 w-full max-md:max-w-full">
-          <MeetingCard
-            title="회의 제목 C"
-            date="2023-10-03"
-            description="주요 의제: 외교 정책에 대한 각 정당의 입장."
-          />
+          {meetings.map((meeting) => (
+            <MeetingCard
+              key={meeting.id}
+              title={meeting.title || meeting.conf_nm}
+              date={meeting.conf_dt}
+              description={meeting.summary || ''}
+            />
+          ))}
         </div>
       </ContentSection>
 
@@ -80,21 +101,14 @@ const Home = () => {
         buttonText="모든 의안 보기"
       >
         <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
-          <BillCard
-            title="의안 A"
-            date="2023-10-05"
-            description="정당 A의 새로운 경제 법안."
-          />
-          <BillCard
-            title="의안 B"
-            date="2023-10-06"
-            description="정당 B의 사회 복지 정책 수정."
-          />
-          <BillCard
-            title="의안 C"
-            date="2023-10-07"
-            description="정당 C의 교육법 개정안."
-          />
+          {bills.map((bill) => (
+            <BillCard
+              key={bill.id}
+              title={bill.bill_nm}
+              date={bill.proposal_date}
+              description={bill.summary || ''}
+            />
+          ))}
         </div>
       </ContentSection>
 

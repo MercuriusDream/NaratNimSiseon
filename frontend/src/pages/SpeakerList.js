@@ -17,7 +17,8 @@ function SpeakerList() {
 
   useEffect(() => {
     fetchSpeakers();
-  }, [fetchSpeakers]);
+    // eslint-disable-next-line
+  }, [page, filters]);
 
   const fetchSpeakers = async () => {
     try {
@@ -27,7 +28,7 @@ function SpeakerList() {
         ...filters
       });
       const response = await api.get(`/speakers/?${params}`);
-      setSpeakers(response.data.results);
+      setSpeakers(response.data.results || []);
       setTotalPages(Math.ceil(response.data.count / 10));
     } catch (err) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -58,6 +59,14 @@ function SpeakerList() {
     return (
       <div className="text-center text-red-600 p-4">
         {error}
+      </div>
+    );
+  }
+
+  if (!speakers.length) {
+    return (
+      <div className="text-center text-gray-600 p-4">
+        표시할 의원이 없습니다.
       </div>
     );
   }

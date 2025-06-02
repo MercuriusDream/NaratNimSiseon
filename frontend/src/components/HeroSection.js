@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 
-const HeroSection = () => {
+const HeroSection = ({ onFilterChange }) => {
   const [activeFilter, setActiveFilter] = useState('all');
+
+  const handleFilterClick = (filter) => {
+    setActiveFilter(filter);
+    if (onFilterChange) {
+      onFilterChange(filter);
+    }
+  };
 
   return (
     <section className="relative min-h-[600px] bg-gradient-to-b from-white to-gray-50">
@@ -13,13 +20,16 @@ const HeroSection = () => {
           <p className="text-xl text-gray-600 mb-8">
             각 의안의 발전 추이와 정당별 입장 변화를 확인해보세요.
           </p>
-          <button className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors mb-12">
+          <button 
+            className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors mb-12"
+            onClick={() => window.location.href = '/important-topics'}
+          >
             중요 주제 보기
           </button>
           
-          <div className="flex justify-center space-x-4">
+          <div className="flex flex-wrap justify-center gap-4">
             <button
-              onClick={() => setActiveFilter('all')}
+              onClick={() => handleFilterClick('all')}
               className={`px-6 py-2 rounded-full transition-colors ${
                 activeFilter === 'all'
                   ? 'bg-blue-600 text-white'
@@ -29,7 +39,7 @@ const HeroSection = () => {
               전체 의안
             </button>
             <button
-              onClick={() => setActiveFilter('in-progress')}
+              onClick={() => handleFilterClick('in-progress')}
               className={`px-6 py-2 rounded-full transition-colors ${
                 activeFilter === 'in-progress'
                   ? 'bg-blue-600 text-white'
@@ -39,7 +49,7 @@ const HeroSection = () => {
               진행 중
             </button>
             <button
-              onClick={() => setActiveFilter('completed')}
+              onClick={() => handleFilterClick('completed')}
               className={`px-6 py-2 rounded-full transition-colors ${
                 activeFilter === 'completed'
                   ? 'bg-blue-600 text-white'

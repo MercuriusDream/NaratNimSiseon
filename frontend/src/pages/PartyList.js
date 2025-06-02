@@ -11,13 +11,14 @@ function PartyList() {
 
   useEffect(() => {
     fetchParties();
-  }, [fetchParties, timeRange]);
+    // eslint-disable-next-line
+  }, [timeRange]);
 
   const fetchParties = async () => {
     try {
       setLoading(true);
       const response = await api.get(`/parties/?time_range=${timeRange}`);
-      setParties(response.data);
+      setParties(response.data.results || response.data || []);
     } catch (err) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
       console.error('Error fetching parties:', err);
@@ -38,6 +39,14 @@ function PartyList() {
     return (
       <div className="text-center text-red-600 p-4">
         {error}
+      </div>
+    );
+  }
+
+  if (!parties.length) {
+    return (
+      <div className="text-center text-gray-600 p-4">
+        표시할 정당이 없습니다.
       </div>
     );
   }
