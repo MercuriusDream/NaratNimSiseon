@@ -230,8 +230,9 @@ def main():
     redis_process = None
     if not is_redis_running():
         print("🚀 Starting Redis server...")
-        redis_process = start_service("redis-server --bind 0.0.0.0", "Redis")
-        time.sleep(3)  # Wait for Redis to start
+        # Use --save "" to disable persistence and avoid TLS memory issues
+        redis_process = start_service("redis-server --bind 0.0.0.0 --save \"\" --appendonly no", "Redis")
+        time.sleep(5)  # Wait longer for Redis to start
 
         # Verify Redis started
         if is_redis_running():

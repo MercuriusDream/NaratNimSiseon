@@ -9,7 +9,7 @@ packages = ["redis", "xcodebuild", "zlib"]
 run = ["sh", "-c", "python3 manage.py runserver 0.0.0.0:3000"]
 
 [workflows]
-runButton = "Full Stack Server"
+runButton = "Full Stack Application"
 
 [[workflows.workflow]]
 name = "Run Django Server"
@@ -40,6 +40,31 @@ args = "cd backend && python manage.py collectstatic --noinput"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd backend && python manage.py runserver 0.0.0.0:3000"
+
+[[workflows.workflow]]
+name = "Full Stack Application"
+author = 13787682
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "redis-server --bind 0.0.0.0 --save \"\" --appendonly no &"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm install && npm run build"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python manage.py migrate"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python manage.py collectstatic --noinput"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python manage.py runserver 0.0.0.0:8000"
 
 [[ports]]
 localPort = 3000
