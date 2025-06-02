@@ -32,6 +32,20 @@ DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
+# Allow hosting on *.replit.dev domains
+import re
+if any(re.match(r'.*\.replit\.dev$', host) for host in [os.getenv('REPLIT_DEV_DOMAIN', '')]):
+    ALLOWED_HOSTS.append('.replit.dev')
+    
+# For development, allow all Replit domains
+if DEBUG:
+    ALLOWED_HOSTS.extend([
+        '.replit.dev',
+        '*.replit.dev',
+        'localhost',
+        '127.0.0.1',
+    ])
+
 
 # Application definition
 
