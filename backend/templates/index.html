@@ -1,20 +1,21 @@
 
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="{% load static %}favicon.ico" />
+    <link rel="icon" href="/static/favicon.ico" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#000000" />
-    <meta name="description" content="국회 감성분석 시스템" />
-    <link rel="apple-touch-icon" href="{% static 'logo192.png' %}" />
-    <link rel="manifest" href="{% static 'manifest.json' %}" />
-    <title>국회 감성분석</title>
-    <script defer="defer" src="{% static 'js/main.9b3da840.js' %}"></script>
+    <meta name="description" content="Assembly sentiment analysis web app" />
+    <link rel="apple-touch-icon" href="/static/logo192.png" />
+    <link rel="manifest" href="/static/manifest.json" />
+    <title>Assembly Sentiment Analysis</title>
+    {% load static %}
     <link href="{% static 'css/main.e6c13ad2.css' %}" rel="stylesheet">
 </head>
 <body>
-    <noscript>JavaScript를 활성화해주세요.</noscript>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    <script src="{% static 'js/main.7edeeff4.js' %}"></script>
 </body>
 </html>

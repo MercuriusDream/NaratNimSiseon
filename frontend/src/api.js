@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 
 // Use the current domain with port 3000 for API calls
