@@ -1,15 +1,11 @@
 import axios from 'axios';
 
+// Use relative URLs so requests go through Django's static file serving
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'https://eabf669f-492b-435b-b85a-6332b4265af5-00-2jrzkcqoqv3wb.riker.replit.dev/api',
+  baseURL: window.location.origin,
   headers: {
     'Content-Type': 'application/json',
   },
 });
-
-export const fetchStats = async () => {
-  const response = await api.get('/stats/');
-  return response.data;
-};
 
 export default api;
