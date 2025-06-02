@@ -35,21 +35,21 @@ def check_dependencies():
             missing_deps.append("Redis (sudo apt-get install redis-server)")
     
     # Check Python packages
-    required_packages = [
-        "django",
-        "djangorestframework",
-        "celery",
-        "redis",
-        "streamlit",
-        "psycopg2-binary",
-        "psutil"
-    ]
+    package_mappings = {
+        "django": "django",
+        "djangorestframework": "rest_framework", 
+        "celery": "celery",
+        "redis": "redis",
+        "streamlit": "streamlit",
+        "psycopg2-binary": "psycopg2",
+        "psutil": "psutil"
+    }
     
-    for package in required_packages:
+    for package_name, import_name in package_mappings.items():
         try:
-            __import__(package.replace("-", "_"))
+            __import__(import_name)
         except ImportError:
-            missing_deps.append(f"Python package: {package}")
+            missing_deps.append(f"Python package: {package_name}")
     
     if missing_deps:
         print("Missing dependencies:")
@@ -90,29 +90,34 @@ def main():
     
     print("\nKilling existing processes...")
     # Kill any existing processes on our ports
-    kill_process_by_port(8000)  # Django
+    kill_process_by_port(3000)  # Django
     kill_process_by_port(8501)  # Streamlit
     kill_process_by_port(6379)  # Redis
+    kill_process_by_port(5432)  # PostgreSQL
 
     # Get the project root directory
     project_root = Path(__file__).parent.absolute()
+    
+    # Start PostgreSQL
+    pg_process = start_service("pg_ctl -D /tmp/postgresql start", "PostgreSQL")
+    time.sleep(3)  # Wait for PostgreSQL to start
     
     # Start Redis (if not already running)
     redis_process = start_service("redis-server", "Redis")
     time.sleep(2)  # Wait for Redis to start
     
-    # Activate virtual environment and start Django
-    django_cmd = f"cd {project_root} && python manage.py runserver"
+    # Run Django migrations and start server
+    django_cmd = f"cd {project_root}/backend && python manage.py migrate && python manage.py runserver 0.0.0.0:3000"
     django_process = start_service(django_cmd, "Django Server")
-    time.sleep(2)  # Wait for Django to start
+    time.sleep(3)  # Wait for Django to start
     
     # Start Celery worker
-    celery_worker_cmd = f"cd {project_root} && celery -A backend worker -l info"
+    celery_worker_cmd = f"cd {project_root}/backend && celery -A backend worker -l info"
     celery_worker_process = start_service(celery_worker_cmd, "Celery Worker")
     time.sleep(2)  # Wait for Celery worker to start
     
     # Start Celery beat
-    celery_beat_cmd = f"cd {project_root} && celery -A backend beat -l info"
+    celery_beat_cmd = f"cd {project_root}/backend && celery -A backend beat -l info"
     celery_beat_process = start_service(celery_beat_cmd, "Celery Beat")
     time.sleep(2)  # Wait for Celery beat to start
     
@@ -121,7 +126,7 @@ def main():
     frontend_process = start_service(frontend_cmd, "Streamlit Frontend")
     
     print("\nAll services started successfully!")
-    print("Django server running at: http://localhost:8000")
+    print("Django server running at: http://localhost:3000")
     print("Streamlit frontend running at: http://localhost:8501")
     print("\nPress Ctrl+C to stop all services...")
     
@@ -133,7 +138,7 @@ def main():
         print("\nStopping all services...")
         
         # Stop all processes
-        for proc in [django_process, celery_worker_process, 
+        for proc in [pg_process, django_process, celery_worker_process, 
                     celery_beat_process, frontend_process, redis_process]:
             try:
                 proc.terminate()
