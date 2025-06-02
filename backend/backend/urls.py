@@ -38,4 +38,10 @@ if settings.DEBUG:
         re_path(r'^static/(?P<path>.*)$', serve, {
             'document_root': os.path.join(settings.BASE_DIR, '../frontend/build/static'),
         }),
+        re_path(r'^manifest\.json$', serve, {
+            'document_root': os.path.join(settings.BASE_DIR, '../frontend/build'),
+        }),
+        re_path(r'^favicon\.ico$', serve, {
+            'document_root': os.path.join(settings.BASE_DIR, '../frontend/build'),
+        }),
     ]
