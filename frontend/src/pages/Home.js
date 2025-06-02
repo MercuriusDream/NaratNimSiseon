@@ -1,114 +1,105 @@
-
-import React, { useState, useEffect } from 'react';
-import Layout from '../components/Layout';
-import { Link } from 'react-router-dom';
-import { fetchStats } from '../api';
+import React from 'react';
+import NavigationHeader from '../components/NavigationHeader';
+import HeroSection from '../components/HeroSection';
+import ContentSection from '../components/ContentSection';
+import Footer from '../components/Footer';
+import PartyCard from '../components/PartyCard';
+import MeetingCard from '../components/MeetingCard';
+import BillCard from '../components/BillCard';
 
 const Home = () => {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const loadStats = async () => {
-      try {
-        setLoading(true);
-        const data = await fetchStats();
-        setStats(data);
-      } catch (err) {
-        console.error('Error fetching stats:', err);
-        setError('데이터를 불러오는 중 오류가 발생했습니다.');
-        // Set default stats for demo
-        setStats({
-          total_parties: 5,
-          total_sessions: 150,
-          total_bills: 500,
-          total_speakers: 300
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadStats();
-  }, []);
-
-  if (loading) {
-    return (
-      <Layout>
-        <div className="container">
-          <div className="loading">데이터를 불러오는 중...</div>
-        </div>
-      </Layout>
-    );
-  }
-
   return (
-    <Layout>
-      <div className="container">
-        <div className="hero-section">
-          <h1>나랏님 시선</h1>
-          <p>대한민국 국회의 투명성과 민주주의를 위한 종합 정보 플랫폼</p>
+    <main className="relative pt-20 bg-white">
+      <NavigationHeader />
+      <HeroSection />
+
+      <ContentSection
+        title="주요 정당 소개"
+        description="시민들이 알아야 할 정당들입니다."
+        buttonText="모든 정당 보기"
+      >
+        <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
+          <PartyCard
+            image="https://cdn.builder.io/api/v1/image/assets/TEMP/c0bb71264a8878b6280234dd445a420e7dc20eaf?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+            title="국민의힘"
+            subtitle="국민의힘의 정체성"
+            description="국민의힘은 시민의 권리를 최우선으로 생각합니다."
+          />
+          <PartyCard
+            image="https://cdn.builder.io/api/v1/image/assets/TEMP/3af21a0427fc6d2844d5840d98ae9a20c37dc761?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+            title="더불어민주당"
+            subtitle="더불어민주당의 목표"
+            description="더불어민주당는 경제 발전에 중점을 두고 있습니다."
+          />
         </div>
-
-        {error && (
-          <div className="error">
-            {error}
-          </div>
-        )}
-
-        <div className="stats-grid">
-          <div className="stat-card">
-            <span className="stat-number">{stats?.total_parties || 0}</span>
-            <div className="stat-label">정당</div>
-            <Link to="/parties" className="view-all-link">
-              전체 보기
-            </Link>
-          </div>
-
-          <div className="stat-card">
-            <span className="stat-number">{stats?.total_sessions || 0}</span>
-            <div className="stat-label">회의록</div>
-            <Link to="/sessions" className="view-all-link">
-              전체 보기
-            </Link>
-          </div>
-
-          <div className="stat-card">
-            <span className="stat-number">{stats?.total_bills || 0}</span>
-            <div className="stat-label">의안</div>
-            <Link to="/bills" className="view-all-link">
-              전체 보기
-            </Link>
-          </div>
-
-          <div className="stat-card">
-            <span className="stat-number">{stats?.total_speakers || 0}</span>
-            <div className="stat-label">의원</div>
-            <Link to="/speakers" className="view-all-link">
-              전체 보기
-            </Link>
-          </div>
+        <div className="flex flex-wrap gap-10 items-center mt-10 w-full max-md:max-w-full">
+          <PartyCard
+            image="https://cdn.builder.io/api/v1/image/assets/TEMP/e82aeb2dbc7d60844b3cb2e4efeea51dc3d5d3d7?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+            title="진보당"
+            subtitle="진보당의 비전"
+            description="진보당은 사회적 평등을 추구합니다."
+          />
+          <PartyCard
+            image="https://cdn.builder.io/api/v1/image/assets/TEMP/98663e14a2ae5aab73e71b25ee6ed71114519fd8?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+            title="기본소득당"
+            subtitle="기본소득당의 약속"
+            description="기본소득당은 청년층의 목소리를 대변합니다."
+          />
         </div>
+      </ContentSection>
 
-        <div className="content-section">
-          <h2>최근 국정 활동</h2>
-          <div className="card">
-            <div className="card-content">
-              <h3 className="card-title">국회 데이터 분석 시스템</h3>
-              <p className="card-description">
-                투명하고 접근 가능한 국회 정보를 통해 민주주의의 가치를 실현합니다.
-                의안, 회의록, 의원 활동 등 다양한 국정 정보를 한눈에 확인하세요.
-              </p>
-              <div className="card-meta">
-                <span className="badge badge-primary">정보 공개</span>
-                <span>업데이트: 매일</span>
-              </div>
-            </div>
-          </div>
+      <ContentSection
+        title="최근 회의록"
+        description="정치의 최신 동향을 확인하세요."
+        buttonText="모든 회의록 보기"
+      >
+        <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
+          <MeetingCard
+            title="회의 제목 A"
+            date="2023-10-01"
+            description="회의에서 논의된 주요 이슈: 정당 A의 정책 발표."
+          />
+          <MeetingCard
+            title="회의 제목 B"
+            date="2023-10-02"
+            description="회의에서 논의된 주요 사항: 긴급 경제 회의."
+          />
         </div>
-      </div>
-    </Layout>
+        <div className="flex gap-10 items-center mt-10 w-full max-md:max-w-full">
+          <MeetingCard
+            title="회의 제목 C"
+            date="2023-10-03"
+            description="주요 의제: 외교 정책에 대한 각 정당의 입장."
+          />
+        </div>
+      </ContentSection>
+
+      <ContentSection
+        title="최근 의안"
+        description="주요 의안을 확인해보세요."
+        buttonText="모든 의안 보기"
+      >
+        <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
+          <BillCard
+            title="의안 A"
+            date="2023-10-05"
+            description="정당 A의 새로운 경제 법안."
+          />
+          <BillCard
+            title="의안 B"
+            date="2023-10-06"
+            description="정당 B의 사회 복지 정책 수정."
+          />
+          <BillCard
+            title="의안 C"
+            date="2023-10-07"
+            description="정당 C의 교육법 개정안."
+          />
+        </div>
+      </ContentSection>
+
+      <Footer />
+    </main>
   );
 };
 

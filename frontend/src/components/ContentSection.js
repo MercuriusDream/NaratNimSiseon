@@ -1,0 +1,31 @@
+import React from 'react';
+
+const ContentSection = ({ title, description, buttonText, children }) => {
+  return (
+    <section className="flex overflow-hidden relative z-0 flex-col justify-center px-44 py-16 w-full max-md:px-5 max-md:max-w-full">
+      <div className="flex z-0 flex-col items-center w-full text-base text-black max-md:max-w-full">
+        <h2 className="text-4xl font-bold leading-tight text-center max-md:max-w-full">
+          {title}
+        </h2>
+        <p className="mt-6 text-center max-md:max-w-full">
+          {description}
+        </p>
+        <div className="flex overflow-hidden gap-3 items-start mt-6 w-60 max-w-full font-medium text-white">
+          <button className="p-3 w-60 bg-black rounded-lg">
+            {buttonText}
+          </button>
+        </div>
+      </div>
+      <div className="flex z-0 flex-col justify-center py-5 mt-16 w-full max-md:mt-10 max-md:max-w-full">
+        {children}
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Background"
+        className="object-contain absolute inset-x-0 bottom-0 z-0 w-full h-0 max-md:max-w-full"
+      />
+    </section>
+  );
+};
+
+export default ContentSection; 
