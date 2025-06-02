@@ -19,3 +19,7 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd backend && python manage.py runserver 0.0.0.0:3000"
+
+[[ports]]
+localPort = 3000
+externalPort = 80
