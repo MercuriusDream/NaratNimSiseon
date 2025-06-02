@@ -17,7 +17,7 @@ function SpeakerList() {
 
   useEffect(() => {
     fetchSpeakers();
-  }, [page, filters]);
+  }, [fetchSpeakers]);
 
   const fetchSpeakers = async () => {
     try {

@@ -11,7 +11,7 @@ function PartyList() {
 
   useEffect(() => {
     fetchParties();
-  }, [timeRange]);
+  }, [fetchParties, timeRange]);
 
   const fetchParties = async () => {
     try {

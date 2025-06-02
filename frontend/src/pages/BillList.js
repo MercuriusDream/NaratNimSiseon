@@ -18,7 +18,7 @@ function BillList() {
 
   useEffect(() => {
     fetchBills();
-  }, [page, filters]);
+  }, [fetchBills]);
 
   const fetchBills = async () => {
     try {
@@ -215,4 +215,4 @@ function BillList() {
   );
 }
 
-export default BillList; 
+export default BillList;

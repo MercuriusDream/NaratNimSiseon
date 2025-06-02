@@ -14,7 +14,7 @@ function PartyDetail() {
 
   useEffect(() => {
     fetchPartyData();
-  }, [id, timeRange, sortBy]);
+  }, [id, timeRange, sortBy, fetchPartyData]);
 
   const fetchPartyData = async () => {
     try {
@@ -239,4 +239,4 @@ function PartyDetail() {
   );
 }
 
-export default PartyDetail; 
+export default PartyDetail;

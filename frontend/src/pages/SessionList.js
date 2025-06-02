@@ -18,7 +18,7 @@ function SessionList() {
 
   useEffect(() => {
     fetchSessions();
-  }, [page, filters]);
+  }, [fetchSessions]);
 
   const fetchSessions = async () => {
     try {
