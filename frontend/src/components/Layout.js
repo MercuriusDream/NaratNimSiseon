@@ -3,52 +3,35 @@ import { Link } from 'react-router-dom';
 
 const Layout = ({ children }) => {
   return (
-    <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <Link to="/" className="text-xl font-bold text-gray-800">
-                  국회 감성분석
-                </Link>
-              </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link
-                  to="/sessions"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  회의록
-                </Link>
-                <Link
-                  to="/bills"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  의안
-                </Link>
-                <Link
-                  to="/speakers"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  의원
-                </Link>
-                <Link
-                  to="/parties"
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  정당
-                </Link>
-              </div>
-            </div>
-          </div>
+    <div className="App">
+      <header className="header">
+        <div className="nav-container">
+          <Link to="/" className="logo">
+            나랏님 시선
+          </Link>
+          <nav className="nav-links">
+            <Link to="/" className="nav-link">홈</Link>
+            <Link to="/parties" className="nav-link">정당 목록</Link>
+            <Link to="/sessions" className="nav-link">회의록 목록</Link>
+            <Link to="/bills" className="nav-link">의안 목록</Link>
+            <Link to="/speakers" className="nav-link">의원 목록</Link>
+          </nav>
         </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      </header>
+      <main>
         {children}
       </main>
+      <footer style={{
+        background: '#1e293b',
+        color: 'white',
+        textAlign: 'center',
+        padding: '2rem',
+        marginTop: '4rem'
+      }}>
+        <p>&copy; 2024 나랏님 시선. 모든 권리 보유.</p>
+      </footer>
     </div>
   );
 };
 
-export default Layout; 
+export default Layout;
