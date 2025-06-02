@@ -131,10 +131,10 @@ const Home = () => {
           <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
             {bills.map((bill) => (
               <BillCard
-                key={bill.id}
-                id={bill.id}
+                key={bill.bill_id}
+                id={bill.bill_id}
                 title={bill.bill_nm}
-                date={bill.proposal_date}
+                date={bill.created_at}
                 description={bill.summary || ''}
               />
             ))}

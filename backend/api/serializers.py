@@ -22,17 +22,6 @@ class BillSerializer(serializers.ModelSerializer):
         model = Bill
         fields = '__all__'
 
-    def validate_proposal_date(self, value):
-        if value > timezone.now():
-            raise serializers.ValidationError("의안 제안 날짜는 현재 날짜보다 이후일 수 없습니다.")
-        return value
-
-    def validate(self, data):
-        if data.get('proposal_date') and data.get('resolution_date'):
-            if data['proposal_date'] > data['resolution_date']:
-                raise serializers.ValidationError("의안 처리 날짜는 제안 날짜보다 이후여야 합니다.")
-        return data
-
 class StatementSerializer(serializers.ModelSerializer):
     speaker_name = serializers.CharField(source='speaker.naas_nm', read_only=True)
     party_name = serializers.CharField(source='speaker.plpt_nm', read_only=True)

@@ -90,23 +90,17 @@ class BillViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         bill_name = self.request.query_params.get('bill_name')
-        proposer = self.request.query_params.get('proposer')
-        status = self.request.query_params.get('status')
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
 
         if bill_name:
             queryset = queryset.filter(bill_nm__icontains=bill_name)
-        if proposer:
-            queryset = queryset.filter(proposer__icontains=proposer)
-        if status:
-            queryset = queryset.filter(status=status)
         if date_from:
-            queryset = queryset.filter(proposal_date__gte=date_from)
+            queryset = queryset.filter(created_at__gte=date_from)
         if date_to:
-            queryset = queryset.filter(proposal_date__lte=date_to)
+            queryset = queryset.filter(created_at__lte=date_to)
 
-        return queryset.order_by('-proposal_date')
+        return queryset.order_by('-created_at')
 
     @action(detail=True, methods=['get'])
     def statements(self, request, pk=None):
