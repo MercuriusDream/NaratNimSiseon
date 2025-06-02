@@ -1,78 +1,452 @@
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global base styles */
 body {
   margin: 0;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f8fafc;
-  color: #1e293b;
-  line-height: 1.6;
+  background-color: #ffffff;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
-  background: #f1f5f9;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.875em;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
 }
 
-* {
-  box-sizing: border-box;
+/* Component-specific styles from 웹 페이지 designs */
+
+/* NavigationHeader styles */
+.navigation-header {
+  @apply flex overflow-hidden flex-col w-full bg-white;
 }
 
-html {
-  scroll-behavior: smooth;
+.nav-content {
+  @apply flex flex-wrap gap-5 justify-between items-center px-20 py-4 w-full bg-white max-md:px-5 max-md:max-w-full;
 }
 
-a {
-  color: #667eea;
-  text-decoration: none;
-  transition: color 0.2s ease;
+.nav-logo {
+  @apply flex gap-2 items-center text-2xl font-bold tracking-tighter text-slate-800;
 }
 
-a:hover {
-  color: #5a67d8;
+.nav-menu {
+  @apply flex gap-8 items-center text-base font-medium text-slate-600 max-md:max-w-full;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  color: #1e293b;
-  font-weight: 600;
-  line-height: 1.3;
+.nav-link {
+  @apply transition-colors duration-200 hover:text-blue-600;
 }
 
-p {
-  color: #475569;
-  line-height: 1.6;
-  margin-bottom: 1rem;
+.nav-link.active {
+  @apply text-blue-600;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
+/* HeroSection styles */
+.hero-section {
+  @apply flex overflow-hidden flex-col items-center px-20 pt-20 pb-32 w-full bg-gradient-to-b from-blue-50 to-white max-md:px-5 max-md:py-24 max-md:max-w-full;
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
+.hero-content {
+  @apply flex flex-col items-center max-w-4xl;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+.hero-title {
+  @apply text-5xl font-bold text-center text-slate-800 leading-tight max-md:text-4xl;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+.hero-subtitle {
+  @apply mt-6 text-xl text-center text-slate-600 leading-relaxed max-md:text-lg;
 }
 
-/* Focus styles */
-*:focus {
-  outline: 2px solid #667eea;
-  outline-offset: 2px;
+.hero-button {
+  @apply mt-8 px-8 py-4 text-lg font-semibold text-white bg-blue-600 rounded-lg transition-all duration-200 hover:bg-blue-700 hover:shadow-lg;
 }
 
-/* Selection styles */
-::selection {
-  background: #ddd6fe;
-  color: #5b21b6;
+/* ContentSection styles */
+.content-section {
+  @apply flex overflow-hidden flex-col items-center px-20 py-20 w-full max-md:px-5 max-md:py-16 max-md:max-w-full;
+}
+
+.content-header {
+  @apply flex flex-col items-center text-center max-w-3xl mb-16;
+}
+
+.content-title {
+  @apply text-4xl font-bold text-slate-800 leading-tight max-md:text-3xl;
+}
+
+.content-description {
+  @apply mt-4 text-lg text-slate-600 leading-relaxed;
+}
+
+.content-button {
+  @apply mt-8 px-6 py-3 text-base font-medium text-blue-600 bg-white border-2 border-blue-600 rounded-lg transition-all duration-200 hover:bg-blue-600 hover:text-white;
+}
+
+/* Card styles */
+.card {
+  @apply flex flex-col bg-white rounded-xl shadow-md border border-gray-200 transition-all duration-200 hover:shadow-lg hover:border-gray-300;
+}
+
+.card-image {
+  @apply w-full h-48 object-cover rounded-t-xl;
+}
+
+.card-content {
+  @apply p-6;
+}
+
+.card-title {
+  @apply text-xl font-semibold text-slate-800 mb-2;
+}
+
+.card-subtitle {
+  @apply text-sm text-slate-500 mb-3;
+}
+
+.card-description {
+  @apply text-base text-slate-600 leading-relaxed;
+}
+
+.card-meta {
+  @apply text-sm text-slate-500 mt-4;
+}
+
+/* PartyCard specific styles */
+.party-card {
+  @apply card max-w-sm;
+}
+
+.party-logo {
+  @apply w-16 h-16 object-contain rounded-lg mb-4;
+}
+
+.party-name {
+  @apply card-title;
+}
+
+.party-slogan {
+  @apply card-subtitle;
+}
+
+.party-description {
+  @apply card-description;
+}
+
+/* MeetingCard specific styles */
+.meeting-card {
+  @apply card max-w-md;
+}
+
+.meeting-title {
+  @apply card-title;
+}
+
+.meeting-date {
+  @apply card-subtitle;
+}
+
+.meeting-summary {
+  @apply card-description;
+}
+
+/* BillCard specific styles */
+.bill-card {
+  @apply card max-w-md;
+}
+
+.bill-title {
+  @apply card-title;
+}
+
+.bill-date {
+  @apply card-subtitle;
+}
+
+.bill-summary {
+  @apply card-description;
+}
+
+/* Footer styles */
+.footer {
+  @apply bg-slate-800 text-white py-16;
+}
+
+.footer-content {
+  @apply flex flex-col items-center px-20 max-md:px-5;
+}
+
+.footer-logo {
+  @apply text-2xl font-bold mb-4;
+}
+
+.footer-description {
+  @apply text-center text-slate-300 max-w-2xl mb-8;
+}
+
+.footer-links {
+  @apply flex gap-8 mb-8 max-md:gap-6;
+}
+
+.footer-link {
+  @apply text-slate-300 transition-colors duration-200 hover:text-white;
+}
+
+.footer-bottom {
+  @apply text-center text-slate-400 text-sm;
+}
+
+/* Detail page styles */
+.detail-page {
+  @apply min-h-screen bg-gray-50;
+}
+
+.detail-header {
+  @apply bg-white shadow-sm border-b border-gray-200 py-8;
+}
+
+.detail-content {
+  @apply max-w-6xl mx-auto px-6 py-8;
+}
+
+.detail-title {
+  @apply text-3xl font-bold text-slate-800 mb-4;
+}
+
+.detail-meta {
+  @apply flex gap-4 text-sm text-slate-600 mb-6;
+}
+
+.detail-description {
+  @apply text-lg text-slate-700 leading-relaxed;
+}
+
+/* List page styles */
+.list-page {
+  @apply min-h-screen bg-gray-50;
+}
+
+.list-container {
+  @apply max-w-6xl mx-auto px-6 py-8;
+}
+
+.list-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
+}
+
+/* Profile section styles */
+.profile-section {
+  @apply bg-white rounded-xl shadow-sm p-8;
+}
+
+.profile-image {
+  @apply w-32 h-32 rounded-full object-cover mb-6;
+}
+
+.profile-name {
+  @apply text-2xl font-bold text-slate-800 mb-2;
+}
+
+.profile-party {
+  @apply text-lg text-blue-600 mb-4;
+}
+
+.profile-info {
+  @apply space-y-2;
+}
+
+.profile-info-item {
+  @apply flex justify-between text-sm;
+}
+
+.profile-info-label {
+  @apply text-slate-600;
+}
+
+.profile-info-value {
+  @apply text-slate-800 font-medium;
+}
+
+/* Metrics and charts */
+.metrics-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8;
+}
+
+.metric-card {
+  @apply bg-white rounded-xl shadow-sm p-6 border border-gray-200;
+}
+
+.metric-value {
+  @apply text-3xl font-bold text-slate-800 mb-2;
+}
+
+.metric-label {
+  @apply text-sm text-slate-600;
+}
+
+.metric-change {
+  @apply text-sm font-medium;
+}
+
+.metric-change.positive {
+  @apply text-green-600;
+}
+
+.metric-change.negative {
+  @apply text-red-600;
+}
+
+/* Chart container */
+.chart-container {
+  @apply bg-white rounded-xl shadow-sm p-6 border border-gray-200;
+}
+
+.chart-title {
+  @apply text-lg font-semibold text-slate-800 mb-4;
+}
+
+/* Speech analysis */
+.speech-analysis {
+  @apply bg-white rounded-xl shadow-sm p-6 border border-gray-200;
+}
+
+.speech-card {
+  @apply border-l-4 border-blue-500 bg-blue-50 p-4 mb-4;
+}
+
+.speech-meta {
+  @apply flex justify-between items-center mb-2;
+}
+
+.speech-speaker {
+  @apply font-medium text-slate-800;
+}
+
+.speech-sentiment {
+  @apply text-sm px-2 py-1 rounded-full;
+}
+
+.speech-sentiment.positive {
+  @apply bg-green-100 text-green-800;
+}
+
+.speech-sentiment.negative {
+  @apply bg-red-100 text-red-800;
+}
+
+.speech-sentiment.neutral {
+  @apply bg-gray-100 text-gray-800;
+}
+
+.speech-content {
+  @apply text-slate-700 leading-relaxed;
+}
+
+/* Participant list */
+.participant-list {
+  @apply space-y-4;
+}
+
+.participant-card {
+  @apply bg-white rounded-lg shadow-sm p-4 border border-gray-200;
+}
+
+.participant-info {
+  @apply flex items-center gap-4;
+}
+
+.participant-avatar {
+  @apply w-12 h-12 rounded-full bg-gray-200;
+}
+
+.participant-details {
+  @apply flex-1;
+}
+
+.participant-name {
+  @apply font-medium text-slate-800;
+}
+
+.participant-party {
+  @apply text-sm text-slate-600;
+}
+
+/* Related bills */
+.related-bills {
+  @apply space-y-4;
+}
+
+.related-bill {
+  @apply bg-white rounded-lg shadow-sm p-4 border border-gray-200 hover:shadow-md transition-shadow duration-200;
+}
+
+.related-bill-title {
+  @apply font-medium text-slate-800 mb-2;
+}
+
+.related-bill-meta {
+  @apply text-sm text-slate-600;
+}
+
+/* Responsive utilities */
+@media (max-width: 768px) {
+  .nav-content {
+    @apply flex-col gap-4 py-6;
+  }
+  
+  .nav-menu {
+    @apply flex-wrap justify-center;
+  }
+  
+  .hero-section {
+    @apply px-6 py-16;
+  }
+  
+  .content-section {
+    @apply px-6 py-12;
+  }
+  
+  .list-grid {
+    @apply grid-cols-1;
+  }
+  
+  .metrics-grid {
+    @apply grid-cols-1 md:grid-cols-2;
+  }
+}
+
+/* Loading states */
+.loading-spinner {
+  @apply animate-spin rounded-full border-t-2 border-b-2 border-blue-500;
+}
+
+.loading-container {
+  @apply flex items-center justify-center h-96;
+}
+
+/* Error states */
+.error-container {
+  @apply flex items-center justify-center h-96;
+}
+
+.error-message {
+  @apply text-red-600 text-center;
+}
+
+/* Button variants */
+.btn-primary {
+  @apply px-6 py-3 text-white bg-blue-600 rounded-lg font-medium transition-all duration-200 hover:bg-blue-700 hover:shadow-lg;
+}
+
+.btn-secondary {
+  @apply px-6 py-3 text-blue-600 bg-white border-2 border-blue-600 rounded-lg font-medium transition-all duration-200 hover:bg-blue-600 hover:text-white;
+}
+
+.btn-outline {
+  @apply px-6 py-3 text-slate-600 bg-white border border-gray-300 rounded-lg font-medium transition-all duration-200 hover:bg-gray-50 hover:border-gray-400;
 }
