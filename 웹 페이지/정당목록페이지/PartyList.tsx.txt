@@ -1,0 +1,39 @@
+import * as React from "react";
+import { PartyListItem } from "./PartyListItem";
+
+const partyData = [
+  { logoSrc: "https://cdn.builder.io/api/v1/image/assets/TEMP/b606816a11786f523d96dff7e80ec55b70c1a8da?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2", name: "국민의힘", stance: "긍정적" },
+  { logoSrc: "https://cdn.builder.io/api/v1/image/assets/TEMP/d42ff47271a818d1c61222ee3e2472af05954b14?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2", name: "조국혁신당", stance: "부정적" },
+  { logoSrc: "https://cdn.builder.io/api/v1/image/assets/TEMP/f09c3fa41dc4cf4491ab80146e729d131f56edeb?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2", name: "진보당", stance: "중립적" },
+  { logoSrc: "https://cdn.builder.io/api/v1/image/assets/TEMP/86b4c8baaa183815be500b5f362189d5f0707297?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2", name: "기본소득당", stance: "긍정적" },
+  { logoSrc: "https://cdn.builder.io/api/v1/image/assets/TEMP/a09ad08294aca199effbe5ae12aa2577b8782e6f?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2", name: "개혁신당", stance: "부정적" },
+  { logoSrc: "https://cdn.builder.io/api/v1/image/assets/TEMP/5d09bad851fb07b3923823b735eb651253c2ba0a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2", name: "더불어민주당", stance: "긍정적" },
+  { logoSrc: "https://cdn.builder.io/api/v1/image/assets/TEMP/fcfab62c3ad033a30c4437aedcacba42d9bdb002?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2", name: "사회민주당", stance: "중립적" },
+];
+
+export const PartyList = () => {
+  return (
+    <section className="flex overflow-hidden relative z-0 gap-10 justify-center items-center px-44 py-16 w-full max-md:px-5 max-md:max-w-full">
+      <div className="z-0 flex-1 shrink self-stretch my-auto text-black basis-0 min-w-60 max-md:max-w-full">
+        <h2 className="text-4xl font-bold leading-tight max-md:max-w-full">
+          원내 정당 목록
+        </h2>
+        <p className="mt-6 text-base max-md:max-w-full">
+          우리나라의 원내 정당들을 나열합니다.
+        </p>
+      </div>
+      <div className="flex z-0 flex-col flex-1 shrink justify-center self-stretch my-auto basis-0 min-w-60 max-md:max-w-full">
+        {partyData.map((party, index) => (
+          <div key={index} className="flex gap-10 w-full max-md:max-w-full">
+            <PartyListItem {...party} />
+          </div>
+        ))}
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Background decoration"
+        className="object-contain absolute inset-x-0 bottom-0 z-0 self-start h-0 w-[1440px] max-md:max-w-full"
+      />
+    </section>
+  );
+};

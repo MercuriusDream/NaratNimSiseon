@@ -1,0 +1,21 @@
+"use client";
+import * as React from "react";
+import { TopBar } from "./TopBar";
+import { MeetingHeader } from "./MeetingHeader";
+import { MeetingSummary } from "./MeetingSummary";
+import { ParticipantList } from "./ParticipantList";
+import { RelatedBill } from "./RelatedBill";
+import { Footer } from "./Footer";
+
+export default function MeetingDetails() {
+  return (
+    <main className="relative pt-20 bg-white">
+      <TopBar />
+      <MeetingHeader />
+      <MeetingSummary />
+      <ParticipantList />
+      <RelatedBill />
+      <Footer />
+    </main>
+  );
+}

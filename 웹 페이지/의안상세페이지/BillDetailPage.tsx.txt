@@ -1,0 +1,23 @@
+"use client";
+import * as React from "react";
+import { TopBar } from "./TopBar";
+import { HeroSection } from "./HeroSection";
+import { DataMetricsSection } from "./DataMetricsSection";
+import { PartyPositionChart } from "./PartyPositionChart";
+import { SpeechAnalysisSection } from "./SpeechAnalysisSection";
+import { Footer } from "./Footer";
+
+export const BillDetailPage: React.FC = () => {
+  return (
+    <main className="relative pt-20 bg-white">
+      <TopBar />
+      <HeroSection />
+      <DataMetricsSection />
+      <PartyPositionChart />
+      <SpeechAnalysisSection />
+      <Footer />
+    </main>
+  );
+};
+
+export default BillDetailPage;

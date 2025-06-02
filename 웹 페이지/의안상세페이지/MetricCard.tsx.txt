@@ -1,0 +1,15 @@
+interface MetricCardProps {
+  title: string;
+  value: string;
+  change?: string;
+}
+
+export const MetricCard: React.FC<MetricCardProps> = ({ title, value, change }) => {
+  return (
+    <article className="overflow-hidden flex-1 shrink p-4 rounded-md border border-solid basis-0 border-black border-opacity-10 min-w-60 max-md:max-w-full">
+      <h3 className="text-black max-md:max-w-full">{title}</h3>
+      <p className="mt-1 text-3xl font-medium leading-none">{value}</p>
+      {change && <p className="mt-1">{change}</p>}
+    </article>
+  );
+};

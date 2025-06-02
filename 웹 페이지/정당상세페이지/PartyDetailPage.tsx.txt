@@ -1,0 +1,21 @@
+"use client";
+import * as React from "react";
+import { TopBar } from "./TopBar";
+import { HeroSection } from "./HeroSection";
+import { MeetingList } from "./MeetingList";
+import { BillList } from "./BillList";
+import { Footer } from "./Footer";
+
+export const PartyDetailPage: React.FC = () => {
+  return (
+    <main className="relative pt-20 bg-white">
+      <TopBar />
+      <HeroSection />
+      <MeetingList />
+      <BillList />
+      <Footer />
+    </main>
+  );
+};
+
+export default PartyDetailPage;

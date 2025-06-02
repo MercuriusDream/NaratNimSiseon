@@ -1,0 +1,38 @@
+"use client";
+import * as React from "react";
+
+export const HeroSection: React.FC = () => {
+  return (
+    <section className="flex overflow-hidden relative z-0 gap-10 justify-center items-start px-44 py-16 w-full text-base max-md:px-5 max-md:max-w-full">
+      <div className="flex z-0 flex-col flex-1 shrink items-center my-auto w-full basis-0 min-w-60 max-md:max-w-full">
+        <h2 className="text-4xl font-bold leading-tight text-center text-black max-md:max-w-full">
+          정당 상세 정보
+        </h2>
+        <p className="mt-6 text-center text-black max-md:max-w-full">
+          최근 회의록 및 의안에 대한 정보를 확인하세요.
+        </p>
+        <div className="flex overflow-hidden flex-wrap gap-3 items-start mt-6 font-medium max-md:max-w-full">
+          <button className="p-3 w-60 text-black rounded-lg border border-black border-solid">
+            의안 더 보기
+          </button>
+          <button className="p-3 w-60 text-white bg-black rounded-lg">
+            회의록 다운로드
+          </button>
+        </div>
+        <div className="flex overflow-hidden gap-3 justify-center items-center mt-6 text-sm leading-none text-center text-black whitespace-nowrap">
+          <button className="self-stretch p-2 my-auto rounded-md bg-zinc-300 bg-opacity-50 w-[120px]">
+            회의록
+          </button>
+          <button className="self-stretch p-2 my-auto rounded-md bg-zinc-300 bg-opacity-50 w-[120px]">
+            의안
+          </button>
+        </div>
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Background decoration"
+        className="object-contain absolute inset-x-0 bottom-0 z-0 self-start h-0 w-[1440px] max-md:max-w-full"
+      />
+    </section>
+  );
+};

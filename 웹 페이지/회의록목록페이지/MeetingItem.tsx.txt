@@ -1,0 +1,29 @@
+import React from 'react';
+
+interface MeetingItemProps {
+  date: string;
+  topic: string;
+  summary: string;
+}
+
+export const MeetingItem: React.FC<MeetingItemProps> = ({ date, topic, summary }) => {
+  return (
+    <article className="flex relative flex-1 shrink gap-4 justify-center items-center py-5 basis-0 min-w-60 size-full max-md:max-w-full">
+      <div className="z-0 self-stretch px-3 my-auto text-4xl leading-relaxed text-center text-black whitespace-nowrap bg-black bg-opacity-10 h-[60px] rounded-[30px] w-[60px]">
+        📖
+      </div>
+      <div className="z-0 flex-1 shrink self-stretch my-auto basis-[22px]">
+        <h3 className="text-xl leading-snug text-black">{date}</h3>
+        <p className="text-base text-black">주제: {topic}</p>
+      </div>
+      <p className="z-0 my-auto text-xl font-medium leading-7 text-right text-black w-[200px]">
+        주요 발언 요약: {summary}
+      </p>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/5273b5101221b9339d377ec0a9c4afcbe2fe538e?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Divider"
+        className="object-contain absolute inset-x-0 -bottom-px z-0 self-start h-0 aspect-[500] min-w-60 w-[520px] max-md:max-w-full"
+      />
+    </article>
+  );
+};

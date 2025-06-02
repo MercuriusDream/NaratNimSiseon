@@ -1,0 +1,45 @@
+import React from 'react';
+import { MeetingItem } from './MeetingItem';
+
+export const MeetingList = () => {
+  return (
+    <section className="flex overflow-hidden relative z-0 gap-10 justify-center items-center px-44 py-16 w-full max-md:px-5 max-md:max-w-full">
+      <div className="z-0 flex-1 shrink self-stretch my-auto text-black basis-0 min-w-60 max-md:max-w-full">
+        <h2 className="text-4xl font-bold leading-tight max-md:max-w-full">
+          회의록 목록
+        </h2>
+        <p className="mt-6 text-base max-md:max-w-full">
+          최근 회의록을 확인하고 주요 내용을 파악하세요.
+        </p>
+      </div>
+      <div className="flex z-0 flex-col flex-1 shrink justify-center self-stretch my-auto basis-0 min-w-60 max-md:max-w-full">
+        <div className="flex gap-10 w-full max-md:max-w-full">
+          <MeetingItem
+            date="2023년 10월 10일 회의"
+            topic="국가 예산안"
+            summary="예산안 관련 다양한 의견 제시"
+          />
+        </div>
+        <div className="flex gap-10 w-full max-md:max-w-full">
+          <MeetingItem
+            date="2023년 10월 5일 회의"
+            topic="교육 정책"
+            summary="교육 정책을 두고 여당과 야당 간의 논의"
+          />
+        </div>
+        <div className="flex gap-10 w-full max-md:max-w-full">
+          <MeetingItem
+            date="2023년 9월 30일 회의"
+            topic="환경 정책"
+            summary="환경 관련 새로운 법안 제정 논의"
+          />
+        </div>
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Background decoration"
+        className="object-contain absolute inset-x-0 bottom-0 z-0 self-start h-0 w-[1440px] max-md:max-w-full"
+      />
+    </section>
+  );
+};

@@ -1,0 +1,38 @@
+import * as React from "react";
+import { ChangeArticle } from "./ChangeArticle";
+
+export const RecentChanges: React.FC = () => {
+  return (
+    <section className="flex overflow-hidden relative z-0 gap-10 justify-center items-center px-44 py-16 w-full max-md:px-5 max-md:max-w-full">
+      <div className="z-0 flex-1 shrink self-stretch my-auto text-black basis-0 min-w-60 max-md:max-w-full">
+        <h2 className="text-4xl font-bold leading-tight max-md:max-w-full">
+          최근 의안 변화
+        </h2>
+        <p className="mt-6 text-base max-md:max-w-full">
+          정당별 의안별 입장 변화를 시각적으로 보여줍니다.
+        </p>
+      </div>
+      <div className="flex z-0 flex-col flex-1 shrink justify-center self-stretch py-5 my-auto basis-0 min-w-60 max-md:max-w-full">
+        <div className="flex gap-10 items-center w-full max-md:max-w-full">
+          <ChangeArticle
+            title="의안 제목 1"
+            party="정당 A의 입장"
+            description="상세 분석 내용입니다."
+          />
+        </div>
+        <div className="flex gap-10 items-center mt-10 w-full max-md:max-w-full">
+          <ChangeArticle
+            title="의안 제목 2"
+            party="정당 B의 입장"
+            description="상세 분석 내용입니다."
+          />
+        </div>
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Background decoration"
+        className="object-contain absolute inset-x-0 bottom-0 z-0 self-start h-0 w-[1440px] max-md:max-w-full"
+      />
+    </section>
+  );
+};

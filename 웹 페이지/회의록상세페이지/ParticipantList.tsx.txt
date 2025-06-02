@@ -1,0 +1,28 @@
+import { ParticipantCard } from "./ParticipantCard";
+
+export function ParticipantList() {
+  return (
+    <section className="flex overflow-hidden relative z-0 flex-col justify-center px-44 py-16 w-full text-center max-md:px-5 max-md:max-w-full">
+      <div className="flex z-0 flex-col items-center w-full text-black max-md:max-w-full">
+        <h2 className="text-4xl font-bold leading-tight max-md:max-w-full">
+          참여 의원 목록
+        </h2>
+        <p className="mt-6 text-base max-md:max-w-full">
+          이 회의에 참여한 의원들입니다.
+        </p>
+      </div>
+      <div className="flex z-0 flex-col justify-center mt-16 w-full max-md:mt-10 max-md:max-w-full">
+        <div className="flex flex-wrap gap-10 items-start w-full max-md:max-w-full">
+          <ParticipantCard name="의원 A" party="정당 A" speechCount={5} />
+          <ParticipantCard name="의원 B" party="정당 B" speechCount={3} />
+          <ParticipantCard name="의원 C" party="정당 C" speechCount={6} />
+        </div>
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Background"
+        className="object-contain absolute inset-x-0 bottom-0 z-0 w-full h-0 max-md:max-w-full"
+      />
+    </section>
+  );
+}

@@ -1,0 +1,11 @@
+export const Footer: React.FC = () => {
+  return (
+    <footer className="flex overflow-hidden z-0 gap-10 justify-center items-center p-16 w-full text-xl leading-7 text-center text-black max-md:px-5 max-md:max-w-full">
+      <div className="flex flex-wrap gap-10 justify-center self-stretch my-auto min-h-[100px] min-w-60 max-md:max-w-full">
+        <p className="w-72">© 2023 국민의 정치적 이해도 향상</p>
+        <p className="w-[220px]">문의: info@example.com</p>
+        <p className="w-[260px]">투명한 정보 제공에 앞장섭니다.</p>
+      </div>
+    </footer>
+  );
+};

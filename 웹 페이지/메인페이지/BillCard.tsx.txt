@@ -1,0 +1,28 @@
+import * as React from "react";
+
+interface BillCardProps {
+  title: string;
+  date: string;
+  description: string;
+}
+
+export function BillCard({ title, date, description }: BillCardProps) {
+  return (
+    <article className="flex flex-1 shrink gap-4 justify-center items-start self-stretch px-4 pt-4 pb-7 my-auto rounded-md border border-solid basis-0 border-black border-opacity-10 min-h-36 min-w-60">
+      <div className="flex overflow-hidden min-h-[100px] w-[100px]">
+        <div className="flex flex-1 shrink basis-0 bg-zinc-300 bg-opacity-50 h-[100px] min-h-[100px] w-[100px]" />
+      </div>
+      <div className="flex-1 shrink text-black basis-0">
+        <h3 className="text-xl font-medium leading-snug">
+          {title}
+        </h3>
+        <p className="mt-2 text-sm leading-none text-black">
+          {date}
+        </p>
+        <p className="mt-2 text-base">
+          {description}
+        </p>
+      </div>
+    </article>
+  );
+}

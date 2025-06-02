@@ -1,0 +1,17 @@
+import * as React from "react";
+
+interface MetricCardProps {
+  title: string;
+  value: string;
+  change: string;
+}
+
+export const MetricCard: React.FC<MetricCardProps> = ({ title, value, change }) => {
+  return (
+    <div className="overflow-hidden flex-1 shrink p-4 rounded-md border border-solid basis-0 border-black border-opacity-10">
+      <h3 className="text-black">{title}</h3>
+      <p className="mt-1 text-3xl font-medium leading-none">{value}</p>
+      <p className="mt-1">{change}</p>
+    </div>
+  );
+};

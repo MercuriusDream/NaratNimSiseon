@@ -1,0 +1,29 @@
+import  as React from react;
+
+interface BillItemProps {
+  title string;
+  position string;
+  date string;
+}
+
+export function BillItem({ title, position, date } BillItemProps) {
+  return (
+    article className=flex relative flex-1 shrink gap-4 justify-center items-center py-5 basis-0 min-w-60 size-full max-mdmax-w-full
+      div className=z-0 self-stretch px-3 my-auto text-4xl leading-relaxed text-center text-black whitespace-nowrap bg-black bg-opacity-10 h-[60px] rounded-[30px] w-[60px]
+        📄
+      div
+      div className=z-0 flex-1 shrink self-stretch my-auto basis-[22px]
+        h4 className=text-xl leading-snug text-black{title}h4
+        p className=text-base text-black입장 {position}p
+      div
+      time className=z-0 self-stretch my-auto text-xl font-medium leading-snug text-right text-black
+        발표 날짜 {date}
+      time
+      img
+        src=httpscdn.builder.ioapiv1imageassetsTEMP5273b5101221b9339d377ec0a9c4afcbe2fe538eplaceholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2
+        alt=
+        className=object-contain absolute inset-x-0 -bottom-px z-0 self-start h-0 aspect-[500] min-w-60 w-[520px] max-mdmax-w-full
+      
+    article
+  );
+}

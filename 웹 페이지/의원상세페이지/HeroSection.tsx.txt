@@ -1,0 +1,27 @@
+import * as React from "react";
+
+export function HeroSection() {
+  return (
+    <section className="flex overflow-hidden relative z-0 gap-10 justify-center items-center px-44 py-16 w-full max-md:px-5 max-md:max-w-full">
+      <div className="z-0 flex-1 shrink self-stretch my-auto text-base text-black basis-0 min-w-60 max-md:max-w-full">
+        <h2 className="text-4xl font-bold leading-tight max-md:max-w-full">
+          의원 이름: 홍길동
+        </h2>
+        <p className="mt-6 max-md:max-w-full">정당: 더불어민주당</p>
+        <div className="flex overflow-hidden gap-3 items-start mt-6 w-60 max-w-full font-medium text-white">
+          <button className="p-3 w-60 bg-black rounded-lg hover:bg-gray-800 transition-colors">
+            정당 페이지 보기
+          </button>
+        </div>
+      </div>
+      <div className="flex overflow-hidden z-0 flex-1 shrink self-stretch my-auto basis-0 min-h-[400px] min-w-60 max-md:max-w-full">
+        <div className="flex flex-1 shrink w-full basis-0 bg-zinc-300 bg-opacity-50 min-h-[400px] min-w-60 max-md:max-w-full" />
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt=""
+        className="object-contain absolute inset-x-0 bottom-0 z-0 self-start h-0 w-[1440px] max-md:max-w-full"
+      />
+    </section>
+  );
+}

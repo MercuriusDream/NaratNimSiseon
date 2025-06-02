@@ -1,0 +1,45 @@
+import * as React from "react";
+import { BillItem } from "./BillItem";
+
+export function BillsList() {
+  return (
+    <section className="flex overflow-hidden relative z-0 gap-10 justify-center items-center px-44 py-16 w-full max-md:px-5 max-md:max-w-full">
+      <div className="z-0 flex-1 shrink self-stretch my-auto text-black basis-0 min-w-60 max-md:max-w-full">
+        <h3 className="text-4xl font-bold leading-tight max-md:max-w-full">
+          최근 참여한 의안 목록
+        </h3>
+        <p className="mt-6 text-base max-md:max-w-full">
+          홍길동 의원이 최근에 참여한 의안과 그의 입장을 살펴보세요.
+        </p>
+      </div>
+      <div className="flex z-0 flex-col flex-1 shrink justify-center self-stretch my-auto basis-0 min-w-60 max-md:max-w-full">
+        <div className="flex gap-10 w-full max-md:max-w-full">
+          <BillItem
+            title="의안 제목 1"
+            position="찬성"
+            date="2023-10-01"
+          />
+        </div>
+        <div className="flex gap-10 w-full max-md:max-w-full">
+          <BillItem
+            title="의안 제목 2"
+            position="반대"
+            date="2023-09-15"
+          />
+        </div>
+        <div className="flex gap-10 w-full max-md:max-w-full">
+          <BillItem
+            title="의안 제목 3"
+            position="중립"
+            date="2023-08-30"
+          />
+        </div>
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt=""
+        className="object-contain absolute inset-x-0 bottom-0 z-0 self-start h-0 w-[1440px] max-md:max-w-full"
+      />
+    </section>
+  );
+}

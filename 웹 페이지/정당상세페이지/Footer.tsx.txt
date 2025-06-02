@@ -1,0 +1,13 @@
+import * as React from "react";
+
+export const Footer: React.FC = () => {
+  return (
+    <footer className="flex overflow-hidden z-0 gap-10 justify-center items-center p-16 w-full text-xl leading-7 text-center text-black max-md:px-5 max-md:max-w-full">
+      <div className="flex flex-wrap gap-10 justify-center self-stretch my-auto min-h-[100px] min-w-60 max-md:max-w-full">
+        <p className="w-72">© 2023 정치 투명성 증진 프로젝트</p>
+        <p className="w-[254px]">문의: support@example.com</p>
+        <a href="#" className="w-[148px]">개인정보처리방침</a>
+      </div>
+    </footer>
+  );
+};

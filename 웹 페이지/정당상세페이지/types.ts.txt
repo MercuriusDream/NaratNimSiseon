@@ -1,0 +1,12 @@
+export interface Meeting {
+  date: string;
+  title: string;
+  id: string;
+  subtitle: string;
+}
+
+export interface Bill {
+  title: string;
+  subtitle: string;
+  status: string;
+}

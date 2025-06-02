@@ -1,0 +1,73 @@
+"use client";
+import * as React from "react";
+import type { Bill } from "./types";
+
+const bills: Bill[] = [
+  {
+    title: "환경 보호 법안",
+    subtitle: "정당의 지지 의사",
+    status: "통과"
+  },
+  {
+    title: "교육 개혁 법안",
+    subtitle: "정당의 반대 의사",
+    status: "연기"
+  },
+  {
+    title: "보건 의료 법안",
+    subtitle: "정당의 중립적 입장",
+    status: "심사 중"
+  }
+];
+
+const BillItem: React.FC<Bill> = ({ title, subtitle, status }) => (
+  <article className="flex relative flex-1 shrink gap-4 justify-center items-center py-5 basis-0 min-w-60 size-full max-md:max-w-full">
+    <div className="z-0 self-stretch px-3 my-auto text-4xl leading-relaxed text-center text-black whitespace-nowrap bg-black bg-opacity-10 h-[60px] rounded-[30px] w-[60px]">
+      📜
+    </div>
+    <div className="z-0 flex-1 shrink self-stretch my-auto basis-[22px] min-w-60">
+      <h3 className="text-xl leading-snug text-black">{title}</h3>
+      <p className="text-base text-black">{subtitle}</p>
+    </div>
+    <div className="z-0 self-stretch my-auto text-xl font-medium leading-snug text-right text-black">
+      상태: {status}
+    </div>
+    <img
+      src="https://cdn.builder.io/api/v1/image/assets/TEMP/5273b5101221b9339d377ec0a9c4afcbe2fe538e?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+      alt="Divider"
+      className="object-contain absolute inset-x-0 -bottom-px z-0 self-start h-0 aspect-[500] min-w-60 w-[520px] max-md:max-w-full"
+    />
+  </article>
+);
+
+export const BillList: React.FC = () => {
+  return (
+    <section className="flex overflow-hidden relative z-0 gap-10 justify-center items-center px-44 py-16 w-full max-md:px-5 max-md:max-w-full">
+      <div className="z-0 flex-1 shrink self-stretch my-auto text-base text-black basis-0 min-w-60 max-md:max-w-full">
+        <h2 className="text-4xl font-bold leading-tight max-md:max-w-full">
+          최근 의안
+        </h2>
+        <p className="mt-6 max-md:max-w-full">
+          최근 이 정당과 관련된 의안 목록입니다.
+        </p>
+        <div className="overflow-hidden mt-6 w-60 max-w-full font-medium text-white">
+          <button className="p-3 w-full bg-black rounded-lg">
+            의안 더 보기
+          </button>
+        </div>
+      </div>
+      <div className="flex z-0 flex-col flex-1 shrink justify-center self-stretch my-auto basis-0 min-w-60 max-md:max-w-full">
+        {bills.map((bill, index) => (
+          <div key={index} className="flex gap-10 w-full max-md:max-w-full">
+            <BillItem {...bill} />
+          </div>
+        ))}
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Background decoration"
+        className="object-contain absolute inset-x-0 bottom-0 z-0 self-start h-0 w-[1440px] max-md:max-w-full"
+      />
+    </section>
+  );
+};

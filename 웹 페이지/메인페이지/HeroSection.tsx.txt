@@ -1,0 +1,31 @@
+import * as React from "react";
+
+export function HeroSection() {
+  return (
+    <section className="flex overflow-hidden relative z-0 gap-10 justify-center items-center px-44 py-16 w-full text-white bg-black bg-opacity-60 max-md:px-5 max-md:max-w-full">
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/69e5a3a000687c411a114ac98d4b5b57e522cf67?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Hero"
+        className="object-contain z-0 shrink-0 self-stretch my-auto rounded-full aspect-square w-[135px]"
+      />
+      <div className="z-0 flex-1 shrink self-stretch my-auto basis-0 min-w-60 max-md:max-w-full">
+        <h2 className="text-2xl font-bold leading-none max-md:max-w-full">
+          나랏님 시선
+        </h2>
+        <p className="mt-3 text-base max-md:max-w-full">
+          모두를 위한 열린 공간
+        </p>
+      </div>
+      <div className="flex overflow-hidden z-0 gap-3 items-start self-stretch my-auto w-60 text-base font-medium">
+        <button className="p-3 w-60 bg-black rounded-lg">
+          나라님 시선 알아보기
+        </button>
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Background"
+        className="object-contain absolute inset-x-0 bottom-0 z-0 self-start h-0 w-[1440px] max-md:max-w-full"
+      />
+    </section>
+  );
+}

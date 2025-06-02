@@ -1,0 +1,25 @@
+"use client";
+import * as React from "react";
+import { TopNavigation } from "./TopNavigation";
+import { HeroSection } from "./HeroSection";
+import { BillList } from "./BillList";
+import { RecentChanges } from "./RecentChanges";
+import { DataMetrics } from "./DataMetrics";
+import { Footer } from "./Footer";
+
+export const BillTrackingPage: React.FC = () => {
+  return (
+    <div className="relative pt-20 bg-white">
+      <TopNavigation />
+      <main>
+        <HeroSection />
+        <BillList />
+        <RecentChanges />
+        <DataMetrics />
+      </main>
+      <Footer />
+    </div>
+  );
+};
+
+export default BillTrackingPage;

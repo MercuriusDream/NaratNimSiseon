@@ -1,0 +1,19 @@
+
+"use client";
+import * as React from "react";
+import { TopBar } from "./TopBar";
+import { HeroSection } from "./HeroSection";
+import { PartyList } from "./PartyList";
+import { Footer } from "./Footer";
+
+export default function PoliticalPartyList() {
+  return (
+    <div className="relative pt-20 bg-white">
+      <TopBar />
+      <HeroSection />
+      <PartyList />
+      <Footer />
+    </div>
+  );
+}
+

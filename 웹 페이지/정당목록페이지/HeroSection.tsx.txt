@@ -1,0 +1,21 @@
+import * as React from "react";
+
+export const HeroSection = () => {
+  return (
+    <section className="flex overflow-hidden relative z-0 gap-10 justify-center items-start px-44 py-16 w-full text-center text-black max-md:px-5 max-md:max-w-full">
+      <div className="flex z-0 flex-col flex-1 shrink items-center my-auto basis-0 min-w-60 max-md:max-w-full">
+        <h2 className="text-4xl font-bold leading-tight max-md:max-w-full">
+          현재 활동 중인 원내 정당 목록
+        </h2>
+        <p className="mt-6 text-base max-md:max-w-full">
+          아래 목록에서 우리나라의 원내 정당들을 확인하세요.
+        </p>
+      </div>
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/76080b5942a9c4eebd231ce434be14a230d1428a?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Background decoration"
+        className="object-contain absolute inset-x-0 bottom-0 z-0 self-start h-0 w-[1440px] max-md:max-w-full"
+      />
+    </section>
+  );
+};
