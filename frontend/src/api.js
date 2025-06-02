@@ -7,4 +7,9 @@ const api = axios.create({
   },
 });
 
+export const fetchStats = async () => {
+  const response = await api.get('/stats/');
+  return response.data;
+};
+
 export default api;
