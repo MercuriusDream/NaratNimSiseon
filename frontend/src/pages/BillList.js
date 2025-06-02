@@ -27,7 +27,7 @@ function BillList() {
         page,
         ...filters
       });
-      const response = await axios.get(`http://localhost:8000/api/bills/?${params}`);
+      const response = await axios.get(`/api/bills/?${params}`);
       setBills(response.data.results);
       setTotalPages(Math.ceil(response.data.count / 10));
     } catch (err) {

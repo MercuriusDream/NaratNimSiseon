@@ -15,8 +15,8 @@ function SessionDetail() {
       try {
         setLoading(true);
         const [sessionRes, statementsRes] = await Promise.all([
-          axios.get(`http://localhost:8000/api/sessions/${id}/`),
-          axios.get(`http://localhost:8000/api/sessions/${id}/statements/`)
+          axios.get(`/api/sessions/${id}/`),
+          axios.get(`/api/sessions/${id}/statements/`)
         ]);
         
         setSession(sessionRes.data);

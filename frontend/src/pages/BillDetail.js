@@ -15,8 +15,8 @@ function BillDetail() {
       try {
         setLoading(true);
         const [billRes, statementsRes] = await Promise.all([
-          axios.get(`http://localhost:8000/api/bills/${id}/`),
-          axios.get(`http://localhost:8000/api/bills/${id}/statements/`)
+          axios.get(`/api/bills/${id}/`),
+          axios.get(`/api/bills/${id}/statements/`)
         ]);
         
         setBill(billRes.data);

@@ -36,7 +36,7 @@ ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
 import re
 if any(re.match(r'.*\.replit\.dev$', host) for host in [os.getenv('REPLIT_DEV_DOMAIN', '')]):
     ALLOWED_HOSTS.append('.replit.dev')
-    
+
 # For development, allow all Replit domains
 if DEBUG:
     ALLOWED_HOSTS.extend([
@@ -77,7 +77,7 @@ ROOT_URLCONF = 'backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR.parent, 'frontend', 'build')],
+        'DIRS': [os.path.join(BASE_DIR, '../frontend/build')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
