@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 import SessionCard from '../components/SessionCard';
 
 function SessionList() {
@@ -27,7 +27,7 @@ function SessionList() {
         page,
         ...filters
       });
-      const response = await axios.get(`http://localhost:8000/api/sessions/?${params}`);
+      const response = await api.get(`/sessions/?${params}`);
       setSessions(response.data.results);
       setTotalPages(Math.ceil(response.data.count / 10));
     } catch (err) {
@@ -160,4 +160,4 @@ function SessionList() {
   );
 }
 
-export default SessionList; 
+export default SessionList;
