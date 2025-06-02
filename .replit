@@ -9,7 +9,7 @@ packages = ["redis", "xcodebuild", "zlib"]
 run = ["sh", "-c", "python3 manage.py runserver 0.0.0.0:3000"]
 
 [workflows]
-runButton = "Full Stack Application"
+runButton = "Full Stack Server"
 
 [[workflows.workflow]]
 name = "Run Django Server"
