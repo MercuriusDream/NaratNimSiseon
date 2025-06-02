@@ -63,7 +63,7 @@ ROOT_URLCONF = 'backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, '../frontend/build')],
+        'DIRS': [os.path.join(BASE_DIR.parent, 'frontend', 'build')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -133,7 +133,7 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Additional locations of static files
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, '../frontend/build/static'),
+    os.path.join(BASE_DIR.parent, 'frontend', 'build', 'static'),
 ]
 
 # Default primary key field type
