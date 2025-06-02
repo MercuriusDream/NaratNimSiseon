@@ -19,26 +19,35 @@ const Home = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const baseURL = window.location.origin;
+        
+        // Use relative URLs for API calls
         const [partyRes, meetingRes, billRes] = await Promise.all([
-          fetch(`${baseURL}/api/parties/?page_size=4`),
-          fetch(`${baseURL}/api/sessions/?page_size=3`),
-          fetch(`${baseURL}/api/bills/?page_size=3`),
+          fetch('/api/parties/?page_size=4'),
+          fetch('/api/sessions/?page_size=3'),
+          fetch('/api/bills/?page_size=3'),
         ]);
 
-        if (!partyRes.ok || !meetingRes.ok || !billRes.ok) {
-          throw new Error('Failed to fetch data');
+        // Check if responses are ok
+        if (partyRes.ok && meetingRes.ok && billRes.ok) {
+          const partyData = await partyRes.json();
+          const meetingData = await meetingRes.json();
+          const billData = await billRes.json();
+          
+          setParties(partyData.results || []);
+          setMeetings(meetingData.results || []);
+          setBills(billData.results || []);
+        } else {
+          // If API calls fail, set empty arrays to at least show the UI
+          setParties([]);
+          setMeetings([]);
+          setBills([]);
+          console.warn('Some API calls failed, showing empty data');
         }
-
-        const partyData = await partyRes.json();
-        const meetingData = await meetingRes.json();
-        const billData = await billRes.json();
-        
-        setParties(partyData.results || []);
-        setMeetings(meetingData.results || []);
-        setBills(billData.results || []);
       } catch (err) {
-        setError('데이터를 불러오는 중 오류가 발생했습니다.');
+        // On error, show the UI with empty data rather than error state
+        setParties([]);
+        setMeetings([]);
+        setBills([]);
         console.error('Error fetching home data:', err);
       } finally {
         setLoading(false);
