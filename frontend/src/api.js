@@ -1,10 +1,9 @@
 import axios from 'axios';
 
-// Use the current domain with port 3000 for API calls
-const API_BASE_URL = window.location.protocol + '//' + window.location.hostname + ':3000';
-
+// Use relative paths for API calls to work with the Django server
 const api = axios.create({
-  baseURL: `${API_BASE_URL}/api/`,
+  baseURL: '/api',
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
