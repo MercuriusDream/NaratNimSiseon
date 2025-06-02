@@ -1,6 +1,15 @@
-# 국회 감성 분석 플랫폼 (National Assembly Sentiment Analysis Platform)
+# 나랏님 시선
 
 국회 회의록을 분석하여 의원들의 발언에 대한 감성 분석을 제공하는 웹 플랫폼입니다.
+
+## 프로젝트 정보
+
+이 프로젝트는 충북대학교 소프트웨어학부 2025학년도 1학기 오픈소스소프트웨어기초프로젝트의 일환으로 개발되었습니다.
+
+### 개발자
+- 2024042051 성우석
+- 2024042081 손상준
+- 2023041047 우유정
 
 ## 주요 기능
 
@@ -20,7 +29,7 @@
 - PostgreSQL
 
 ### 프론트엔드
-- React
+- Python (Streamlit)
 - Tailwind CSS
 - Recharts (데이터 시각화)
 - Axios
@@ -49,7 +58,6 @@ GEMINI_API_KEY=your_api_key_here
 
 ### 필수 요구사항
 - Python 3.8 이상
-- Node.js 16 이상
 - PostgreSQL
 - Redis (Celery용)
 
@@ -79,10 +87,10 @@ python manage.py runserver
 cd frontend
 
 # 의존성 설치
-npm install
+pip install -r requirements.txt
 
 # 개발 서버 실행
-npm start
+streamlit run app.py
 ```
 
 ### Celery 설정
@@ -160,13 +168,3 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 3. 변경사항을 커밋합니다 (`git commit -m 'Add some amazing feature'`).
 4. 브랜치에 푸시합니다 (`git push origin feature/amazing-feature`).
 5. Pull Request를 생성합니다.
-
-## 연락처
-
-프로젝트 관리자: [이메일 주소]
-
-## 감사의 말
-
-- 국회 OPEN API
-- Google Gemini AI
-- 모든 기여자들
