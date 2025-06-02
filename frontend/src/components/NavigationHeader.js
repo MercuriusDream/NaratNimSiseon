@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 const NavigationHeader = () => {
   const location = useLocation();
@@ -10,51 +10,48 @@ const NavigationHeader = () => {
   };
 
   return (
-    <header className="flex overflow-hidden absolute inset-x-0 top-0 z-10 flex-wrap gap-5 justify-center items-center p-5 w-full h-20 text-black bg-white min-h-20 shadow-[0px_0px_6px_rgba(0,0,0,0.12)] max-md:max-w-full">
-      <Link to="/" className="flex items-center gap-3">
-        <img
-          src="/logo192.png"
-          alt="Logo"
-          className="object-contain shrink-0 self-stretch my-auto w-10 aspect-square rounded-[100px]"
-        />
-        <h1 className="text-3xl font-medium leading-none">
-          나랏님 시선
-        </h1>
-      </Link>
-      
-      <nav className="flex gap-10 justify-center items-center self-stretch my-auto text-base bg-white min-w-60 ml-auto">
-        <Link 
-          to="/" 
-          className={`self-stretch my-auto hover:text-blue-600 transition-colors ${
-            isActive('/') ? 'text-blue-600 font-semibold' : ''
+    <header className="flex overflow-hidden absolute inset-x-0 top-0 z-50 flex-wrap gap-5 justify-center items-center p-5 w-full h-20 text-black bg-white min-h-20 shadow-[0px_0px_6px_rgba(0,0,0,0.12)] max-md:max-w-full">
+      <img
+        src="https://cdn.builder.io/api/v1/image/assets/TEMP/0b2e1432406e71917c42b07bf0a2f0d64e8d5b59?placeholderIfAbsent=true&apiKey=004d4d7011224d8cbeadb55d96f39ec2"
+        alt="Logo"
+        className="object-contain shrink-0 self-stretch my-auto w-10 aspect-square rounded-[100px]"
+      />
+      <h1 className="flex-1 shrink self-stretch my-auto text-3xl font-medium leading-none basis-0 max-md:max-w-full">
+        나랏님 시선
+      </h1>
+      <nav className="flex gap-10 justify-center items-center self-stretch my-auto text-base bg-white min-w-60">
+        <a 
+          href="/" 
+          className={`self-stretch my-auto transition-colors duration-200 ${
+            isActive('/') ? 'text-blue-600 font-semibold' : 'text-gray-700 hover:text-blue-600'
           }`}
         >
           홈
-        </Link>
-        <Link 
-          to="/parties" 
-          className={`self-stretch my-auto hover:text-blue-600 transition-colors ${
-            isActive('/parties') ? 'text-blue-600 font-semibold' : ''
+        </a>
+        <a 
+          href="/parties" 
+          className={`self-stretch my-auto transition-colors duration-200 ${
+            isActive('/parties') ? 'text-blue-600 font-semibold' : 'text-gray-700 hover:text-blue-600'
           }`}
         >
           정당 목록
-        </Link>
-        <Link 
-          to="/sessions" 
-          className={`self-stretch my-auto hover:text-blue-600 transition-colors ${
-            isActive('/sessions') ? 'text-blue-600 font-semibold' : ''
+        </a>
+        <a 
+          href="/sessions" 
+          className={`self-stretch my-auto transition-colors duration-200 ${
+            isActive('/sessions') ? 'text-blue-600 font-semibold' : 'text-gray-700 hover:text-blue-600'
           }`}
         >
           회의록 목록
-        </Link>
-        <Link 
-          to="/bills" 
-          className={`self-stretch my-auto hover:text-blue-600 transition-colors ${
-            isActive('/bills') ? 'text-blue-600 font-semibold' : ''
+        </a>
+        <a 
+          href="/bills" 
+          className={`self-stretch my-auto transition-colors duration-200 ${
+            isActive('/bills') ? 'text-blue-600 font-semibold' : 'text-gray-700 hover:text-blue-600'
           }`}
         >
           의안 목록
-        </Link>
+        </a>
       </nav>
     </header>
   );

@@ -1,10 +1,8 @@
-
 import React from 'react';
-import { Link } from 'react-router-dom';
 
-const BillCard = ({ id, title, date, description, status }) => {
+const BillCard = ({ id, title, date, description }) => {
   const formatDate = (dateString) => {
-    if (!dateString) return '';
+    if (!dateString) return '날짜 미정';
     try {
       const date = new Date(dateString);
       return date.toLocaleDateString('ko-KR', {
@@ -12,54 +10,34 @@ const BillCard = ({ id, title, date, description, status }) => {
         month: 'long',
         day: 'numeric'
       });
-    } catch (error) {
+    } catch {
       return dateString;
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case '가결':
-        return 'bg-green-100 text-green-800';
-      case '부결':
-        return 'bg-red-100 text-red-800';
-      case '심의중':
-        return 'bg-yellow-100 text-yellow-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   return (
-    <Link 
-      to={`/bills/${id}`}
-      className="flex flex-col min-w-[240px] w-[300px] hover:shadow-lg transition-shadow"
-    >
-      <div className="flex flex-col p-6 w-full bg-white rounded-lg border border-gray-200 border-solid">
-        <div className="flex flex-col w-full">
-          <div className="flex flex-col w-full">
-            <h3 className="text-lg font-semibold leading-7 text-gray-900">
-              {title}
-            </h3>
-            <div className="flex items-center justify-between mt-1">
-              <time className="text-sm leading-5 text-gray-500">
-                {formatDate(date)}
-              </time>
-              {status && (
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(status)}`}>
-                  {status}
-                </span>
-              )}
-            </div>
-          </div>
-          {description && (
-            <p className="mt-2 text-base leading-6 text-gray-600 line-clamp-3">
-              {description}
-            </p>
-          )}
+    <div className="flex overflow-hidden flex-col flex-1 shrink p-6 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 basis-0 min-w-64 max-md:max-w-full">
+      <div className="flex flex-col h-full">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+          <span className="text-sm font-medium text-slate-500">
+            {formatDate(date)}
+          </span>
         </div>
+        <h3 className="text-lg font-bold text-slate-800 leading-tight mb-3 line-clamp-2">
+          {title || '의안 제목 없음'}
+        </h3>
+        <p className="text-sm text-slate-600 leading-relaxed line-clamp-3 flex-1 mb-4">
+          {description || '의안 요약이 제공되지 않았습니다.'}
+        </p>
+        <a
+          href={`/bills/${id}`}
+          className="mt-auto px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-200 text-center"
+        >
+          의안 보기
+        </a>
       </div>
-    </Link>
+    </div>
   );
 };
 

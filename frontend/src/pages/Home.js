@@ -49,11 +49,14 @@ const Home = () => {
 
   if (loading) {
     return (
-      <div className="flex overflow-hidden flex-col bg-white">
+      <div className="flex overflow-hidden flex-col bg-white min-h-screen">
         <NavigationHeader />
-        <main className="flex flex-col self-center w-full max-w-[1440px] max-md:max-w-full">
-          <div className="flex items-center justify-center h-96">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <main className="flex flex-col w-full">
+          <div className="flex items-center justify-center h-96 bg-gradient-to-b from-blue-50 to-white">
+            <div className="flex flex-col items-center gap-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
+              <p className="text-slate-600 font-medium">데이터를 불러오는 중...</p>
+            </div>
           </div>
         </main>
         <Footer />
@@ -63,11 +66,25 @@ const Home = () => {
 
   if (error) {
     return (
-      <div className="flex overflow-hidden flex-col bg-white">
+      <div className="flex overflow-hidden flex-col bg-white min-h-screen">
         <NavigationHeader />
-        <main className="flex flex-col self-center w-full max-w-[1440px] max-md:max-w-full">
-          <div className="flex items-center justify-center h-96">
-            <div className="text-red-600 text-center">{error}</div>
+        <main className="flex flex-col w-full">
+          <div className="flex items-center justify-center h-96 bg-gradient-to-b from-red-50 to-white">
+            <div className="text-center max-w-md">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">오류가 발생했습니다</h3>
+              <p className="text-red-600 mb-4">{error}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors duration-200"
+              >
+                다시 시도
+              </button>
+            </div>
           </div>
         </main>
         <Footer />
@@ -76,9 +93,9 @@ const Home = () => {
   }
 
   return (
-    <div className="flex overflow-hidden flex-col bg-white">
+    <div className="flex overflow-hidden flex-col bg-white min-h-screen">
       <NavigationHeader />
-      <main className="flex flex-col self-center w-full max-w-[1440px] max-md:max-w-full">
+      <main className="flex flex-col w-full">
         <HeroSection />
         
         {/* 주요 정당 소개 섹션 */}
@@ -88,7 +105,7 @@ const Home = () => {
           buttonText="모든 정당 보기"
           buttonLink="/parties"
         >
-          <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
             {parties.map((party) => (
               <PartyCard
                 key={party.id}
@@ -109,7 +126,7 @@ const Home = () => {
           buttonText="모든 회의록 보기"
           buttonLink="/sessions"
         >
-          <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
             {meetings.map((meeting) => (
               <MeetingCard
                 key={meeting.id}
@@ -129,7 +146,7 @@ const Home = () => {
           buttonText="모든 의안 보기"
           buttonLink="/bills"
         >
-          <div className="flex flex-wrap gap-10 items-center w-full max-md:max-w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
             {bills.map((bill) => (
               <BillCard
                 key={bill.bill_id}

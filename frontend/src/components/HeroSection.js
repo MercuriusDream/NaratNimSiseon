@@ -1,30 +1,31 @@
+
 import React from 'react';
 
 const HeroSection = () => {
   return (
-    <section className="flex overflow-hidden flex-col justify-center items-center px-20 py-24 w-full text-center text-black bg-white max-md:px-5 max-md:max-w-full">
-      <div className="flex flex-col items-center max-w-4xl">
-        <h1 className="text-6xl font-bold leading-tight max-md:text-4xl max-md:leading-10">
-          투명한 정치, 
+    <section className="flex overflow-hidden flex-col items-center px-20 pt-32 pb-20 w-full bg-gradient-to-b from-blue-50 to-white max-md:px-5 max-md:pt-24 max-md:max-w-full">
+      <div className="flex flex-col items-center max-w-4xl text-center">
+        <h1 className="text-5xl font-bold text-slate-800 leading-tight max-md:text-4xl max-md:leading-tight mb-6">
+          대한민국 국회의 모든 것을
           <br />
-          명확한 시선
+          <span className="text-blue-600">한눈에 보세요</span>
         </h1>
-        <p className="mt-6 text-xl leading-8 text-gray-600 max-w-2xl">
-          국회의 모든 활동을 한눈에 보고, 정치인들의 진짜 목소리를 들어보세요.
-          데이터로 보는 투명한 정치의 시작입니다.
+        <p className="text-xl text-slate-600 leading-relaxed max-w-2xl mb-8">
+          국회 의안, 회의록, 정당 정보를 쉽고 빠르게 찾아보세요.
+          투명하고 접근 가능한 정치 정보를 제공합니다.
         </p>
-        <div className="flex gap-4 mt-10">
-          <a 
-            href="#latest-bills"
-            className="gap-2 px-8 py-4 text-lg font-medium leading-7 text-white bg-blue-600 rounded-lg border border-blue-600 border-solid hover:bg-blue-700 transition-colors"
+        <div className="flex gap-4 max-md:flex-col max-md:w-full">
+          <a
+            href="/bills"
+            className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors duration-200"
           >
-            최신 의안 보기
+            의안 둘러보기
           </a>
-          <a 
-            href="#about"
-            className="gap-2 px-8 py-4 text-lg font-medium leading-7 text-gray-900 bg-white rounded-lg border border-gray-300 border-solid hover:bg-gray-50 transition-colors"
+          <a
+            href="/sessions"
+            className="px-8 py-3 border-2 border-blue-600 text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition-colors duration-200"
           >
-            더 알아보기
+            회의록 보기
           </a>
         </div>
       </div>
