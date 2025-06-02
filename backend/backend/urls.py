@@ -16,30 +16,16 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.views.generic import TemplateView
 from django.conf import settings
 from django.conf.urls.static import static
-from django.views.generic import TemplateView
-from django.views.static import serve
-import os
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
+    path('', TemplateView.as_view(template_name='index.html'), name='home'),
 ]
 
-# Serve React static files in production
-if not settings.DEBUG:
-    # Serve static files from React build
-    urlpatterns += [
-        path('static/<path:path>', serve, {'document_root': os.path.join(settings.BASE_DIR, '../frontend/build/static')}),
-        path('', TemplateView.as_view(template_name='index.html')),
-        path('<path:path>', TemplateView.as_view(template_name='index.html')),
-    ]
-else:
-    # In development, serve from Django static files
+# Serve static files during development
+if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-    # Add catch-all for React routing in development
-    urlpatterns += [
-        path('', TemplateView.as_view(template_name='index.html')),
-        path('<path:path>', TemplateView.as_view(template_name='index.html')),
-    ]
