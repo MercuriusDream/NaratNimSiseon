@@ -19,10 +19,11 @@ const Home = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        const baseURL = window.location.origin;
         const [partyRes, meetingRes, billRes] = await Promise.all([
-          fetch('/api/parties/?page_size=4'),
-          fetch('/api/sessions/?page_size=3'),
-          fetch('/api/bills/?page_size=3'),
+          fetch(`${baseURL}/api/parties/?page_size=4`),
+          fetch(`${baseURL}/api/sessions/?page_size=3`),
+          fetch(`${baseURL}/api/bills/?page_size=3`),
         ]);
 
         if (!partyRes.ok || !meetingRes.ok || !billRes.ok) {
