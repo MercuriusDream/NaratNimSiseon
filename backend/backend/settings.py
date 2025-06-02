@@ -150,6 +150,12 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, '../frontend/build'),
 ]
 
+# Ensure static files are served correctly
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+]
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
