@@ -16,7 +16,7 @@ function PartyList() {
   const fetchParties = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`http://localhost:8000/api/parties/?time_range=${timeRange}`);
+      const response = await api.get(`/parties/?time_range=${timeRange}`);
       setParties(response.data);
     } catch (err) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -165,4 +165,4 @@ function PartyList() {
   );
 }
 
-export default PartyList; 
+export default PartyList;

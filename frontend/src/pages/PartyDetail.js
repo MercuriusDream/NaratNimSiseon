@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import { Link } from 'react-router-dom';
 import SentimentChart from '../components/SentimentChart';
 
@@ -19,8 +19,8 @@ function PartyDetail() {
   const fetchPartyData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(
-        `http://localhost:8000/api/parties/${id}/?time_range=${timeRange}&sort_by=${sortBy}`
+      const response = await api.get(
+        `parties/${id}/?time_range=${timeRange}&sort_by=${sortBy}`
       );
       setParty(response.data);
     } catch (err) {

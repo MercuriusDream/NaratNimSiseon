@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { Link } from 'react-router-dom';
 import SentimentChart from '../components/SentimentChart';
+import api from '../api';
 
 function Home() {
   const [stats, setStats] = useState({
@@ -22,8 +22,8 @@ function Home() {
         setLoading(true);
         setError(null);
         const [statsRes, sessionsRes] = await Promise.all([
-          axios.get('http://localhost:8000/api/stats/'),
-          axios.get('http://localhost:8000/api/sessions/?limit=5')
+          api.get('stats/'),
+          api.get('sessions/?limit=5')
         ]);
 
         setStats(statsRes.data);

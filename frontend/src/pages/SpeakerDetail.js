@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import SentimentChart from '../components/SentimentChart';
 
 function SpeakerDetail() {
@@ -16,8 +16,8 @@ function SpeakerDetail() {
       try {
         setLoading(true);
         const [speakerRes, statementsRes] = await Promise.all([
-          axios.get(`http://localhost:8000/api/speakers/${id}/`),
-          axios.get(`http://localhost:8000/api/speakers/${id}/statements/?time_range=${timeRange}`)
+          api.get(`speakers/${id}/`),
+          api.get(`speakers/${id}/statements/?time_range=${timeRange}`)
         ]);
         
         setSpeaker(speakerRes.data);

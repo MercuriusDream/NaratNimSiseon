@@ -27,7 +27,7 @@ function SessionList() {
         page,
         ...filters
       });
-      const response = await api.get(`/sessions/?${params}`);
+      const response = await api.get(`sessions/?${params}`);
       setSessions(response.data.results);
       setTotalPages(Math.ceil(response.data.count / 10));
     } catch (err) {

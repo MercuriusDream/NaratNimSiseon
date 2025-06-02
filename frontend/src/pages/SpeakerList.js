@@ -26,7 +26,7 @@ function SpeakerList() {
         page,
         ...filters
       });
-      const response = await axios.get(`http://localhost:8000/api/speakers/?${params}`);
+      const response = await api.get(`/speakers/?${params}`);
       setSpeakers(response.data.results);
       setTotalPages(Math.ceil(response.data.count / 10));
     } catch (err) {
@@ -189,4 +189,4 @@ function SpeakerList() {
   );
 }
 
-export default SpeakerList; 
+export default SpeakerList;
