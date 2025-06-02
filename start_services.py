@@ -58,6 +58,36 @@ def check_dependencies():
         print("\nPlease install all dependencies before running the script.")
         sys.exit(1)
 
+def check_env_file():
+    """Check if .env file exists and has required variables"""
+    env_path = Path(__file__).parent / '.env'
+    if not env_path.exists():
+        print("Error: .env file not found!")
+        print("Please create a .env file in the project root directory.")
+        sys.exit(1)
+    
+    required_vars = [
+        'DJANGO_SECRET_KEY',
+        'PGDATABASE',
+        'PGUSER',
+        'PGPASSWORD',
+        'ASSEMBLY_API_KEY',
+        'GEMINI_API_KEY'
+    ]
+    
+    missing_vars = []
+    with open(env_path) as f:
+        env_content = f.read()
+        for var in required_vars:
+            if f"{var}=" not in env_content:
+                missing_vars.append(var)
+    
+    if missing_vars:
+        print("Error: Missing required environment variables in .env file:")
+        for var in missing_vars:
+            print(f"- {var}")
+        sys.exit(1)
+
 def kill_process_by_port(port):
     """Kill process running on specified port"""
     for proc in psutil.process_iter(['pid', 'name', 'connections']):
@@ -84,13 +114,26 @@ def start_service(command, name):
         print(f"Error starting {name}: {str(e)}")
         sys.exit(1)
 
+def is_redis_running():
+    """Check if Redis is already running"""
+    try:
+        import redis
+        r = redis.Redis(host='localhost', port=6379, db=0)
+        r.ping()
+        return True
+    except:
+        return False
+
 def main():
     print("Checking dependencies...")
     check_dependencies()
     
+    print("\nChecking environment variables...")
+    check_env_file()
+    
     print("\nKilling existing processes...")
     # Kill any existing processes on our ports
-    kill_process_by_port(3000)  # Django
+    kill_process_by_port(8000)  # Django
     kill_process_by_port(8501)  # Streamlit
     kill_process_by_port(6379)  # Redis
     kill_process_by_port(5432)  # PostgreSQL
@@ -98,35 +141,48 @@ def main():
     # Get the project root directory
     project_root = Path(__file__).parent.absolute()
     
-    # Start PostgreSQL
-    pg_process = start_service("pg_ctl -D /tmp/postgresql start", "PostgreSQL")
-    time.sleep(3)  # Wait for PostgreSQL to start
+    # Activate virtual environment
+    venv_path = project_root / '.venv'
+    if not venv_path.exists():
+        print("Error: Virtual environment not found!")
+        print("Please create a virtual environment first:")
+        print("python -m venv .venv")
+        sys.exit(1)
+    
+    if platform.system() == "Windows":
+        activate_cmd = str(venv_path / "Scripts" / "activate")
+    else:
+        activate_cmd = f"source {venv_path}/bin/activate"
     
     # Start Redis (if not already running)
-    redis_process = start_service("redis-server", "Redis")
-    time.sleep(2)  # Wait for Redis to start
+    if not is_redis_running():
+        redis_process = start_service("redis-server", "Redis")
+        time.sleep(2)  # Wait for Redis to start
+    else:
+        print("Redis is already running...")
+        redis_process = None
     
     # Run Django migrations and start server
-    django_cmd = f"cd {project_root}/backend && python manage.py migrate && python manage.py runserver 0.0.0.0:3000"
+    django_cmd = f"cd {project_root}/backend && {activate_cmd} && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     django_process = start_service(django_cmd, "Django Server")
     time.sleep(3)  # Wait for Django to start
     
     # Start Celery worker
-    celery_worker_cmd = f"cd {project_root}/backend && celery -A backend worker -l info"
+    celery_worker_cmd = f"cd {project_root}/backend && {activate_cmd} && celery -A backend worker -l info"
     celery_worker_process = start_service(celery_worker_cmd, "Celery Worker")
     time.sleep(2)  # Wait for Celery worker to start
     
     # Start Celery beat
-    celery_beat_cmd = f"cd {project_root}/backend && celery -A backend beat -l info"
+    celery_beat_cmd = f"cd {project_root}/backend && {activate_cmd} && celery -A backend beat -l info"
     celery_beat_process = start_service(celery_beat_cmd, "Celery Beat")
     time.sleep(2)  # Wait for Celery beat to start
     
     # Start Streamlit frontend
-    frontend_cmd = f"cd {project_root}/frontend && streamlit run app.py"
+    frontend_cmd = f"cd {project_root}/frontend && {activate_cmd} && streamlit run app.py"
     frontend_process = start_service(frontend_cmd, "Streamlit Frontend")
     
     print("\nAll services started successfully!")
-    print("Django server running at: http://localhost:3000")
+    print("Django server running at: http://localhost:8000")
     print("Streamlit frontend running at: http://localhost:8501")
     print("\nPress Ctrl+C to stop all services...")
     
@@ -138,13 +194,21 @@ def main():
         print("\nStopping all services...")
         
         # Stop all processes
-        for proc in [pg_process, django_process, celery_worker_process, 
-                    celery_beat_process, frontend_process, redis_process]:
+        for proc in [django_process, celery_worker_process, 
+                    celery_beat_process, frontend_process]:
+            if proc:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+        
+        if redis_process:
             try:
-                proc.terminate()
-                proc.wait(timeout=5)
+                redis_process.terminate()
+                redis_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                proc.kill()
+                redis_process.kill()
         
         print("All services stopped.")
 
