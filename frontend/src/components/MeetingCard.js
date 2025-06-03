@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 // Props are assumed to be passed from a Session object:
