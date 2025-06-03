@@ -20,9 +20,36 @@ logger = logging.getLogger(__name__)
 genai.configure(api_key=settings.GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-pro')
 
+# Check if Celery/Redis is available
+def is_celery_available():
+    """Check if Celery/Redis is available for async tasks"""
+    try:
+        from celery.app import current_app
+        from kombu.exceptions import OperationalError
+        current_app.control.inspect().active()
+        return True
+    except (ImportError, OperationalError, OSError, ConnectionError):
+        return False
+
+# Decorator to handle both sync and async execution
+def celery_or_sync(func):
+    """Decorator that runs function sync if Celery is not available"""
+    def wrapper(*args, **kwargs):
+        if is_celery_available():
+            logger.info(f"🔄 Running {func.__name__} asynchronously with Celery")
+            return func.delay(*args, **kwargs)
+        else:
+            logger.info(f"🔄 Running {func.__name__} synchronously (Celery not available)")
+            # Remove 'self' parameter if it's a bound task
+            if hasattr(func, '__wrapped__'):
+                return func.__wrapped__(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+    return wrapper
+
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_latest_sessions(self, force=False):
+def fetch_latest_sessions(self=None, force=False):
     """Fetch latest assembly sessions from the API."""
     logger.info(f"🔍 Starting session fetch (force={force})")
     try:
@@ -114,9 +141,13 @@ def fetch_latest_sessions(self, force=False):
                     updated_count += 1
                     logger.info(f"🔄 Updated existing session: {session_id}")
 
-                # Queue session details fetch
-                fetch_session_details.delay(session_id, force=force)
-                logger.info(f"📋 Queued details fetch for: {session_id}")
+                # Queue session details fetch (with fallback)
+                if is_celery_available():
+                    fetch_session_details.delay(session_id, force=force)
+                    logger.info(f"📋 Queued details fetch for: {session_id}")
+                else:
+                    fetch_session_details(session_id=session_id, force=force)
+                    logger.info(f"📋 Processed details fetch for: {session_id}")
 
             except Exception as e:
                 logger.error(f"❌ Error processing session row {i}: {e}")
@@ -133,15 +164,19 @@ def fetch_latest_sessions(self, force=False):
 
     except RequestException as e:
         logger.error(f"Error fetching sessions: {e}")
-        try:
-            self.retry(exc=e)
-        except MaxRetriesExceededError:
-            logger.error("Max retries exceeded for fetch_latest_sessions")
+        if self:  # Only retry if running as Celery task
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error("Max retries exceeded for fetch_latest_sessions")
+                raise
+        else:
+            logger.error("Sync execution failed, no retry available")
             raise
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_session_details(self, session_id, force=False):
+def fetch_session_details(self=None, session_id=None, force=False):
     """Fetch detailed information for a specific session."""
     try:
         url = "https://open.assembly.go.kr/portal/openapi/VCONFDETAIL"
@@ -166,12 +201,18 @@ def fetch_session_details(self, session_id, force=False):
         session.down_url = session_data['DOWN_URL']
         session.save()
 
-        # Fetch bills for this session
-        fetch_session_bills.delay(session_id, force=force)
+        # Fetch bills for this session (with fallback)
+        if is_celery_available():
+            fetch_session_bills.delay(session_id, force=force)
+        else:
+            fetch_session_bills(session_id=session_id, force=force)
 
-        # Process PDF if URL is available
+        # Process PDF if URL is available (with fallback)
         if session.down_url:
-            process_session_pdf.delay(session_id, force=force)
+            if is_celery_available():
+                process_session_pdf.delay(session_id, force=force)
+            else:
+                process_session_pdf(session_id=session_id, force=force)
 
     except (RequestException, Session.DoesNotExist) as e:
         logger.error(f"Error fetching session details: {e}")
@@ -185,7 +226,7 @@ def fetch_session_details(self, session_id, force=False):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_session_bills(self, session_id, force=False):
+def fetch_session_bills(self=None, session_id=None, force=False):
     """Fetch bills discussed in a specific session."""
     try:
         url = "https://open.assembly.go.kr/portal/openapi/VCONFBILLLIST"
@@ -228,7 +269,7 @@ def fetch_session_bills(self, session_id, force=False):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_session_pdf(self, session_id, force=False):
+def process_session_pdf(self=None, session_id=None, force=False):
     """Download and process PDF for a session."""
     try:
         session = Session.objects.get(conf_id=session_id)
@@ -256,8 +297,11 @@ def process_session_pdf(self, session_id, force=False):
             for page in pdf.pages:
                 text += page.extract_text() or ""
 
-        # Process text and extract statements
-        process_statements.delay(session_id, text, force=force)
+        # Process text and extract statements (with fallback)
+        if is_celery_available():
+            process_statements.delay(session_id, text, force=force)
+        else:
+            process_statements(session_id=session_id, text=text, force=force)
 
         # Clean up
         os.remove(pdf_path)
@@ -273,7 +317,7 @@ def process_session_pdf(self, session_id, force=False):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_statements(self, session_id, text, force=False):
+def process_statements(self=None, session_id=None, text=None, force=False):
     """Process extracted text and analyze sentiments."""
     try:
         session = Session.objects.get(conf_id=session_id)
