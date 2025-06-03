@@ -7,6 +7,8 @@ import Footer from '../components/Footer';
 import PartyCard from '../components/PartyCard';
 import MeetingCard from '../components/MeetingCard';
 import BillCard from '../components/BillCard';
+import api from '../api'; // Import the axios instance
+import { ENDPOINTS } from '../apiConfig'; // Import endpoint paths
 
 const Home = () => {
   const [parties, setParties] = useState([]);
@@ -19,36 +21,34 @@ const Home = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
-        // Use relative URLs for API calls
+        setError(null); // Clear previous errors
+
         const [partyRes, meetingRes, billRes] = await Promise.all([
-          fetch('/api/parties/?page_size=4'),
-          fetch('/api/sessions/?page_size=3'),
-          fetch('/api/bills/?page_size=3'),
+          api.get(ENDPOINTS.PARTIES, { params: { page_size: 4 } }),
+          api.get(ENDPOINTS.SESSIONS, { params: { page_size: 3 } }),
+          api.get(ENDPOINTS.BILLS, { params: { page_size: 3 } }),
         ]);
 
-        // Check if responses are ok
-        if (partyRes.ok && meetingRes.ok && billRes.ok) {
-          const partyData = await partyRes.json();
-          const meetingData = await meetingRes.json();
-          const billData = await billRes.json();
-          
-          setParties(partyData.results || []);
-          setMeetings(meetingData.results || []);
-          setBills(billData.results || []);
-        } else {
-          // If API calls fail, set empty arrays to at least show the UI
-          setParties([]);
-          setMeetings([]);
-          setBills([]);
-          console.warn('Some API calls failed, showing empty data');
-        }
+        // Axios responses are in `response.data`
+        // DRF paginated responses have results in `response.data.results`
+        setParties(partyRes.data.results || partyRes.data || []);
+        setMeetings(meetingRes.data.results || meetingRes.data || []);
+        setBills(billRes.data.results || billRes.data || []);
+
+        // Note: Promise.all will fail if any request fails.
+        // The .ok check is not directly applicable here as Axios throws for non-2xx.
+        // The individual error state for partial data load is lost with Promise.all.
+        // If partial load is critical, separate try/catch for each api.get would be needed.
+
       } catch (err) {
-        // On error, show the UI with empty data rather than error state
+        // Axios errors have a `response` object for API errors
+        const message = err.response?.data?.message || err.response?.data?.detail || err.message || '데이터를 불러오는 중 오류가 발생했습니다.';
+        setError(message);
+        console.error('Error fetching home data:', err);
+        // Set to empty arrays on error to prevent rendering issues
         setParties([]);
         setMeetings([]);
         setBills([]);
-        console.error('Error fetching home data:', err);
       } finally {
         setLoading(false);
       }
@@ -138,11 +138,12 @@ const Home = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
             {meetings.map((meeting) => (
               <MeetingCard
-                key={meeting.id}
-                id={meeting.id}
-                title={meeting.title || meeting.conf_nm}
-                date={meeting.conf_dt}
-                description={meeting.summary || ''}
+                key={meeting.conf_id} // Use conf_id as key
+                id={meeting.conf_id}   // Pass conf_id as id
+                cmit_nm={meeting.cmit_nm} // Pass cmit_nm
+                conf_knd={meeting.conf_knd} // Pass conf_knd
+                conf_dt={meeting.conf_dt}   // Pass conf_dt
+                // description is removed as per MeetingCard changes
               />
             ))}
           </div>
@@ -159,10 +160,10 @@ const Home = () => {
             {bills.map((bill) => (
               <BillCard
                 key={bill.bill_id}
-                id={bill.bill_id}
+                id={bill.bill_id} // bill_id for navigation
                 title={bill.bill_nm}
-                date={bill.created_at}
-                description={bill.summary || ''}
+                // date prop removed from BillCard
+                description={''} // Pass empty string for description
               />
             ))}
           </div>
