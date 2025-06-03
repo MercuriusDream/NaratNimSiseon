@@ -42,7 +42,7 @@ const MeetingCard = ({ id, cmit_nm, conf_knd, conf_dt }) => {
           회의록 요약 정보는 제공되지 않습니다.
         </p>
         <a
-          href={`/sessions/${id}`} {/* id is session.conf_id */}
+          href={`/sessions/${id}`} // id is session.conf_id
           className="mt-auto px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-200 text-center"
         >
           회의록 보기
