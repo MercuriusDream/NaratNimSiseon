@@ -145,6 +145,21 @@ cd backend
 python manage.py start_collection
 ```
 
+### 🔧 API 파싱 문제 해결
+API 응답 구조가 변경되어 파싱 오류가 발생하는 경우:
+
+```bash
+# 강제로 최신 데이터 수집 (기존 데이터 업데이트 포함)
+cd backend
+python manage.py force_collection
+
+# 데이터 상태 확인
+python manage.py check_data_status
+
+# 실시간 모니터링 (파싱 오류 확인용)
+python manage.py monitor_collection
+```
+
 ---
 
 ## 🌐 접속 주소

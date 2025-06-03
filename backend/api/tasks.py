@@ -74,7 +74,7 @@ def fetch_latest_sessions(self, force=False):
         for i, row in enumerate(sessions_data, 1):
             try:
                 logger.info(
-                    f"🔄 Processing session {i}/{len(data['row'])}: {row.get('MEETINGSESSION', 'Unknown')}"
+                    f"🔄 Processing session {i}/{len(sessions_data)}: {row.get('MEETINGSESSION', 'Unknown')}"
                 )
                 session_id = f"{row['MEETINGSESSION']}_{row['CHA']}"
                 session, created = Session.objects.get_or_create(
