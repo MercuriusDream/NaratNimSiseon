@@ -231,7 +231,8 @@ def main():
     if not is_redis_running():
         print("🚀 Starting Redis server...")
         # Use --save "" to disable persistence and avoid TLS memory issues
-        redis_process = start_service("redis-server --bind 0.0.0.0 --save \"\" --appendonly no", "Redis")
+        # Set LD_PRELOAD to empty to avoid jemalloc issues in Nix environment
+        redis_process = start_service("env LD_PRELOAD= redis-server --bind 0.0.0.0 --save \"\" --appendonly no", "Redis")
         time.sleep(5)  # Wait longer for Redis to start
 
         # Verify Redis started
