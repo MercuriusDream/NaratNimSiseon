@@ -11,6 +11,7 @@ from celery.schedules import crontab
 from datetime import datetime, timedelta
 import json
 import os
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -228,11 +229,18 @@ def process_statements(self, session_id, text, force=False):
         # Split text into statements (this is a simplified version)
         statements = text.split('\n\n')
         
-        for statement in statements:
+        # Rate limiting: 30 requests per 60 seconds = 1 request every 2 seconds
+        request_delay = 2.1  # Slightly more than 2 seconds to be safe
+        
+        for i, statement in enumerate(statements):
             if not statement.strip():
                 continue
                 
             try:
+                # Add rate limiting delay
+                if i > 0:  # Don't delay the first request
+                    time.sleep(request_delay)
+                
                 # Use Gemini to analyze the statement
                 prompt = f"""
                 Analyze the following statement from a National Assembly meeting:
@@ -272,6 +280,9 @@ def process_statements(self, session_id, text, force=False):
                     sentiment_score=data['sentiment_score'],
                     sentiment_reason=data['reason']
                 )
+                
+                logger.info(f"Processed statement {i+1}/{len(statements)} for session {session_id}")
+                
             except Exception as e:
                 logger.error(f"Error processing individual statement: {e}")
                 continue
