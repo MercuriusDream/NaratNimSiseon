@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { Link } from 'react-router-dom';
@@ -7,18 +8,30 @@ function PartyList() {
   const [parties, setParties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [timeRange, setTimeRange] = useState('all'); // 'all', 'month', 'year'
+  const [timeRange, setTimeRange] = useState('all');
 
   useEffect(() => {
     fetchParties();
-    // eslint-disable-next-line
   }, [timeRange]);
 
   const fetchParties = async () => {
     try {
       setLoading(true);
       const response = await api.get(`/parties/?time_range=${timeRange}`);
-      setParties(response.data.results || response.data || []);
+      
+      // Handle different response structures
+      let partiesData = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          partiesData = response.data;
+        } else if (response.data.results && Array.isArray(response.data.results)) {
+          partiesData = response.data.results;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          partiesData = response.data.data;
+        }
+      }
+      
+      setParties(partiesData);
     } catch (err) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
       console.error('Error fetching parties:', err);
@@ -43,7 +56,7 @@ function PartyList() {
     );
   }
 
-  if (!parties.length) {
+  if (!Array.isArray(parties) || parties.length === 0) {
     return (
       <div className="text-center text-gray-600 p-4">
         표시할 정당이 없습니다.
@@ -104,7 +117,7 @@ function PartyList() {
                   {party.name}
                 </Link>
                 <span className="text-sm text-gray-500">
-                  {party.member_count}명
+                  {party.member_count || 0}명
                 </span>
               </div>
 
@@ -114,8 +127,8 @@ function PartyList() {
                   <p className="text-sm text-gray-600">
                     <span className="font-medium">평균 감성 점수:</span>{' '}
                     <span className={`${
-                      party.avg_sentiment > 0.3 ? 'text-green-600' :
-                      party.avg_sentiment < -0.3 ? 'text-red-600' :
+                      (party.avg_sentiment || 0) > 0.3 ? 'text-green-600' :
+                      (party.avg_sentiment || 0) < -0.3 ? 'text-red-600' :
                       'text-gray-600'
                     }`}>
                       {party.avg_sentiment?.toFixed(2) || 'N/A'}
@@ -139,33 +152,37 @@ function PartyList() {
               </div>
 
               {/* Sentiment Chart */}
-              <div className="h-48">
-                <SentimentChart data={party.recent_statements || []} />
-              </div>
+              {party.recent_statements && Array.isArray(party.recent_statements) && (
+                <div className="h-48 mb-4">
+                  <SentimentChart data={party.recent_statements} />
+                </div>
+              )}
 
               {/* Top Members */}
-              <div className="mt-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">주요 의원</h3>
-                <div className="space-y-2">
-                  {party.top_members?.map(member => (
-                    <div key={member.id} className="flex items-center justify-between text-sm">
-                      <Link
-                        to={`/speakers/${member.id}`}
-                        className="text-gray-600 hover:text-blue-600"
-                      >
-                        {member.naas_nm}
-                      </Link>
-                      <span className={`${
-                        member.avg_sentiment > 0.3 ? 'text-green-600' :
-                        member.avg_sentiment < -0.3 ? 'text-red-600' :
-                        'text-gray-600'
-                      }`}>
-                        {member.avg_sentiment?.toFixed(2) || 'N/A'}
-                      </span>
-                    </div>
-                  ))}
+              {party.top_members && Array.isArray(party.top_members) && party.top_members.length > 0 && (
+                <div className="mt-4">
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">주요 의원</h3>
+                  <div className="space-y-2">
+                    {party.top_members.map(member => (
+                      <div key={member.id} className="flex items-center justify-between text-sm">
+                        <Link
+                          to={`/speakers/${member.id}`}
+                          className="text-gray-600 hover:text-blue-600"
+                        >
+                          {member.naas_nm}
+                        </Link>
+                        <span className={`${
+                          (member.avg_sentiment || 0) > 0.3 ? 'text-green-600' :
+                          (member.avg_sentiment || 0) < -0.3 ? 'text-red-600' :
+                          'text-gray-600'
+                        }`}>
+                          {member.avg_sentiment?.toFixed(2) || 'N/A'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         ))}
