@@ -121,6 +121,26 @@ def kill_process_by_port(port):
         print(f"✅ No processes found on port {port}")
 
 
+def kill_redis_processes():
+    """Kill all Redis processes"""
+    print("🔍 Killing existing Redis processes...")
+    killed_any = False
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            if 'redis-server' in proc.info['name'] or any('redis-server' in cmd for cmd in proc.info['cmdline']):
+                print(f"💀 Killing Redis process (PID: {proc.info['pid']})")
+                proc.kill()
+                killed_any = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    
+    if killed_any:
+        time.sleep(2)  # Wait for processes to fully terminate
+        print("✅ Redis processes killed")
+    else:
+        print("✅ No Redis processes found")
+
+
 def log_output(pipe, prefix):
     """Log output from subprocess in real time"""
     for line in iter(pipe.readline, ''):
@@ -159,16 +179,68 @@ def start_service(command, name, working_dir=None):
 
 def is_redis_running():
     """Check if Redis is already running"""
-    print("🔍 Checking if Redis is running...")
     try:
         import redis
-        r = redis.Redis(host='localhost', port=6379, db=0)
+        r = redis.Redis(host='localhost', port=6379, db=0, socket_connect_timeout=5)
         r.ping()
-        print("✅ Redis is already running")
         return True
-    except Exception as e:
-        print(f"❌ Redis is not running: {e}")
+    except Exception:
         return False
+
+
+def start_redis():
+    """Start Redis with proper configuration for Replit/Nix environment"""
+    print("🚀 Starting Redis server...")
+    
+    # Kill any existing Redis processes first
+    kill_redis_processes()
+    
+    # Try multiple Redis startup strategies
+    redis_commands = [
+        # Strategy 1: Use env LD_PRELOAD= to bypass jemalloc issues
+        "env LD_PRELOAD= redis-server --save '' --appendonly no --bind 0.0.0.0 --port 6379 --daemonize yes --maxmemory 100mb --maxmemory-policy allkeys-lru",
+        
+        # Strategy 2: Use alternative allocator
+        "env MALLOC_ARENA_MAX=1 redis-server --save '' --appendonly no --bind 0.0.0.0 --port 6379 --daemonize yes --maxmemory 100mb",
+        
+        # Strategy 3: Simple Redis with minimal config
+        "redis-server --save '' --appendonly no --bind 0.0.0.0 --port 6379 --daemonize yes --maxmemory 50mb"
+    ]
+    
+    for i, redis_cmd in enumerate(redis_commands, 1):
+        print(f"📋 Trying Redis startup strategy {i}...")
+        print(f"📝 Command: {redis_cmd}")
+        
+        try:
+            result = subprocess.run(redis_cmd, shell=True, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                print(f"✅ Redis command executed successfully")
+                # Wait a moment for Redis to start
+                time.sleep(3)
+                
+                # Check if Redis is actually running
+                if is_redis_running():
+                    print("✅ Redis is running and responding to pings")
+                    return True
+                else:
+                    print("⚠️ Redis command succeeded but server not responding")
+            else:
+                print(f"❌ Redis startup failed with return code {result.returncode}")
+                if result.stderr:
+                    print(f"[REDIS-ERR] {result.stderr}")
+                    
+        except subprocess.TimeoutExpired:
+            print("⚠️ Redis startup command timed out")
+        except Exception as e:
+            print(f"❌ Redis startup error: {e}")
+            
+        # If this strategy failed, try the next one
+        kill_redis_processes()
+        time.sleep(2)
+    
+    print("❌ All Redis startup strategies failed")
+    return False
 
 
 def main():
@@ -199,20 +271,14 @@ def main():
     print("\n📋 STEP 4: Starting Services")
 
     # Start Redis (if not already running)
-    redis_process = None
+    redis_started = False
     if not is_redis_running():
-        print("🚀 Starting Redis server...")
-        # Use proper Redis configuration for Replit/Nix environment
-        redis_cmd = "env LD_PRELOAD= redis-server --bind 0.0.0.0 --save \"\" --appendonly no --daemonize yes"
-        redis_process = start_service(redis_cmd, "Redis")
-        time.sleep(5)  # Wait longer for Redis to start
-
-        # Verify Redis started
-        if is_redis_running():
-            print("✅ Redis started successfully")
-        else:
-            print("❌ Redis failed to start")
-            sys.exit(1)
+        redis_started = start_redis()
+        if not redis_started:
+            print("⚠️ Redis failed to start, will run data collection synchronously")
+    else:
+        print("✅ Redis is already running")
+        redis_started = True
 
     # Run Django migrations and start server
     print("🚀 Starting Django migrations...")
@@ -252,25 +318,31 @@ def main():
                                    working_dir=str(project_root / "backend"))
     time.sleep(5)  # Wait for Django to start
 
-    # Start Celery worker
-    print("🚀 Starting Celery worker...")
-    celery_worker_cmd = f"cd {project_root}/backend && celery -A backend worker -l debug"
-    celery_worker_process = start_service(celery_worker_cmd,
-                                          "Celery-Worker",
-                                          working_dir=str(project_root /
-                                                          "backend"))
-    time.sleep(3)  # Wait for Celery worker to start
+    # Start Celery components only if Redis is running
+    celery_worker_process = None
+    celery_beat_process = None
+    
+    if redis_started:
+        # Start Celery worker
+        print("🚀 Starting Celery worker...")
+        celery_worker_cmd = f"cd {project_root}/backend && celery -A backend worker -l info"
+        celery_worker_process = start_service(celery_worker_cmd,
+                                              "Celery-Worker",
+                                              working_dir=str(project_root / "backend"))
+        time.sleep(3)  # Wait for Celery worker to start
 
-    # Start Celery beat
-    print("🚀 Starting Celery beat scheduler...")
-    celery_beat_cmd = f"cd {project_root}/backend && celery -A backend beat -l debug"
-    celery_beat_process = start_service(celery_beat_cmd,
-                                        "Celery-Beat",
-                                        working_dir=str(project_root /
-                                                        "backend"))
-    time.sleep(3)  # Wait for Celery beat to start
+        # Start Celery beat
+        print("🚀 Starting Celery beat scheduler...")
+        celery_beat_cmd = f"cd {project_root}/backend && celery -A backend beat -l info"
+        celery_beat_process = start_service(celery_beat_cmd,
+                                            "Celery-Beat",
+                                            working_dir=str(project_root / "backend"))
+        time.sleep(3)  # Wait for Celery beat to start
+    else:
+        print("⚠️ Skipping Celery services due to Redis issues")
+        print("   Data collection will run synchronously when triggered")
 
-    print("\n🎉 All services started successfully!")
+    print("\n🎉 Services started!")
     print("=" * 50)
     print("🌐 Django server running at: http://localhost:3000")
     print("🌐 Django admin: http://localhost:3000/admin/")
@@ -278,10 +350,14 @@ def main():
     print("=" * 50)
     print("📊 Process monitoring:")
     print(f"  - Django PID: {django_process.pid}")
-    print(f"  - Celery Worker PID: {celery_worker_process.pid}")
-    print(f"  - Celery Beat PID: {celery_beat_process.pid}")
-    if redis_process:
-        print(f"  - Redis PID: {redis_process.pid}")
+    if redis_started:
+        print(f"  - Redis: Running")
+        if celery_worker_process:
+            print(f"  - Celery Worker PID: {celery_worker_process.pid}")
+        if celery_beat_process:
+            print(f"  - Celery Beat PID: {celery_beat_process.pid}")
+    else:
+        print(f"  - Redis: Failed to start (will use sync processing)")
     print("=" * 50)
     print("✋ Press Ctrl+C to stop all services...")
 
@@ -291,29 +367,27 @@ def main():
             time.sleep(5)
 
             # Check if any process died
-            processes = [("Django", django_process),
-                         ("Celery-Worker", celery_worker_process),
-                         ("Celery-Beat", celery_beat_process)]
-
-            if redis_process:
-                processes.append(("Redis", redis_process))
+            processes = [("Django", django_process)]
+            
+            if celery_worker_process:
+                processes.append(("Celery-Worker", celery_worker_process))
+            if celery_beat_process:
+                processes.append(("Celery-Beat", celery_beat_process))
 
             for name, proc in processes:
                 if proc.poll() is not None:
-                    print(
-                        f"⚠️ {name} process died with return code: {proc.returncode}"
-                    )
+                    print(f"⚠️ {name} process died with return code: {proc.returncode}")
 
     except KeyboardInterrupt:
         print("\n🛑 Stopping all services...")
 
         # Stop all processes gracefully
-        processes_to_stop = [("Django", django_process),
-                             ("Celery-Worker", celery_worker_process),
-                             ("Celery-Beat", celery_beat_process)]
-
-        if redis_process:
-            processes_to_stop.append(("Redis", redis_process))
+        processes_to_stop = [("Django", django_process)]
+        
+        if celery_worker_process:
+            processes_to_stop.append(("Celery-Worker", celery_worker_process))
+        if celery_beat_process:
+            processes_to_stop.append(("Celery-Beat", celery_beat_process))
 
         for name, proc in processes_to_stop:
             if proc and proc.poll() is None:
@@ -328,6 +402,11 @@ def main():
                     print(f"💀 {name} killed")
                 except Exception as e:
                     print(f"❌ Error stopping {name}: {e}")
+
+        # Stop Redis
+        if redis_started:
+            print("🛑 Stopping Redis...")
+            kill_redis_processes()
 
         print("✅ All services stopped.")
 
