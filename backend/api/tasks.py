@@ -53,9 +53,13 @@ def fetch_latest_sessions(self, force=False):
             f"📊 API Response structure: {list(data.keys()) if data else 'Empty response'}"
         )
 
-        # Handle the nested structure: data['nekcaiymatialqlxr'][0]['row']
+        # Handle the nested structure: data['nekcaiymatialqlxr'][1]['row']
+        # Note: [0] contains metadata, [1] contains actual row data
         sessions_data = None
-        if 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 0:
+        if 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 1:
+            sessions_data = data['nekcaiymatialqlxr'][1].get('row', [])
+        elif 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 0:
+            # Try first element as fallback
             sessions_data = data['nekcaiymatialqlxr'][0].get('row', [])
         elif 'row' in data:
             # Fallback for old API structure
