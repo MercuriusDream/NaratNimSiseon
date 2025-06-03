@@ -1,45 +1,56 @@
 
+import json
 import os
 import re
-import glob
 
-def update_django_template():
-    # Find the latest CSS and JS files
-    css_files = glob.glob('backend/staticfiles/css/main.*.css')
-    js_files = glob.glob('backend/staticfiles/js/main.*.js')
+def update_template():
+    # Path to the asset manifest
+    manifest_path = 'frontend/build/asset-manifest.json'
+    template_path = 'backend/templates/index.html'
     
-    if not css_files or not js_files:
-        print("No CSS or JS files found!")
+    if not os.path.exists(manifest_path):
+        print("Asset manifest not found. Make sure to build the frontend first.")
         return
     
-    # Get the latest files (assuming they're the ones we want)
-    latest_css = os.path.basename(css_files[0])
-    latest_js = os.path.basename(js_files[0])
+    if not os.path.exists(template_path):
+        print("Template file not found.")
+        return
     
-    # Read the template file
-    template_path = 'backend/templates/index.html'
+    # Read the asset manifest
+    with open(manifest_path, 'r') as f:
+        manifest = json.load(f)
+    
+    # Extract CSS and JS file names
+    css_file = manifest['files'].get('main.css', '').replace('/static/', '')
+    js_file = manifest['files'].get('main.js', '').replace('/static/', '')
+    
+    if not css_file or not js_file:
+        print("Could not find main CSS or JS files in manifest")
+        return
+    
+    # Read the current template
     with open(template_path, 'r') as f:
-        content = f.read()
+        template_content = f.read()
     
     # Update CSS reference
-    content = re.sub(
-        r'<link href="{% static \'static/css/main\.[^\']+\.css\' %}" rel="stylesheet">',
-        f'<link href="{{% static \'static/css/{latest_css}\' %}}" rel="stylesheet">',
-        content
+    template_content = re.sub(
+        r'<link href="[^"]*main\.[^"]*\.css[^"]*" rel="stylesheet">',
+        f'<link href="{{% static \'{css_file}\' %}}" rel="stylesheet">',
+        template_content
     )
     
     # Update JS reference
-    content = re.sub(
-        r'<script src="{% static \'static/js/main\.[^\']+\.js\' %}"></script>',
-        f'<script src="{{% static \'static/js/{latest_js}\' %}}"></script>',
-        content
+    template_content = re.sub(
+        r'<script src="[^"]*main\.[^"]*\.js[^"]*"></script>',
+        f'<script src="{{% static \'{js_file}\' %}}"></script>',
+        template_content
     )
     
-    # Write back to file
+    # Write the updated template
     with open(template_path, 'w') as f:
-        f.write(content)
+        f.write(template_content)
     
-    print(f"Updated template with CSS: {latest_css}, JS: {latest_js}")
+    print(f"Updated template with CSS: {css_file}, JS: {js_file}")
 
-if __name__ == "__main__":
-    update_django_template()
+if __name__ == '__main__':
+    update_template()
