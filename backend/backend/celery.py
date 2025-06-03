@@ -6,6 +6,17 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 
 app = Celery('backend')
 
+# Configure Celery to use Redis
+app.conf.update(
+    broker_url='redis://localhost:6379/0',
+    result_backend='redis://localhost:6379/0',
+    accept_content=['json'],
+    task_serializer='json',
+    result_serializer='json',
+    timezone='Asia/Seoul',
+    broker_connection_retry_on_startup=True,
+)
+
 # Using a string here means the worker doesn't have to serialize
 # the configuration object to child processes.
 app.config_from_object('django.conf:settings', namespace='CELERY')
