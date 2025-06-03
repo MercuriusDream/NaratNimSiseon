@@ -23,6 +23,7 @@ model = genai.GenerativeModel('gemini-pro')
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_latest_sessions(self, force=False):
     """Fetch latest assembly sessions from the API."""
+    logger.info(f"🔍 Starting session fetch (force={force})")
     try:
         url = "https://open.assembly.go.kr/portal/openapi/nekcaiymatialqlxr"
         params = {
@@ -37,17 +38,30 @@ def fetch_latest_sessions(self, force=False):
         if not force:
             yesterday = datetime.now() - timedelta(days=1)
             params['MEETING_DATE'] = yesterday.strftime('%Y%m%d')
+            logger.info(f"📅 Fetching sessions since: {yesterday.strftime('%Y%m%d')}")
+        else:
+            logger.info("🔄 Force mode: Fetching ALL sessions")
         
+        logger.info(f"🌐 API URL: {url}")
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
         
+        logger.info(f"📊 API Response structure: {list(data.keys()) if data else 'Empty response'}")
+        
         if not data.get('row'):
-            logger.warning("No sessions found in API response")
+            logger.warning("❌ No sessions found in API response")
+            logger.info(f"📋 Full API response: {data}")
             return
         
-        for row in data['row']:
+        logger.info(f"✅ Found {len(data['row'])} sessions in API response")
+        
+        created_count = 0
+        updated_count = 0
+        
+        for i, row in enumerate(data['row'], 1):
             try:
+                logger.info(f"🔄 Processing session {i}/{len(data['row'])}: {row.get('MEETINGSESSION', 'Unknown')}")
                 session_id = f"{row['MEETINGSESSION']}_{row['CHA']}"
                 session, created = Session.objects.get_or_create(
                     conf_id=session_id,
@@ -63,6 +77,12 @@ def fetch_latest_sessions(self, force=False):
                     }
                 )
                 
+                if created:
+                    created_count += 1
+                    logger.info(f"✨ Created new session: {session_id}")
+                else:
+                    logger.info(f"♻️  Session already exists: {session_id}")
+                
                 # If session exists and force is True, update the session
                 if not created and force:
                     session.era_co = '제22대'
@@ -74,13 +94,23 @@ def fetch_latest_sessions(self, force=False):
                     session.bg_ptm = row['MEETTING_TIME']
                     session.down_url = row['LINK_URL']
                     session.save()
+                    updated_count += 1
+                    logger.info(f"🔄 Updated existing session: {session_id}")
                 
                 # Queue session details fetch
                 fetch_session_details.delay(session_id, force=force)
+                logger.info(f"📋 Queued details fetch for: {session_id}")
                 
             except Exception as e:
-                logger.error(f"Error processing session row: {e}")
+                logger.error(f"❌ Error processing session row {i}: {e}")
                 continue
+        
+        logger.info(f"🎉 Session fetch completed: {created_count} created, {updated_count} updated")
+        
+    except Exception as e:
+        logger.error(f"❌ Critical error in fetch_latest_sessions: {e}")
+        logger.error(f"📊 Session count in DB: {Session.objects.count()}")
+        raise
                 
     except RequestException as e:
         logger.error(f"Error fetching sessions: {e}")

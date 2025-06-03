@@ -16,6 +16,11 @@ import logging
 from django.utils import timezone
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
+from rest_framework import generics
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from django.db.models import Count, Avg
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -203,3 +208,91 @@ class PartyViewSet(viewsets.ModelViewSet):
     queryset = Party.objects.all()
     serializer_class = PartySerializer
     pagination_class = StandardResultsSetPagination
+
+class StatementListView(generics.ListAPIView):
+    serializer_class = StatementSerializer
+
+    def get_queryset(self):
+        bill_id = self.kwargs.get('bill_id')
+        return Statement.objects.filter(bill_id=bill_id)
+
+@api_view(['GET'])
+def data_status(request):
+    """Real-time data collection status monitoring endpoint"""
+
+    # Basic counts
+    session_count = Session.objects.count()
+    bill_count = Bill.objects.count()
+    speaker_count = Speaker.objects.count()
+    statement_count = Statement.objects.count()
+
+    # Recent activity (last 24 hours)
+    yesterday = datetime.now() - timedelta(hours=24)
+    recent_sessions = Session.objects.filter(created_at__gte=yesterday).count()
+    recent_bills = Bill.objects.filter(created_at__gte=yesterday).count()
+    recent_statements = Statement.objects.filter(created_at__gte=yesterday).count()
+
+    # Processing status
+    sessions_with_statements = Session.objects.annotate(
+        statement_count=Count('statements')
+    ).filter(statement_count__gt=0).count()
+
+    sessions_with_pdfs = Session.objects.exclude(down_url='').count()
+
+    processing_rate = 0
+    if session_count > 0:
+        processing_rate = (sessions_with_statements / session_count) * 100
+
+    # Sentiment analysis
+    sentiment_data = {}
+    if statement_count > 0:
+        avg_sentiment = Statement.objects.aggregate(
+            avg_sentiment=Avg('sentiment_score')
+        )['avg_sentiment']
+
+        positive_statements = Statement.objects.filter(sentiment_score__gt=0.3).count()
+        negative_statements = Statement.objects.filter(sentiment_score__lt=-0.3).count()
+        neutral_statements = statement_count - positive_statements - negative_statements
+
+        sentiment_data = {
+            'average_sentiment': round(avg_sentiment, 3) if avg_sentiment else 0,
+            'positive_count': positive_statements,
+            'neutral_count': neutral_statements,
+            'negative_count': negative_statements
+        }
+
+    # Latest data
+    latest_session = Session.objects.order_by('-created_at').first()
+    latest_statement = Statement.objects.order_by('-created_at').first()
+
+    return Response({
+        'total_counts': {
+            'sessions': session_count,
+            'bills': bill_count,
+            'speakers': speaker_count,
+            'statements': statement_count
+        },
+        'recent_activity': {
+            'new_sessions_24h': recent_sessions,
+            'new_bills_24h': recent_bills,
+            'new_statements_24h': recent_statements
+        },
+        'processing_status': {
+            'sessions_with_pdfs': sessions_with_pdfs,
+            'sessions_with_statements': sessions_with_statements,
+            'processing_completion_rate': round(processing_rate, 1)
+        },
+        'sentiment_analysis': sentiment_data,
+        'latest_data': {
+            'latest_session': {
+                'id': latest_session.conf_id if latest_session else None,
+                'created_at': latest_session.created_at if latest_session else None
+            },
+            'latest_statement': {
+                'created_at': latest_statement.created_at if latest_statement else None,
+                'speaker': latest_statement.speaker.naas_nm if latest_statement else None,
+                'sentiment': round(latest_statement.sentiment_score, 2) if latest_statement else None
+            }
+        },
+        'last_updated': datetime.now()
+    })
