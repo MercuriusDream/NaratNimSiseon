@@ -32,8 +32,8 @@ class Command(BaseCommand):
                 statements = Statement.objects.count()
                 
                 # Get sessions with PDFs processed
-                sessions_with_pdfs = Session.objects.exclude(pdf_url__isnull=True).exclude(pdf_url='').count()
-                sessions_with_statements = Session.objects.filter(statement__isnull=False).distinct().count()
+                sessions_with_pdfs = Session.objects.exclude(down_url__isnull=True).exclude(down_url='').count()
+                sessions_with_statements = Session.objects.filter(statements__isnull=False).distinct().count()
                 
                 self.stdout.write('🔄 REAL-TIME DATA COLLECTION MONITOR')
                 self.stdout.write('=' * 50)
