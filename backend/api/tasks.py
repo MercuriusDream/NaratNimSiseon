@@ -53,17 +53,25 @@ def fetch_latest_sessions(self, force=False):
             f"📊 API Response structure: {list(data.keys()) if data else 'Empty response'}"
         )
 
-        if not data.get('row'):
+        # Handle the nested structure: data['nekcaiymatialqlxr'][0]['row']
+        sessions_data = None
+        if 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 0:
+            sessions_data = data['nekcaiymatialqlxr'][0].get('row', [])
+        elif 'row' in data:
+            # Fallback for old API structure
+            sessions_data = data['row']
+
+        if not sessions_data:
             logger.warning("❌ No sessions found in API response")
             logger.info(f"📋 Full API response: {data}")
             return
 
-        logger.info(f"✅ Found {len(data['row'])} sessions in API response")
+        logger.info(f"✅ Found {len(sessions_data)} sessions in API response")
 
         created_count = 0
         updated_count = 0
 
-        for i, row in enumerate(data['row'], 1):
+        for i, row in enumerate(sessions_data, 1):
             try:
                 logger.info(
                     f"🔄 Processing session {i}/{len(data['row'])}: {row.get('MEETINGSESSION', 'Unknown')}"
