@@ -1,8 +1,8 @@
 import axios from 'axios';
+import { API_BASE_URL } from './apiConfig'; // Import base URL
 
-// Use relative URLs so requests go through Django's static file serving
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || window.location.origin,
+  baseURL: API_BASE_URL, // Use the configured base URL
   headers: {
     'Content-Type': 'application/json',
   },

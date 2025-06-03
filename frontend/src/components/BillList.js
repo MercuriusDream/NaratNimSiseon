@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import BillCard from './BillCard';
+import api from '../api'; // Import the axios instance
+import { ENDPOINTS } from '../apiConfig'; // Import endpoint paths
 
 const BillList = ({ filter = 'all' }) => {
   const [bills, setBills] = useState([]);
@@ -10,26 +12,34 @@ const BillList = ({ filter = 'all' }) => {
     const fetchBills = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/bills/');
-        if (!response.ok) throw new Error('의안 목록을 불러오는데 실패했습니다.');
-        const data = await response.json();
-        setBills(data.results || []);
+        setError(null); // Clear previous errors
+        // Construct URL for bills, potentially with query params if 'filter' is used for backend filtering
+        // For now, assuming 'filter' is only for client-side, or backend pagination handles 'all'
+        // TODO: If 'filter' prop is meant for backend, pass it as params: api.get(ENDPOINTS.BILLS, { params: { status: filter } })
+        const response = await api.get(ENDPOINTS.BILLS);
+        // Axios wraps the response in a `data` object.
+        // DRF paginated responses have results in `response.data.results`
+        setBills(response.data.results || response.data || []);
       } catch (err) {
-        setError(err.message);
+        // Axios errors have a `response` object for API errors
+        const message = err.response?.data?.message || err.response?.data?.detail || err.message || '의안 목록을 불러오는데 실패했습니다.';
+        setError(message);
         console.error('Error fetching bills:', err);
       } finally {
         setLoading(false);
       }
     };
     fetchBills();
-  }, []);
+  }, [filter]); // Added filter to dependency array
 
-  const filteredBills = bills.filter(bill => {
-    if (filter === 'all') return true;
-    if (filter === 'in-progress') return bill.status === '진행중';
-    if (filter === 'completed') return bill.status === '완료';
-    return true;
-  });
+  // Remove filtering based on bill.status as it's not a model field
+  // const filteredBills = bills.filter(bill => {
+  //   if (filter === 'all') return true;
+  //   if (filter === 'in-progress') return bill.status === '진행중';
+  //   if (filter === 'completed') return bill.status === '완료';
+  //   return true;
+  // });
+  const filteredBills = bills; // Display all fetched bills for now
 
   if (loading) {
     return (
@@ -63,20 +73,22 @@ const BillList = ({ filter = 'all' }) => {
         <div className="max-w-4xl mx-auto">
           <h2 className="text-4xl font-bold text-gray-900 mb-6">대표 의안 목록</h2>
           <p className="text-xl text-gray-600 mb-12">각 의안에 대한 기본 정보와 입장 변화를 확인할 수 있습니다.</p>
-          {filteredBills.length === 0 ? (
+          {/* Use bills directly as filteredBills is now an alias */}
+          {bills.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-600">표시할 의안이 없습니다.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {filteredBills.map((bill) => (
+              {bills.map((bill) => (
                 <BillCard
-                  key={bill.id}
-                  status={bill.status}
-                  number={bill.bill_no || bill.bill_id}
+                  key={bill.bill_id} // Use bill_id for key
+                  // status prop removed
+                  id={bill.bill_id} // Pass bill_id as id for navigation
+                  number={bill.bill_id} // Use bill_id for number
                   title={bill.bill_nm}
-                  description={bill.summary || ''}
-                  partyOpinions={bill.party_opinions || []}
+                  description={''} // Pass empty string for description, was bill.summary
+                  // partyOpinions prop removed
                 />
               ))}
             </div>
