@@ -1,3 +1,4 @@
+
 import subprocess
 import sys
 import os
@@ -22,30 +23,17 @@ def check_dependencies():
 
     # Check PostgreSQL
     print("📋 Checking PostgreSQL...")
-    if platform.system() == "Windows":
-        pg_path = shutil.which("psql")
-        if not pg_path:
-            missing_deps.append(
-                "PostgreSQL (https://www.postgresql.org/download/windows/)")
-        else:
-            print(f"✅ PostgreSQL found at: {pg_path}")
+    pg_path = shutil.which("psql")
+    if not pg_path:
+        missing_deps.append("PostgreSQL")
     else:
-        pg_path = shutil.which("psql")
-        if not pg_path:
-            missing_deps.append("PostgreSQL (sudo apt-get install postgresql)")
-        else:
-            print(f"✅ PostgreSQL found at: {pg_path}")
+        print(f"✅ PostgreSQL found at: {pg_path}")
 
     # Check Redis
     print("📋 Checking Redis...")
     redis_path = shutil.which("redis-server")
     if not redis_path:
-        if platform.system() == "Windows":
-            missing_deps.append(
-                "Redis for Windows (https://github.com/microsoftarchive/redis/releases)"
-            )
-        else:
-            missing_deps.append("Redis (sudo apt-get install redis-server)")
+        missing_deps.append("Redis")
     else:
         print(f"✅ Redis found at: {redis_path}")
 
@@ -56,7 +44,6 @@ def check_dependencies():
         "djangorestframework": "rest_framework",
         "celery": "celery",
         "redis": "redis",
-        "streamlit": "streamlit",
         "psycopg2-binary": "psycopg2",
         "psutil": "psutil"
     }
@@ -196,8 +183,8 @@ def main():
 
     print("\n📋 STEP 3: Killing existing processes")
     # Kill any existing processes on our ports
+    kill_process_by_port(3000)  # Django (Replit port)
     kill_process_by_port(8000)  # Django
-    kill_process_by_port(8501)  # Streamlit
     kill_process_by_port(6379)  # Redis
     kill_process_by_port(5432)  # PostgreSQL
 
@@ -205,23 +192,8 @@ def main():
     project_root = Path(__file__).parent.absolute()
     print(f"📁 Project root: {project_root}")
 
-    # Check virtual environment
-    venv_path = project_root / '.venv'
-    if not venv_path.exists():
-        print("❌ Virtual environment not found!")
-        print("Please create a virtual environment first:")
-        print("python -m venv .venv")
-        sys.exit(1)
-
-    print(f"✅ Virtual environment found at: {venv_path}")
-
-    if platform.system() == "Windows":
-        activate_cmd = f"{venv_path}/Scripts/activate.bat &&"
-        python_cmd = f"{venv_path}/Scripts/python.exe"
-    else:
-        activate_cmd = f"source {venv_path}/bin/activate &&"
-        python_cmd = f"{venv_path}/bin/python"
-
+    # Use system Python (no virtual environment in Replit)
+    python_cmd = "python"
     print(f"🐍 Python executable: {python_cmd}")
 
     print("\n📋 STEP 4: Starting Services")
@@ -230,9 +202,9 @@ def main():
     redis_process = None
     if not is_redis_running():
         print("🚀 Starting Redis server...")
-        # Use --save "" to disable persistence and avoid TLS memory issues
-        # Set LD_PRELOAD to empty to avoid jemalloc issues in Nix environment
-        redis_process = start_service("env LD_PRELOAD= redis-server --bind 0.0.0.0 --save \"\" --appendonly no", "Redis")
+        # Use proper Redis configuration for Replit/Nix environment
+        redis_cmd = "env LD_PRELOAD= redis-server --bind 0.0.0.0 --save \"\" --appendonly no --daemonize yes"
+        redis_process = start_service(redis_cmd, "Redis")
         time.sleep(5)  # Wait longer for Redis to start
 
         # Verify Redis started
@@ -244,7 +216,7 @@ def main():
 
     # Run Django migrations and start server
     print("🚀 Starting Django migrations...")
-    django_migrate_cmd = f"{activate_cmd} cd {project_root}/backend && {python_cmd} manage.py migrate"
+    django_migrate_cmd = f"cd {project_root}/backend && {python_cmd} manage.py migrate"
     migrate_process = subprocess.run(django_migrate_cmd,
                                      shell=True,
                                      capture_output=True,
@@ -260,8 +232,21 @@ def main():
             print(f"[MIGRATE-ERR] {migrate_process.stderr}")
         sys.exit(1)
 
+    # Collect static files
+    print("🚀 Collecting static files...")
+    collectstatic_cmd = f"cd {project_root}/backend && {python_cmd} manage.py collectstatic --noinput"
+    collectstatic_process = subprocess.run(collectstatic_cmd,
+                                          shell=True,
+                                          capture_output=True,
+                                          text=True)
+
+    if collectstatic_process.returncode == 0:
+        print("✅ Static files collected successfully")
+    else:
+        print("⚠️ Static files collection failed, continuing anyway...")
+
     print("🚀 Starting Django server...")
-    django_cmd = f"{activate_cmd} cd {project_root}/backend && {python_cmd} manage.py runserver 0.0.0.0:8000"
+    django_cmd = f"cd {project_root}/backend && {python_cmd} manage.py runserver 0.0.0.0:3000"
     django_process = start_service(django_cmd,
                                    "Django",
                                    working_dir=str(project_root / "backend"))
@@ -269,7 +254,7 @@ def main():
 
     # Start Celery worker
     print("🚀 Starting Celery worker...")
-    celery_worker_cmd = f"{activate_cmd} cd {project_root}/backend && celery -A backend worker -l debug"
+    celery_worker_cmd = f"cd {project_root}/backend && celery -A backend worker -l debug"
     celery_worker_process = start_service(celery_worker_cmd,
                                           "Celery-Worker",
                                           working_dir=str(project_root /
@@ -278,33 +263,23 @@ def main():
 
     # Start Celery beat
     print("🚀 Starting Celery beat scheduler...")
-    celery_beat_cmd = f"{activate_cmd} cd {project_root}/backend && celery -A backend beat -l debug"
+    celery_beat_cmd = f"cd {project_root}/backend && celery -A backend beat -l debug"
     celery_beat_process = start_service(celery_beat_cmd,
                                         "Celery-Beat",
                                         working_dir=str(project_root /
                                                         "backend"))
     time.sleep(3)  # Wait for Celery beat to start
 
-    # Start Streamlit frontend
-    print("🚀 Starting Streamlit frontend...")
-    frontend_cmd = f"{activate_cmd} cd {project_root}/frontend && streamlit run app.py --server.port=8501 --server.address=0.0.0.0"
-    frontend_process = start_service(frontend_cmd,
-                                     "Streamlit",
-                                     working_dir=str(project_root /
-                                                     "frontend"))
-
     print("\n🎉 All services started successfully!")
     print("=" * 50)
-    print("🌐 Django server running at: http://localhost:8000")
-    print("🌐 Django admin: http://localhost:8000/admin/")
-    print("🌐 Django API: http://localhost:8000/api/")
-    print("🌐 Streamlit frontend running at: http://localhost:8501")
+    print("🌐 Django server running at: http://localhost:3000")
+    print("🌐 Django admin: http://localhost:3000/admin/")
+    print("🌐 Django API: http://localhost:3000/api/")
     print("=" * 50)
     print("📊 Process monitoring:")
     print(f"  - Django PID: {django_process.pid}")
     print(f"  - Celery Worker PID: {celery_worker_process.pid}")
     print(f"  - Celery Beat PID: {celery_beat_process.pid}")
-    print(f"  - Streamlit PID: {frontend_process.pid}")
     if redis_process:
         print(f"  - Redis PID: {redis_process.pid}")
     print("=" * 50)
@@ -318,8 +293,7 @@ def main():
             # Check if any process died
             processes = [("Django", django_process),
                          ("Celery-Worker", celery_worker_process),
-                         ("Celery-Beat", celery_beat_process),
-                         ("Streamlit", frontend_process)]
+                         ("Celery-Beat", celery_beat_process)]
 
             if redis_process:
                 processes.append(("Redis", redis_process))
@@ -336,8 +310,7 @@ def main():
         # Stop all processes gracefully
         processes_to_stop = [("Django", django_process),
                              ("Celery-Worker", celery_worker_process),
-                             ("Celery-Beat", celery_beat_process),
-                             ("Streamlit", frontend_process)]
+                             ("Celery-Beat", celery_beat_process)]
 
         if redis_process:
             processes_to_stop.append(("Redis", redis_process))
