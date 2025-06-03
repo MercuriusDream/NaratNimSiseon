@@ -34,7 +34,7 @@ const BillCard = ({ id, title, description }) => {
           {description || '의안 요약이 제공되지 않았습니다.'}
         </p>
         <a
-          href={`/bills/${id}`}
+          href={`/bills/${id}`} // id is bill.bill_id from BillList
           className="mt-auto px-4 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-200 text-center"
         >
           의안 보기
