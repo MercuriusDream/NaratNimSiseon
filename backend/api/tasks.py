@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 # Configure Gemini API
 genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemma-3-27b-it')
+
 
 # Check if Celery/Redis is available
 def is_celery_available():
@@ -31,20 +32,26 @@ def is_celery_available():
     except (ImportError, OperationalError, OSError, ConnectionError):
         return False
 
+
 # Decorator to handle both sync and async execution
 def celery_or_sync(func):
     """Decorator that runs function sync if Celery is not available"""
+
     def wrapper(*args, **kwargs):
         if is_celery_available():
-            logger.info(f"🔄 Running {func.__name__} asynchronously with Celery")
+            logger.info(
+                f"🔄 Running {func.__name__} asynchronously with Celery")
             return func.delay(*args, **kwargs)
         else:
-            logger.info(f"🔄 Running {func.__name__} synchronously (Celery not available)")
+            logger.info(
+                f"🔄 Running {func.__name__} synchronously (Celery not available)"
+            )
             # Remove 'self' parameter if it's a bound task
             if hasattr(func, '__wrapped__'):
                 return func.__wrapped__(*args, **kwargs)
             else:
                 return func(*args, **kwargs)
+
     return wrapper
 
 
@@ -85,7 +92,8 @@ def fetch_latest_sessions(self=None, force=False):
         sessions_data = None
         if 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 1:
             sessions_data = data['nekcaiymatialqlxr'][1].get('row', [])
-        elif 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 0:
+        elif 'nekcaiymatialqlxr' in data and len(
+                data['nekcaiymatialqlxr']) > 0:
             # Try first element as fallback
             sessions_data = data['nekcaiymatialqlxr'][0].get('row', [])
         elif 'row' in data:
