@@ -1,6 +1,5 @@
 import requests
 import pdfplumber
-import google.generativeai as genai
 from celery import shared_task
 from django.conf import settings
 from .models import Session, Bill, Speaker, Statement
@@ -16,9 +15,24 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Configure Gemini API
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel('gemma-3-27b-it')
+# Configure Gemini API with error handling
+try:
+    import google.generativeai as genai
+    if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemma-3-27b-it')
+    else:
+        logger.warning("GEMINI_API_KEY not found in settings")
+        genai = None
+        model = None
+except ImportError:
+    logger.warning("google.generativeai not available")
+    genai = None
+    model = None
+except Exception as e:
+    logger.warning(f"Error configuring Gemini API: {e}")
+    genai = None
+    model = None
 
 
 # Check if Celery/Redis is available
@@ -58,7 +72,25 @@ def celery_or_sync(func):
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_latest_sessions(self=None, force=False, debug=False):
     """Fetch latest assembly sessions from the API."""
-    logger.info(f"🔍 Starting session fetch (force={force}, debug={debug})")
+    try:
+        logger.info(f"🔍 Starting session fetch (force={force}, debug={debug})")
+        
+        # Check if we have the required settings
+        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error("❌ ASSEMBLY_API_KEY not found in settings")
+            raise ValueError("ASSEMBLY_API_KEY not configured")
+        
+        if debug:
+            logger.info(f"🐛 DEBUG: Function started successfully")
+            logger.info(f"🐛 DEBUG: Settings check passed")
+    
+    except Exception as e:
+        logger.error(f"❌ Error at start of fetch_latest_sessions: {e}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+        raise
+    
     try:
         url = "https://open.assembly.go.kr/portal/openapi/nzbyfwhwaoanttzje"
 
@@ -590,6 +622,10 @@ def process_statements(self=None,
                     time.sleep(request_delay)
 
                 # Use Gemini to analyze the statement
+                if not model:
+                    logger.warning("Gemini model not available, skipping sentiment analysis")
+                    continue
+                
                 prompt = f"""
                 Analyze the following statement from a National Assembly meeting:
                 
