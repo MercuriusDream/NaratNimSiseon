@@ -199,6 +199,8 @@ def fetch_session_details(self=None, session_id=None, force=False):
         data = response.json()
 
         if not data.get('row'):
+            print(session_id)
+            print(data)
             logger.warning(f"No details found for session {session_id}")
             return
 
