@@ -72,12 +72,13 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                 "DAE_NUM": "22",  # 22nd Assembly
                 "CONF_DATE": current_date.strftime('%Y-%m')
             }
+            logger.info(
+                f"📅 Fetching sessions for: {current_date.strftime('%Y-%m')}")
+            
             if debug:
                 logger.info(f"🐛 DEBUG: API URL: {url}")
                 logger.info(f"🐛 DEBUG: API Params: {params}")
             
-            logger.info(
-                f"📅 Fetching sessions for: {current_date.strftime('%Y-%m')}")
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
@@ -107,11 +108,12 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                     "CONF_DATE": conf_date
                 }
 
+                logger.info(f"📅 Fetching sessions for: {conf_date}")
+                
                 if debug:
                     logger.info(f"🐛 DEBUG: API URL: {url}")
                     logger.info(f"🐛 DEBUG: API Params for {conf_date}: {params}")
 
-                logger.info(f"📅 Fetching sessions for: {conf_date}")
                 try:
                     response = requests.get(url, params=params, timeout=30)
                     response.raise_for_status()
