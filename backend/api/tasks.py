@@ -138,11 +138,13 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
             print(f"🐛 IMMEDIATE DEBUG: Not force mode, fetching current month only")
             # Fetch current month only
             current_date = datetime.now()
+            conf_date = current_date.strftime('%Y-%m')
+            print(f"🐛 IMMEDIATE DEBUG: Current date calculated as: {conf_date}")
             params = {
                 "KEY": settings.ASSEMBLY_API_KEY,
                 "Type": "json",
                 "DAE_NUM": "22",  # 22nd Assembly
-                "CONF_DATE": current_date.strftime('%Y-%m')
+                "CONF_DATE": conf_date
             }
             print(f"🐛 IMMEDIATE DEBUG: Params created: {params}")
             logger.info(
@@ -193,12 +195,23 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                 logger.info("❌ No sessions data found in API response")
         else:
             # Force mode: fetch month by month going backwards
+            print(f"🐛 IMMEDIATE DEBUG: Force mode enabled")
             logger.info("🔄 Force mode: Fetching sessions month by month")
             current_date = datetime.now()
+            print(f"🐛 IMMEDIATE DEBUG: Starting from current date: {current_date}")
 
             for months_back in range(0, 24):  # Go back up to 24 months
-                target_date = current_date - timedelta(days=30 * months_back)
-                conf_date = target_date.strftime('%Y-%m')
+                # Use proper month calculation instead of days
+                year = current_date.year
+                month = current_date.month - months_back
+                
+                # Handle year rollover
+                while month <= 0:
+                    month += 12
+                    year -= 1
+                    
+                conf_date = f"{year:04d}-{month:02d}"
+                print(f"🐛 IMMEDIATE DEBUG: Calculated conf_date for months_back={months_back}: {conf_date}")
 
                 params = {
                     "KEY": settings.ASSEMBLY_API_KEY,
