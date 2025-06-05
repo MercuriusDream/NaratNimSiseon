@@ -61,110 +61,160 @@ def fetch_latest_sessions(self=None, force=False):
     logger.info(f"🔍 Starting session fetch (force={force})")
     try:
         url = "https://open.assembly.go.kr/portal/openapi/nzbyfwhwaoanttzje"
-        params = {
-            "KEY": settings.ASSEMBLY_API_KEY,
-            "Type": "json",
-            "pIndex": 1,
-            "pSize": 100,
-            "DAE_NUM": "22"  # 22nd Assembly
-        }
-
-        # If not force, only fetch sessions from the last 24 hours
+        
+        # If not force, only fetch recent sessions
         if not force:
-            yesterday = datetime.now() - timedelta(days=1)
-            params['MEETING_DATE'] = yesterday.strftime('%Y%m%d')
-            logger.info(
-                f"📅 Fetching sessions since: {yesterday.strftime('%Y%m%d')}")
+            # Fetch current month only
+            current_date = datetime.now()
+            params = {
+                "KEY": settings.ASSEMBLY_API_KEY,
+                "Type": "json",
+                "DAE_NUM": "22",  # 22nd Assembly
+                "CONF_DATE": current_date.strftime('%Y-%m')
+            }
+            logger.info(f"📅 Fetching sessions for: {current_date.strftime('%Y-%m')}")
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            sessions_data = extract_sessions_from_response(data)
+            if sessions_data:
+                process_sessions_data(sessions_data)
         else:
-            logger.info("🔄 Force mode: Fetching ALL sessions")
+            # Force mode: fetch month by month going backwards
+            logger.info("🔄 Force mode: Fetching sessions month by month")
+            current_date = datetime.now()
+            
+            for months_back in range(0, 24):  # Go back up to 24 months
+                target_date = current_date - timedelta(days=30 * months_back)
+                conf_date = target_date.strftime('%Y-%m')
+                
+                params = {
+                    "KEY": settings.ASSEMBLY_API_KEY,
+                    "Type": "json",
+                    "DAE_NUM": "22",  # 22nd Assembly
+                    "CONF_DATE": conf_date
+                }
+                
+                logger.info(f"📅 Fetching sessions for: {conf_date}")
+                try:
+                    response = requests.get(url, params=params, timeout=30)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    sessions_data = extract_sessions_from_response(data)
+                    if not sessions_data:
+                        logger.info(f"❌ No sessions found for {conf_date}, stopping...")
+                        break
+                    
+                    process_sessions_data(sessions_data)
+                    
+                    # Small delay between requests to be respectful
+                    time.sleep(1)
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ Error fetching {conf_date}: {e}")
+                    continue
+        
+        logger.info("🎉 Session fetch completed")
 
-        logger.info(f"🌐 API URL: {url}")
-        response = requests.get(url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+    except Exception as e:
+        if e == RequestException:
+            if self:
+                try:
+                    self.retry(exc=e)
+                except MaxRetriesExceededError:
+                    logger.error("Max retries exceeded for fetch_latest_sessions")
+                    raise
+            else:
+                logger.error("Sync execution failed, no retry available")
+                raise
+        logger.error(f"❌ Critical error in fetch_latest_sessions: {e}")
+        logger.error(f"📊 Session count in DB: {Session.objects.count()}")
+        raise
 
-        logger.info(
-            f"📊 API Response structure: {list(data.keys()) if data else 'Empty response'}"
-        )
 
-        # Handle the nested structure: data['nekcaiymatialqlxr'][1]['row']
-        # Note: [0] contains metadata, [1] contains actual row data
-        sessions_data = None
-        if 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 1:
-            sessions_data = data['nzbyfwhwaoanttzje'][1].get('row', [])
-        elif 'nzbyfwhwaoanttzje' in data and len(
-                data['nzbyfwhwaoanttzje']) > 0:
-            # Try first element as fallback
-            sessions_data = data['nzbyfwhwaoanttzje'][0].get('row', [])
-        elif 'row' in data:
-            # Fallback for old API structure
-            sessions_data = data['row']
+def extract_sessions_from_response(data):
+    """Extract sessions data from API response"""
+    sessions_data = None
+    if 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 1:
+        sessions_data = data['nzbyfwhwaoanttzje'][1].get('row', [])
+    elif 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 0:
+        # Try first element as fallback
+        sessions_data = data['nzbyfwhwaoanttzje'][0].get('row', [])
+    elif 'row' in data:
+        # Fallback for old API structure
+        sessions_data = data['row']
+    
+    logger.info(f"✅ Found {len(sessions_data) if sessions_data else 0} sessions in API response")
+    return sessions_data
 
-        if not sessions_data:
-            logger.warning("❌ No sessions found in API response")
-            logger.info(f"📋 Full API response: {data}")
-            return
 
-        logger.info(f"✅ Found {len(sessions_data)} sessions in API response")
+def process_sessions_data(sessions_data):
+    """Process the sessions data and create/update session objects"""
+    if not sessions_data:
+        logger.warning("❌ No sessions data to process")
+        return
+    
+    created_count = 0
+    updated_count = 0
 
-        created_count = 0
-        updated_count = 0
-
-        for i, row in enumerate(sessions_data, 1):
-            try:
-                logger.info(
-                    f"🔄 Processing session {i}/{len(sessions_data)}: {row.get('MEETINGSESSION', 'Unknown')}"
-                )
-                # Use CONF_ID if available, otherwise construct from available data
-                session_id = row.get('CONFER_NUM')
-                session, created = Session.objects.get_or_create(
-                    conf_id=session_id,
-                    defaults={
-                        'era_co': '제22대',
-                        'sess': row['MEETINGSESSION'],
-                        'dgr': row['CHA'],
-                        'conf_dt': row['MEETTING_DATE'],
-                        'conf_knd': '국회본회의',
-                        'cmit_nm': '국회본회의',
-                        'bg_ptm': row['MEETTING_TIME'],
-                        'down_url': row['LINK_URL']
-                    })
-
-                if created:
-                    created_count += 1
-                    logger.info(f"✨ Created new session: {session_id}")
-                else:
-                    logger.info(f"♻️  Session already exists: {session_id}")
-
-                # If session exists and force is True, update the session
-                if not created and force:
-                    session.era_co = '제22대'
-                    session.sess = row['MEETINGSESSION']
-                    session.dgr = row['CHA']
-                    session.conf_dt = row['MEETTING_DATE']
-                    session.conf_knd = '국회본회의'
-                    session.cmit_nm = '국회본회의'
-                    session.bg_ptm = row['MEETTING_TIME']
-                    session.down_url = row['LINK_URL']
-                    session.save()
-                    updated_count += 1
-                    logger.info(f"🔄 Updated existing session: {session_id}")
-
-                # Queue session details fetch (with fallback)
-                if is_celery_available():
-                    fetch_session_details.delay(session_id, force=force)
-                    logger.info(f"📋 Queued details fetch for: {session_id}")
-                else:
-                    fetch_session_details(session_id=session_id, force=force)
-                    logger.info(f"📋 Processed details fetch for: {session_id}")
-
-            except Exception as e:
-                logger.error(f"❌ Error processing session row {i}: {e}")
+    for i, row in enumerate(sessions_data, 1):
+        try:
+            logger.info(f"🔄 Processing session {i}/{len(sessions_data)}: {row.get('TITLE', 'Unknown')}")
+            
+            # Use CONFER_NUM as the proper session ID
+            session_id = row.get('CONFER_NUM')
+            if not session_id:
+                logger.warning(f"⚠️ No CONFER_NUM found for session {i}")
                 continue
+                
+            session, created = Session.objects.get_or_create(
+                conf_id=session_id,
+                defaults={
+                    'era_co': f'제{row.get("DAE_NUM", 22)}대',
+                    'sess': row.get('TITLE', '').split(' ')[2] if len(row.get('TITLE', '').split(' ')) > 2 else '',
+                    'dgr': row.get('TITLE', '').split(' ')[3] if len(row.get('TITLE', '').split(' ')) > 3 else '',
+                    'conf_dt': row.get('CONF_DATE', ''),
+                    'conf_knd': row.get('CLASS_NAME', '국회본회의'),
+                    'cmit_nm': row.get('CLASS_NAME', '국회본회의'),
+                    'bg_ptm': '',  # Not available in this API
+                    'down_url': row.get('PDF_LINK_URL', '')
+                })
 
-        logger.info(
-            f"🎉 Session fetch completed: {created_count} created, {updated_count} updated"
-        )
+            if created:
+                created_count += 1
+                logger.info(f"✨ Created new session: {session_id}")
+            else:
+                logger.info(f"♻️  Session already exists: {session_id}")
+
+            # If session exists and force is True, update the session
+            if not created and force:
+                session.era_co = f'제{row.get("DAE_NUM", 22)}대'
+                session.sess = row.get('TITLE', '').split(' ')[2] if len(row.get('TITLE', '').split(' ')) > 2 else ''
+                session.dgr = row.get('TITLE', '').split(' ')[3] if len(row.get('TITLE', '').split(' ')) > 3 else ''
+                session.conf_dt = row.get('CONF_DATE', '')
+                session.conf_knd = row.get('CLASS_NAME', '국회본회의')
+                session.cmit_nm = row.get('CLASS_NAME', '국회본회의')
+                session.down_url = row.get('PDF_LINK_URL', '')
+                session.save()
+                updated_count += 1
+                logger.info(f"🔄 Updated existing session: {session_id}")
+
+            # Queue session details fetch (with fallback)
+            if is_celery_available():
+                fetch_session_details.delay(session_id, force=force)
+                logger.info(f"📋 Queued details fetch for: {session_id}")
+            else:
+                fetch_session_details(session_id=session_id, force=force)
+                logger.info(f"📋 Processed details fetch for: {session_id}")
+
+        except Exception as e:
+            logger.error(f"❌ Error processing session row {i}: {e}")
+            continue
+
+    logger.info(f"🎉 Sessions processed: {created_count} created, {updated_count} updated")
+
+        
 
     except Exception as e:
         if e == RequestException:
