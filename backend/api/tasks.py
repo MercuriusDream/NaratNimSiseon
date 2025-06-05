@@ -1,3 +1,4 @@
+
 import requests
 import pdfplumber
 import google.generativeai as genai
@@ -78,7 +79,7 @@ def fetch_latest_sessions(self=None, force=False):
             data = response.json()
             sessions_data = extract_sessions_from_response(data)
             if sessions_data:
-                process_sessions_data(sessions_data)
+                process_sessions_data(sessions_data, force=force)
         else:
             # Force mode: fetch month by month going backwards
             logger.info("🔄 Force mode: Fetching sessions month by month")
@@ -106,7 +107,7 @@ def fetch_latest_sessions(self=None, force=False):
                         logger.info(f"❌ No sessions found for {conf_date}, stopping...")
                         break
                     
-                    process_sessions_data(sessions_data)
+                    process_sessions_data(sessions_data, force=force)
                     
                     # Small delay between requests to be respectful
                     time.sleep(1)
@@ -118,7 +119,7 @@ def fetch_latest_sessions(self=None, force=False):
         logger.info("🎉 Session fetch completed")
 
     except Exception as e:
-        if e == RequestException:
+        if isinstance(e, RequestException):
             if self:
                 try:
                     self.retry(exc=e)
@@ -149,7 +150,7 @@ def extract_sessions_from_response(data):
     return sessions_data
 
 
-def process_sessions_data(sessions_data):
+def process_sessions_data(sessions_data, force=False):
     """Process the sessions data and create/update session objects"""
     if not sessions_data:
         logger.warning("❌ No sessions data to process")
@@ -213,21 +214,6 @@ def process_sessions_data(sessions_data):
             continue
 
     logger.info(f"🎉 Sessions processed: {created_count} created, {updated_count} updated")
-    except Exception as e:
-        if e == RequestException:
-            if self:
-                try:
-                    self.retry(exc=e)
-                except MaxRetriesExceededError:
-                    logger.error(
-                        "Max retries exceeded for fetch_latest_sessions")
-                    raise
-            else:
-                logger.error("Sync execution failed, no retry available")
-                raise
-        logger.error(f"❌ Critical error in fetch_latest_sessions: {e}")
-        logger.error(f"📊 Session count in DB: {Session.objects.count()}")
-        raise
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -297,13 +283,14 @@ def fetch_session_details(self=None, session_id=None, force=False):
 
     except (RequestException, Session.DoesNotExist) as e:
         logger.error(f"Error fetching session details: {e}")
-        try:
-            self.retry(exc=e)
-        except MaxRetriesExceededError:
-            logger.error(
-                f"Max retries exceeded for fetch_session_details: {session_id}"
-            )
-            raise
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error(
+                    f"Max retries exceeded for fetch_session_details: {session_id}"
+                )
+                raise
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -341,12 +328,13 @@ def fetch_session_bills(self=None, session_id=None, force=False):
 
     except (RequestException, Session.DoesNotExist) as e:
         logger.error(f"Error fetching session bills: {e}")
-        try:
-            self.retry(exc=e)
-        except MaxRetriesExceededError:
-            logger.error(
-                f"Max retries exceeded for fetch_session_bills: {session_id}")
-            raise
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error(
+                    f"Max retries exceeded for fetch_session_bills: {session_id}")
+                raise
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -389,12 +377,13 @@ def process_session_pdf(self=None, session_id=None, force=False):
 
     except (RequestException, Session.DoesNotExist, Exception) as e:
         logger.error(f"Error processing session PDF: {e}")
-        try:
-            self.retry(exc=e)
-        except MaxRetriesExceededError:
-            logger.error(
-                f"Max retries exceeded for process_session_pdf: {session_id}")
-            raise
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error(
+                    f"Max retries exceeded for process_session_pdf: {session_id}")
+                raise
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -473,12 +462,13 @@ def process_statements(self=None, session_id=None, text=None, force=False):
 
     except (Session.DoesNotExist, Exception) as e:
         logger.error(f"Error processing statements: {e}")
-        try:
-            self.retry(exc=e)
-        except MaxRetriesExceededError:
-            logger.error(
-                f"Max retries exceeded for process_statements: {session_id}")
-            raise
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error(
+                    f"Max retries exceeded for process_statements: {session_id}")
+                raise
 
 
 # Scheduled task to run daily at midnight
