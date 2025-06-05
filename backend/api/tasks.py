@@ -77,7 +77,7 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
-            sessions_data = extract_sessions_from_response(data)
+            sessions_data = extract_sessions_from_response(data, debug=debug)
             if sessions_data:
                 process_sessions_data(sessions_data, force=force, debug=debug)
         else:
@@ -102,7 +102,7 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                     response.raise_for_status()
                     data = response.json()
 
-                    sessions_data = extract_sessions_from_response(data)
+                    sessions_data = extract_sessions_from_response(data, debug=debug)
                     if not sessions_data:
                         logger.info(
                             f"❌ No sessions found for {conf_date}, stopping..."
@@ -139,8 +139,11 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
         raise
 
 
-def extract_sessions_from_response(data):
+def extract_sessions_from_response(data, debug=False):
     """Extract sessions data from API response"""
+    if debug:
+        logger.info(f"🐛 DEBUG: Full API response structure: {list(data.keys()) if data else 'Empty response'}")
+    
     sessions_data = None
     if 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 1:
         sessions_data = data['nzbyfwhwaoanttzje'][1].get('row', [])
@@ -151,6 +154,11 @@ def extract_sessions_from_response(data):
         # Fallback for old API structure
         sessions_data = data['row']
 
+    if debug:
+        logger.info(f"🐛 DEBUG: Extracted {len(sessions_data) if sessions_data else 0} sessions from response")
+        if sessions_data:
+            logger.info(f"🐛 DEBUG: Sample session keys: {list(sessions_data[0].keys()) if len(sessions_data) > 0 else 'No sessions'}")
+    
     logger.info(
         f"✅ Found {len(sessions_data) if sessions_data else 0} sessions in API response"
     )
@@ -166,11 +174,15 @@ def process_sessions_data(sessions_data, force=False, debug=False):
     if debug:
         logger.info(
             f"🐛 DEBUG MODE: Would process {len(sessions_data)} sessions")
-        for i, row in enumerate(sessions_data[:5], 1):  # Show first 5 sessions
-            logger.info(f"🐛 DEBUG Session {i}: {row}")
-        if len(sessions_data) > 5:
+        for i, row in enumerate(sessions_data[:3], 1):  # Show first 3 sessions
+            session_id = row.get('CONFER_NUM')
+            title = row.get('TITLE', 'Unknown')
+            date = row.get('CONF_DATE', 'Unknown')
+            logger.info(f"🐛 DEBUG Session {i}: ID={session_id}, Title={title[:50]}..., Date={date}")
+        if len(sessions_data) > 3:
             logger.info(
-                f"🐛 DEBUG: ... and {len(sessions_data) - 5} more sessions")
+                f"🐛 DEBUG: ... and {len(sessions_data) - 3} more sessions")
+        logger.info("🐛 DEBUG MODE: Data preview completed - not storing to database")
         return
 
     created_count = 0
