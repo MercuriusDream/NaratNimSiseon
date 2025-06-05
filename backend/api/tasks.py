@@ -411,9 +411,9 @@ def fetch_session_details(self=None,
     try:
         if debug:
             logger.info(
-                f"🐛 DEBUG: Would fetch details for session {session_id} (skipping in debug mode)"
+                f"🐛 DEBUG: Fetching details for session {session_id} in debug mode"
             )
-            return
+            # Continue with actual API call in debug mode
         url = "https://open.assembly.go.kr/portal/openapi/VCONFDETAIL"
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
@@ -499,9 +499,9 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
     try:
         if debug:
             logger.info(
-                f"🐛 DEBUG: Would fetch bills for session {session_id} (skipping in debug mode)"
+                f"🐛 DEBUG: Fetching bills for session {session_id} in debug mode"
             )
-            return
+            # Continue with actual API call in debug mode
         url = "https://open.assembly.go.kr/portal/openapi/VCONFBILLLIST"
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
@@ -549,7 +549,7 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
     try:
         if debug:
             logger.info(
-                f"🐛 DEBUG: Would process PDF for session {session_id} (skipping in debug mode)"
+                f"🐛 DEBUG: Skipping PDF processing for session {session_id} in debug mode (too resource intensive)"
             )
             return
         session = Session.objects.get(conf_id=session_id)
@@ -614,7 +614,7 @@ def process_statements(self=None,
     try:
         if debug:
             logger.info(
-                f"🐛 DEBUG: Would process {len(text.split()) if text else 0} words of text for session {session_id} (skipping in debug mode)"
+                f"🐛 DEBUG: Skipping statement processing for session {session_id} in debug mode (too resource intensive)"
             )
             if text:
                 logger.info(f"🐛 DEBUG: Text preview: {text[:200]}...")
