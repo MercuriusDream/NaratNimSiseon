@@ -72,14 +72,25 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                 "DAE_NUM": "22",  # 22nd Assembly
                 "CONF_DATE": current_date.strftime('%Y-%m')
             }
+            if debug:
+                logger.info(f"🐛 DEBUG: API URL: {url}")
+                logger.info(f"🐛 DEBUG: API Params: {params}")
+            
             logger.info(
                 f"📅 Fetching sessions for: {current_date.strftime('%Y-%m')}")
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
+            
+            if debug:
+                logger.info(f"🐛 DEBUG: API Response status: {response.status_code}")
+                logger.info(f"🐛 DEBUG: Raw API response (first 500 chars): {str(data)[:500]}...")
+            
             sessions_data = extract_sessions_from_response(data, debug=debug)
             if sessions_data:
                 process_sessions_data(sessions_data, force=force, debug=debug)
+            elif debug:
+                logger.info("🐛 DEBUG: No sessions data found to process")
         else:
             # Force mode: fetch month by month going backwards
             logger.info("🔄 Force mode: Fetching sessions month by month")
@@ -96,17 +107,27 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                     "CONF_DATE": conf_date
                 }
 
+                if debug:
+                    logger.info(f"🐛 DEBUG: API URL: {url}")
+                    logger.info(f"🐛 DEBUG: API Params for {conf_date}: {params}")
+
                 logger.info(f"📅 Fetching sessions for: {conf_date}")
                 try:
                     response = requests.get(url, params=params, timeout=30)
                     response.raise_for_status()
                     data = response.json()
 
+                    if debug:
+                        logger.info(f"🐛 DEBUG: API Response status for {conf_date}: {response.status_code}")
+                        logger.info(f"🐛 DEBUG: Raw API response for {conf_date} (first 500 chars): {str(data)[:500]}...")
+
                     sessions_data = extract_sessions_from_response(data, debug=debug)
                     if not sessions_data:
                         logger.info(
                             f"❌ No sessions found for {conf_date}, stopping..."
                         )
+                        if debug:
+                            logger.info(f"🐛 DEBUG: Breaking loop at {conf_date}")
                         break
 
                     process_sessions_data(sessions_data,
@@ -114,10 +135,13 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                                           debug=debug)
 
                     # Small delay between requests to be respectful
-                    time.sleep(1)
+                    if not debug:  # Skip delay in debug mode for faster testing
+                        time.sleep(1)
 
                 except Exception as e:
                     logger.warning(f"⚠️ Error fetching {conf_date}: {e}")
+                    if debug:
+                        logger.info(f"🐛 DEBUG: Full error for {conf_date}: {type(e).__name__}: {e}")
                     continue
 
         logger.info("🎉 Session fetch completed")
@@ -143,21 +167,36 @@ def extract_sessions_from_response(data, debug=False):
     """Extract sessions data from API response"""
     if debug:
         logger.info(f"🐛 DEBUG: Full API response structure: {list(data.keys()) if data else 'Empty response'}")
+        if data and 'nzbyfwhwaoanttzje' in data:
+            logger.info(f"🐛 DEBUG: nzbyfwhwaoanttzje length: {len(data['nzbyfwhwaoanttzje'])}")
+            if len(data['nzbyfwhwaoanttzje']) > 0:
+                logger.info(f"🐛 DEBUG: First element keys: {list(data['nzbyfwhwaoanttzje'][0].keys()) if isinstance(data['nzbyfwhwaoanttzje'][0], dict) else 'Not a dict'}")
+            if len(data['nzbyfwhwaoanttzje']) > 1:
+                logger.info(f"🐛 DEBUG: Second element keys: {list(data['nzbyfwhwaoanttzje'][1].keys()) if isinstance(data['nzbyfwhwaoanttzje'][1], dict) else 'Not a dict'}")
     
     sessions_data = None
     if 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 1:
         sessions_data = data['nzbyfwhwaoanttzje'][1].get('row', [])
+        if debug:
+            logger.info(f"🐛 DEBUG: Using second element for sessions data")
     elif 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 0:
         # Try first element as fallback
         sessions_data = data['nzbyfwhwaoanttzje'][0].get('row', [])
+        if debug:
+            logger.info(f"🐛 DEBUG: Using first element as fallback for sessions data")
     elif 'row' in data:
         # Fallback for old API structure
         sessions_data = data['row']
+        if debug:
+            logger.info(f"🐛 DEBUG: Using direct 'row' key for sessions data")
 
     if debug:
         logger.info(f"🐛 DEBUG: Extracted {len(sessions_data) if sessions_data else 0} sessions from response")
-        if sessions_data:
-            logger.info(f"🐛 DEBUG: Sample session keys: {list(sessions_data[0].keys()) if len(sessions_data) > 0 else 'No sessions'}")
+        if sessions_data and len(sessions_data) > 0:
+            logger.info(f"🐛 DEBUG: Sample session keys: {list(sessions_data[0].keys())}")
+            logger.info(f"🐛 DEBUG: First session sample data: {sessions_data[0]}")
+        else:
+            logger.info(f"🐛 DEBUG: No session data found in response")
     
     logger.info(
         f"✅ Found {len(sessions_data) if sessions_data else 0} sessions in API response"
