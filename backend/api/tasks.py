@@ -115,7 +115,8 @@ def fetch_latest_sessions(self=None, force=False):
                 logger.info(
                     f"🔄 Processing session {i}/{len(sessions_data)}: {row.get('MEETINGSESSION', 'Unknown')}"
                 )
-                session_id = f"{row['MEETINGSESSION']}_{row['CHA']}"
+                # Use CONF_ID if available, otherwise construct from available data
+                session_id = row.get('CONF_ID') or row.get('CONF_NO') or f"{row['MEETINGSESSION']}_{row['CHA']}"
                 session, created = Session.objects.get_or_create(
                     conf_id=session_id,
                     defaults={
@@ -194,22 +195,44 @@ def fetch_session_details(self=None, session_id=None, force=False):
             "CONF_ID": session_id
         }
 
+        logger.info(f"🔍 Fetching details for session: {session_id}")
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
 
-        if not data.get('row'):
-            print(session_id)
-            print(data)
-            logger.warning(f"No details found for session {session_id}")
+        logger.info(f"📊 Session details API response structure: {list(data.keys()) if data else 'Empty response'}")
+
+        # Check for different possible response structures
+        session_details = None
+        if data.get('row') and len(data['row']) > 0:
+            session_details = data['row'][0]
+        elif 'VCONFDETAIL' in data and len(data['VCONFDETAIL']) > 1:
+            # Handle nested structure like the sessions API
+            session_details = data['VCONFDETAIL'][1].get('row', [])
+            if session_details and len(session_details) > 0:
+                session_details = session_details[0]
+            else:
+                session_details = None
+
+        if not session_details:
+            logger.warning(f"❌ No details found for session {session_id}")
+            logger.info(f"📋 Full API response: {data}")
+            
+            # Try to fetch bills anyway, some sessions might have bills without detailed info
+            if is_celery_available():
+                fetch_session_bills.delay(session_id, force=force)
+            else:
+                fetch_session_bills(session_id=session_id, force=force)
             return
 
-        session_data = data['row'][0]
+        logger.info(f"✅ Found session details for: {session_id}")
         session = Session.objects.get(conf_id=session_id)
 
-        # Update session details
-        session.down_url = session_data['DOWN_URL']
-        session.save()
+        # Update session details if available
+        if session_details.get('DOWN_URL'):
+            session.down_url = session_details['DOWN_URL']
+            session.save()
+            logger.info(f"📄 Updated PDF URL for session: {session_id}")
 
         # Fetch bills for this session (with fallback)
         if is_celery_available():
