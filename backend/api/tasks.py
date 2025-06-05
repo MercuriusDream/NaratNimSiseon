@@ -85,7 +85,7 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
             
             if debug:
                 logger.info(f"🐛 DEBUG: API Response status: {response.status_code}")
-                logger.info(f"🐛 DEBUG: Raw API response (first 500 chars): {str(data)[:500]}...")
+                logger.info(f"🐛 DEBUG: Full API response: {json.dumps(data, indent=2, ensure_ascii=False)}")
             
             sessions_data = extract_sessions_from_response(data, debug=debug)
             if sessions_data:
@@ -121,7 +121,7 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
 
                     if debug:
                         logger.info(f"🐛 DEBUG: API Response status for {conf_date}: {response.status_code}")
-                        logger.info(f"🐛 DEBUG: Raw API response for {conf_date} (first 500 chars): {str(data)[:500]}...")
+                        logger.info(f"🐛 DEBUG: Full API response for {conf_date}: {json.dumps(data, indent=2, ensure_ascii=False)}")
 
                     sessions_data = extract_sessions_from_response(data, debug=debug)
                     if not sessions_data:
