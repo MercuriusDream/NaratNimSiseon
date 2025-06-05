@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import TopNavigation from '../components/TopNavigation';
+import NavigationHeader from '../components/NavigationHeader';
 import HeroSection from '../components/HeroSection';
 import BillList from '../components/BillList';
 import RecentChanges from '../components/RecentChanges';
@@ -15,7 +15,7 @@ const BillListPage = () => {
 
   return (
     <div className="relative pt-20 bg-white">
-      <TopNavigation />
+      <NavigationHeader />
       <main>
         <HeroSection onFilterChange={handleFilterChange} />
         <BillList filter={currentFilter} />
