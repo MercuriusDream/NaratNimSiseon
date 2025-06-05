@@ -214,15 +214,21 @@ def process_sessions_data(sessions_data, force=False, debug=False):
 
     if debug:
         logger.info(
-            f"🐛 DEBUG MODE: Would process {len(sessions_data)} sessions")
-        for i, row in enumerate(sessions_data[:3], 1):  # Show first 3 sessions
+            f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)")
+        for i, row in enumerate(sessions_data[:10], 1):  # Show first 10 sessions
             session_id = row.get('CONFER_NUM')
             title = row.get('TITLE', 'Unknown')
             date = row.get('CONF_DATE', 'Unknown')
-            logger.info(f"🐛 DEBUG Session {i}: ID={session_id}, Title={title[:50]}..., Date={date}")
-        if len(sessions_data) > 3:
+            pdf_url = row.get('PDF_LINK_URL', 'No PDF')
+            logger.info(f"🐛 DEBUG Session {i}: ID={session_id}")
+            logger.info(f"   Title: {title}")
+            logger.info(f"   Date: {date}")
+            logger.info(f"   PDF: {pdf_url}")
+            logger.info(f"   Full data: {row}")
+            logger.info("   ---")
+        if len(sessions_data) > 10:
             logger.info(
-                f"🐛 DEBUG: ... and {len(sessions_data) - 3} more sessions")
+                f"🐛 DEBUG: ... and {len(sessions_data) - 10} more sessions")
         logger.info("🐛 DEBUG MODE: Data preview completed - not storing to database")
         return
 
@@ -315,7 +321,7 @@ def fetch_session_details(self=None,
     try:
         if debug:
             logger.info(
-                f"🐛 DEBUG: Would fetch details for session {session_id}")
+                f"🐛 DEBUG: Would fetch details for session {session_id} (skipping in debug mode)")
             return
         url = "https://open.assembly.go.kr/portal/openapi/VCONFDETAIL"
         params = {
@@ -401,7 +407,7 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
     """Fetch bills discussed in a specific session."""
     try:
         if debug:
-            logger.info(f"🐛 DEBUG: Would fetch bills for session {session_id}")
+            logger.info(f"🐛 DEBUG: Would fetch bills for session {session_id} (skipping in debug mode)")
             return
         url = "https://open.assembly.go.kr/portal/openapi/VCONFBILLLIST"
         params = {
@@ -449,7 +455,7 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
     """Download and process PDF for a session."""
     try:
         if debug:
-            logger.info(f"🐛 DEBUG: Would process PDF for session {session_id}")
+            logger.info(f"🐛 DEBUG: Would process PDF for session {session_id} (skipping in debug mode)")
             return
         session = Session.objects.get(conf_id=session_id)
 
@@ -513,7 +519,7 @@ def process_statements(self=None,
     try:
         if debug:
             logger.info(
-                f"🐛 DEBUG: Would process {len(text.split()) if text else 0} words of text for session {session_id}"
+                f"🐛 DEBUG: Would process {len(text.split()) if text else 0} words of text for session {session_id} (skipping in debug mode)"
             )
             if text:
                 logger.info(f"🐛 DEBUG: Text preview: {text[:200]}...")
