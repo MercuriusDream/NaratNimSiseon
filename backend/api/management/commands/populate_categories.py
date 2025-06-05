@@ -1,5 +1,3 @@
-
-import json
 from django.core.management.base import BaseCommand
 from api.models import Category, Subcategory
 
@@ -48,244 +46,167 @@ class Command(BaseCommand):
                 "subcategories": [
                     "중앙 행정조직",
                     "공무원 제도",
-                    "지방자치단체 운영",
-                    "지방의회 제도",
+                    "행정절차",
+                    "지방자치단체",
                     "지방재정",
-                    "지방선거 및 주민참여"
+                    "지방선거"
                 ]
             },
             {
-                "category": "사법 및 법제",
+                "category": "경제 및 재정",
                 "subcategories": [
-                    "법원 및 판사제도",
-                    "검찰제도",
-                    "헌법재판소 및 위헌심사",
-                    "법률 용어 및 입법기술",
-                    "행정소송 및 행정심판",
-                    "사법개혁 및 구조조정"
+                    "예산 및 결산",
+                    "조세 제도",
+                    "금융 정책",
+                    "통화 정책",
+                    "산업 정책",
+                    "무역 정책"
                 ]
             },
             {
-                "category": "공직자 제도 및 윤리",
-                "subcategories": [
-                    "고위공직자 인사제도",
-                    "청문회 및 임명 동의",
-                    "공직자 재산 등록",
-                    "이해충돌방지",
-                    "부패방지 및 감시기구",
-                    "공무원 징계 및 감사제도"
-                ]
-            },
-            {
-                "category": "국방 및 군사",
-                "subcategories": [
-                    "국방 정책",
-                    "병역 제도",
-                    "무기체계 및 방산 산업",
-                    "군 조직 및 지휘구조",
-                    "군인 복지 및 인권",
-                    "해외파병 및 연합훈련"
-                ]
-            },
-            {
-                "category": "외교 및 통일",
-                "subcategories": [
-                    "외교 정책 및 전략",
-                    "조약 체결 및 비준",
-                    "국제기구 활동",
-                    "재외국민 보호",
-                    "공공외교 및 이미지 제고",
-                    "대북정책 및 남북교류",
-                    "탈북민 보호 및 정착"
-                ]
-            },
-            {
-                "category": "치안·안전·재난",
-                "subcategories": [
-                    "경찰 제도 및 인권",
-                    "범죄 예방 및 형사정책",
-                    "사이버 범죄 대응",
-                    "소방방재 및 재난관리",
-                    "테러 및 민방위",
-                    "교통 안전 및 사고 방지"
-                ]
-            },
-            {
-                "category": "재정 및 조세",
-                "subcategories": [
-                    "국가 예산안 및 결산",
-                    "재정운용계획",
-                    "조세 체계 및 기본법",
-                    "소득세 및 법인세",
-                    "부가세·지방세·재산세",
-                    "조세 회피 및 탈세 방지"
-                ]
-            },
-            {
-                "category": "금융 및 보험",
-                "subcategories": [
-                    "금융감독 및 금융위원회",
-                    "은행 및 저축기관",
-                    "증권 및 자본시장",
-                    "보험제도",
-                    "핀테크 및 디지털금융",
-                    "사모펀드 및 투자자 보호"
-                ]
-            },
-            {
-                "category": "산업 및 기업",
-                "subcategories": [
-                    "산업정책 기본계획",
-                    "중소기업 육성",
-                    "벤처 및 창업지원",
-                    "기업 규제완화·강화",
-                    "산업단지 및 기업 유치",
-                    "산업재해 예방"
-                ]
-            },
-            {
-                "category": "무역 및 투자",
-                "subcategories": [
-                    "무역진흥 정책",
-                    "FTA 및 통상협상",
-                    "외국인 투자유치",
-                    "수입규제 및 산업보호",
-                    "통관 및 관세",
-                    "무역분쟁 대응"
-                ]
-            },
-            {
-                "category": "노동 및 고용",
-                "subcategories": [
-                    "노동 기본권",
-                    "근로시간 및 휴식",
-                    "최저임금 및 임금체계",
-                    "비정규직 및 플랫폼 노동",
-                    "직업훈련 및 고용정책",
-                    "산재보험 및 노사관계"
-                ]
-            },
-            {
-                "category": "사회복지",
+                "category": "사회복지 및 보건",
                 "subcategories": [
                     "국민연금",
-                    "기초생활보장",
-                    "장애인 복지",
-                    "노인 복지",
-                    "아동 및 청소년 복지",
-                    "사회서비스 전달체계"
+                    "건강보험",
+                    "사회보장",
+                    "공중보건",
+                    "의료 제도",
+                    "장애인 복지"
                 ]
             },
             {
-                "category": "보건 및 의료",
+                "category": "교육 및 문화",
                 "subcategories": [
-                    "국민건강보험",
-                    "감염병 대응체계",
-                    "의료기관 인프라",
-                    "공공의료 확대",
-                    "의약품 및 백신",
-                    "의료인력 양성"
+                    "초중등교육",
+                    "고등교육",
+                    "평생교육",
+                    "문화예술",
+                    "체육진흥",
+                    "언론 정책"
                 ]
             },
             {
-                "category": "교육",
+                "category": "국방 및 외교",
                 "subcategories": [
-                    "유아교육",
-                    "초·중등교육",
-                    "고등교육 및 대학",
-                    "사교육 및 교육격차",
-                    "교원 인사 및 처우",
-                    "평생교육 및 직업훈련"
+                    "국방 정책",
+                    "군사 조직",
+                    "외교 정책",
+                    "통일 정책",
+                    "국제협력",
+                    "안보 정책"
                 ]
             },
             {
-                "category": "과학기술 및 정보통신",
+                "category": "법무 및 사법",
                 "subcategories": [
-                    "국가 연구개발(R&D)",
-                    "정보통신 인프라",
-                    "5G 및 차세대 통신",
-                    "인공지능 및 데이터",
-                    "개인정보 보호",
-                    "사이버 보안 정책"
+                    "형사법",
+                    "민사법",
+                    "사법제도",
+                    "검찰 제도",
+                    "변호사 제도",
+                    "인권 보호"
                 ]
             },
             {
                 "category": "환경 및 에너지",
                 "subcategories": [
-                    "기후변화 대응",
-                    "온실가스 감축 및 탄소중립",
-                    "대기·수질·토양 보호",
-                    "재생에너지 및 원자력",
-                    "자원순환 및 폐기물 관리",
-                    "환경영향평가 제도"
+                    "환경보호",
+                    "대기오염",
+                    "수질보전",
+                    "에너지 정책",
+                    "신재생에너지",
+                    "기후변화"
                 ]
             },
             {
-                "category": "국토·교통·문화",
+                "category": "교통 및 건설",
                 "subcategories": [
-                    "국토계획 및 개발",
-                    "도시재생 및 건축",
-                    "주택정책",
-                    "도로·철도·항공",
-                    "문화예술 진흥",
-                    "체육 및 올림픽 유치"
+                    "도로교통",
+                    "철도 정책",
+                    "항공 정책",
+                    "해운 정책",
+                    "건설 정책",
+                    "도시계획"
                 ]
             },
             {
-                "category": "지역",
+                "category": "농림수산업",
                 "subcategories": [
-                    "서울",
-                    "경기",
-                    "수도권",
-                    "충청",
-                    "강원",
-                    "전라",
-                    "경상",
-                    "제주",
-                    "대전",
-                    "대구",
-                    "광주",
-                    "부산",
-                    "울산",
-                    "인천",
-                    "세종",
-                    "영남권",
-                    "동해",
-                    "서해",
-                    "남해",
-                    "북한",
-                    "해외"
+                    "농업 정책",
+                    "임업 정책",
+                    "수산업 정책",
+                    "농촌 개발",
+                    "식품안전",
+                    "농산물 유통"
+                ]
+            },
+            {
+                "category": "과학기술 및 정보통신",
+                "subcategories": [
+                    "과학기술 진흥",
+                    "정보통신 정책",
+                    "인터넷 규제",
+                    "개인정보보호",
+                    "디지털 혁신",
+                    "AI 및 빅데이터"
+                ]
+            },
+            {
+                "category": "노동 및 고용",
+                "subcategories": [
+                    "노동법",
+                    "고용 정책",
+                    "산업안전",
+                    "최저임금",
+                    "노사관계",
+                    "직업훈련"
+                ]
+            },
+            {
+                "category": "여성 및 가족",
+                "subcategories": [
+                    "여성 권익",
+                    "성평등",
+                    "가족 정책",
+                    "육아 지원",
+                    "청소년 정책",
+                    "양성평등"
                 ]
             }
         ]
 
-        self.stdout.write('Starting category population...')
-        
         created_categories = 0
         created_subcategories = 0
-        
-        for category_data in categories_data:
-            category, created = Category.objects.get_or_create(
-                name=category_data['category'],
-                defaults={'description': f'{category_data["category"]} 관련 발언들'}
+
+        for cat_data in categories_data:
+            # Create or get the category
+            category, cat_created = Category.objects.get_or_create(
+                name=cat_data['category'],
+                defaults={'description': f"{cat_data['category']} 관련 정책 및 법안"}
             )
-            
-            if created:
+
+            if cat_created:
                 created_categories += 1
-                self.stdout.write(f'Created category: {category.name}')
-            
-            for subcategory_name in category_data['subcategories']:
-                subcategory, created = Subcategory.objects.get_or_create(
-                    category=category,
-                    name=subcategory_name,
-                    defaults={'description': f'{subcategory_name} 관련 발언들'}
+                self.stdout.write(
+                    self.style.SUCCESS(f'Created category: {category.name}')
                 )
-                
-                if created:
+
+            # Create subcategories
+            for subcat_name in cat_data['subcategories']:
+                subcategory, subcat_created = Subcategory.objects.get_or_create(
+                    category=category,
+                    name=subcat_name,
+                    defaults={'description': f"{subcat_name} 관련 세부 사항"}
+                )
+
+                if subcat_created:
                     created_subcategories += 1
-        
+                    self.stdout.write(
+                        self.style.SUCCESS(f'  Created subcategory: {subcategory.name}')
+                    )
+
         self.stdout.write(
             self.style.SUCCESS(
-                f'Successfully populated {created_categories} categories and {created_subcategories} subcategories'
+                f'\nCompleted! Created {created_categories} categories and {created_subcategories} subcategories.'
             )
         )

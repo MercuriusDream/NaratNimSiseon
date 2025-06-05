@@ -315,3 +315,171 @@ def data_status(request):
         },
         'last_updated': datetime.now()
     })
+
+
+class CategoryListView(generics.ListAPIView):
+    """List all categories with their subcategories"""
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+
+
+@api_view(['GET'])
+def category_analytics(request):
+    """Get category-based analytics for sentiment and activity"""
+    try:
+        time_range = request.query_params.get('time_range', 'all')
+        categories_param = request.query_params.get('categories')
+        
+        # Base queryset for statements
+        statements_qs = Statement.objects.all()
+        
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=365)
+            )
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=30)
+            )
+        
+        # Apply category filter if provided
+        if categories_param:
+            category_ids = [int(id.strip()) for id in categories_param.split(',') if id.strip()]
+            statements_qs = statements_qs.filter(
+                categories__category_id__in=category_ids
+            )
+        
+        # Get category analytics
+        category_data = []
+        for category in Category.objects.all():
+            category_statements = statements_qs.filter(
+                categories__category=category
+            ).distinct()
+            
+            if category_statements.exists():
+                avg_sentiment = category_statements.aggregate(
+                    avg_sentiment=Avg('sentiment_score')
+                )['avg_sentiment'] or 0
+                
+                statement_count = category_statements.count()
+                
+                # Get party breakdown for this category
+                party_breakdown = category_statements.values(
+                    'speaker__plpt_nm'
+                ).annotate(
+                    count=Count('id'),
+                    avg_sentiment=Avg('sentiment_score')
+                ).order_by('-count')[:5]
+                
+                category_data.append({
+                    'category_id': category.id,
+                    'category_name': category.name,
+                    'statement_count': statement_count,
+                    'avg_sentiment': round(avg_sentiment, 3),
+                    'party_breakdown': list(party_breakdown)
+                })
+        
+        return Response({
+            'results': category_data,
+            'total_categories': len(category_data),
+            'time_range': time_range
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in category analytics: {e}")
+        return Response(
+            {'error': 'Failed to fetch category analytics'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def category_trend_analysis(request, category_id):
+    """Get trend analysis for a specific category over time"""
+    try:
+        category = get_object_or_404(Category, id=category_id)
+        
+        # Get statements for this category over the last year
+        one_year_ago = timezone.now().date() - timedelta(days=365)
+        statements = Statement.objects.filter(
+            categories__category=category,
+            session__conf_dt__gte=one_year_ago
+        ).order_by('session__conf_dt')
+        
+        # Group by month
+        monthly_data = {}
+        for statement in statements:
+            month_key = statement.session.conf_dt.strftime('%Y-%m')
+            if month_key not in monthly_data:
+                monthly_data[month_key] = {
+                    'count': 0,
+                    'sentiment_scores': []
+                }
+            monthly_data[month_key]['count'] += 1
+            monthly_data[month_key]['sentiment_scores'].append(statement.sentiment_score)
+        
+        # Calculate monthly averages
+        trend_data = []
+        for month, data in sorted(monthly_data.items()):
+            avg_sentiment = sum(data['sentiment_scores']) / len(data['sentiment_scores'])
+            trend_data.append({
+                'month': month,
+                'statement_count': data['count'],
+                'avg_sentiment': round(avg_sentiment, 3)
+            })
+        
+        return Response({
+            'category': {
+                'id': category.id,
+                'name': category.name
+            },
+            'trend_data': trend_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in category trend analysis: {e}")
+        return Response(
+            {'error': 'Failed to fetch category trends'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+def trigger_statement_analysis(request):
+    """Manually trigger LLM analysis for statements"""
+    try:
+        # Get statements that need analysis (no categories assigned)
+        statements_to_analyze = Statement.objects.filter(
+            categories__isnull=True
+        )[:10]  # Limit to 10 for performance
+        
+        if not statements_to_analyze:
+            return Response({
+                'message': 'No statements need analysis',
+                'analyzed_count': 0
+            })
+        
+        from .tasks import analyze_statement_categories
+        
+        analyzed_count = 0
+        for statement in statements_to_analyze:
+            try:
+                # Trigger async analysis
+                analyze_statement_categories.delay(statement.id)
+                analyzed_count += 1
+            except Exception as e:
+                logger.error(f"Failed to trigger analysis for statement {statement.id}: {e}")
+        
+        return Response({
+            'message': f'Triggered analysis for {analyzed_count} statements',
+            'analyzed_count': analyzed_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error triggering statement analysis: {e}")
+        return Response(
+            {'error': 'Failed to trigger analysis'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
