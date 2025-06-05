@@ -57,9 +57,9 @@ def celery_or_sync(func):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_latest_sessions(self=None, force=False):
+def fetch_latest_sessions(self=None, force=False, debug=False):
     """Fetch latest assembly sessions from the API."""
-    logger.info(f"🔍 Starting session fetch (force={force})")
+    logger.info(f"🔍 Starting session fetch (force={force}, debug={debug})")
     try:
         url = "https://open.assembly.go.kr/portal/openapi/nzbyfwhwaoanttzje"
         
@@ -79,7 +79,7 @@ def fetch_latest_sessions(self=None, force=False):
             data = response.json()
             sessions_data = extract_sessions_from_response(data)
             if sessions_data:
-                process_sessions_data(sessions_data, force=force)
+                process_sessions_data(sessions_data, force=force, debug=debug)
         else:
             # Force mode: fetch month by month going backwards
             logger.info("🔄 Force mode: Fetching sessions month by month")
@@ -107,7 +107,7 @@ def fetch_latest_sessions(self=None, force=False):
                         logger.info(f"❌ No sessions found for {conf_date}, stopping...")
                         break
                     
-                    process_sessions_data(sessions_data, force=force)
+                    process_sessions_data(sessions_data, force=force, debug=debug)
                     
                     # Small delay between requests to be respectful
                     time.sleep(1)
@@ -150,10 +150,18 @@ def extract_sessions_from_response(data):
     return sessions_data
 
 
-def process_sessions_data(sessions_data, force=False):
+def process_sessions_data(sessions_data, force=False, debug=False):
     """Process the sessions data and create/update session objects"""
     if not sessions_data:
         logger.warning("❌ No sessions data to process")
+        return
+    
+    if debug:
+        logger.info(f"🐛 DEBUG MODE: Would process {len(sessions_data)} sessions")
+        for i, row in enumerate(sessions_data[:5], 1):  # Show first 5 sessions
+            logger.info(f"🐛 DEBUG Session {i}: {row}")
+        if len(sessions_data) > 5:
+            logger.info(f"🐛 DEBUG: ... and {len(sessions_data) - 5} more sessions")
         return
     
     created_count = 0
@@ -203,10 +211,10 @@ def process_sessions_data(sessions_data, force=False):
 
             # Queue session details fetch (with fallback)
             if is_celery_available():
-                fetch_session_details.delay(session_id, force=force)
+                fetch_session_details.delay(session_id, force=force, debug=debug)
                 logger.info(f"📋 Queued details fetch for: {session_id}")
             else:
-                fetch_session_details(session_id=session_id, force=force)
+                fetch_session_details(session_id=session_id, force=force, debug=debug)
                 logger.info(f"📋 Processed details fetch for: {session_id}")
 
         except Exception as e:
@@ -217,9 +225,12 @@ def process_sessions_data(sessions_data, force=False):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_session_details(self=None, session_id=None, force=False):
+def fetch_session_details(self=None, session_id=None, force=False, debug=False):
     """Fetch detailed information for a specific session."""
     try:
+        if debug:
+            logger.info(f"🐛 DEBUG: Would fetch details for session {session_id}")
+            return
         url = "https://open.assembly.go.kr/portal/openapi/VCONFDETAIL"
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
@@ -254,9 +265,9 @@ def fetch_session_details(self=None, session_id=None, force=False):
 
             # Try to fetch bills anyway, some sessions might have bills without detailed info
             if is_celery_available():
-                fetch_session_bills.delay(session_id, force=force)
+                fetch_session_bills.delay(session_id, force=force, debug=debug)
             else:
-                fetch_session_bills(session_id=session_id, force=force)
+                fetch_session_bills(session_id=session_id, force=force, debug=debug)
             return
 
         logger.info(f"✅ Found session details for: {session_id}")
@@ -270,16 +281,16 @@ def fetch_session_details(self=None, session_id=None, force=False):
 
         # Fetch bills for this session (with fallback)
         if is_celery_available():
-            fetch_session_bills.delay(session_id, force=force)
+            fetch_session_bills.delay(session_id, force=force, debug=debug)
         else:
-            fetch_session_bills(session_id=session_id, force=force)
+            fetch_session_bills(session_id=session_id, force=force, debug=debug)
 
         # Process PDF if URL is available (with fallback)
         if session.down_url:
             if is_celery_available():
-                process_session_pdf.delay(session_id, force=force)
+                process_session_pdf.delay(session_id, force=force, debug=debug)
             else:
-                process_session_pdf(session_id=session_id, force=force)
+                process_session_pdf(session_id=session_id, force=force, debug=debug)
 
     except (RequestException, Session.DoesNotExist) as e:
         logger.error(f"Error fetching session details: {e}")
@@ -294,9 +305,12 @@ def fetch_session_details(self=None, session_id=None, force=False):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_session_bills(self=None, session_id=None, force=False):
+def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
     """Fetch bills discussed in a specific session."""
     try:
+        if debug:
+            logger.info(f"🐛 DEBUG: Would fetch bills for session {session_id}")
+            return
         url = "https://open.assembly.go.kr/portal/openapi/VCONFBILLLIST"
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
@@ -338,9 +352,12 @@ def fetch_session_bills(self=None, session_id=None, force=False):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_session_pdf(self=None, session_id=None, force=False):
+def process_session_pdf(self=None, session_id=None, force=False, debug=False):
     """Download and process PDF for a session."""
     try:
+        if debug:
+            logger.info(f"🐛 DEBUG: Would process PDF for session {session_id}")
+            return
         session = Session.objects.get(conf_id=session_id)
 
         # Skip if PDF already processed and not forcing
@@ -368,9 +385,9 @@ def process_session_pdf(self=None, session_id=None, force=False):
 
         # Process text and extract statements (with fallback)
         if is_celery_available():
-            process_statements.delay(session_id, text, force=force)
+            process_statements.delay(session_id, text, force=force, debug=debug)
         else:
-            process_statements(session_id=session_id, text=text, force=force)
+            process_statements(session_id=session_id, text=text, force=force, debug=debug)
 
         # Clean up
         os.remove(pdf_path)
@@ -387,9 +404,14 @@ def process_session_pdf(self=None, session_id=None, force=False):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_statements(self=None, session_id=None, text=None, force=False):
+def process_statements(self=None, session_id=None, text=None, force=False, debug=False):
     """Process extracted text and analyze sentiments."""
     try:
+        if debug:
+            logger.info(f"🐛 DEBUG: Would process {len(text.split()) if text else 0} words of text for session {session_id}")
+            if text:
+                logger.info(f"🐛 DEBUG: Text preview: {text[:200]}...")
+            return
         session = Session.objects.get(conf_id=session_id)
 
         # Skip if statements already processed and not forcing
@@ -473,8 +495,11 @@ def process_statements(self=None, session_id=None, text=None, force=False):
 
 # Scheduled task to run daily at midnight
 @shared_task
-def scheduled_data_collection():
+def scheduled_data_collection(debug=False):
     """Scheduled task to collect data daily."""
-    logger.info("Starting scheduled data collection")
-    fetch_latest_sessions.delay(force=False)
+    logger.info(f"Starting scheduled data collection (debug={debug})")
+    if is_celery_available():
+        fetch_latest_sessions.delay(force=False, debug=debug)
+    else:
+        fetch_latest_sessions(force=False, debug=debug)
     logger.info("Scheduled data collection completed")
