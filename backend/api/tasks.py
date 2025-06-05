@@ -7,7 +7,7 @@ from celery.exceptions import MaxRetriesExceededError
 from requests.exceptions import RequestException
 import logging
 from celery.schedules import crontab
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dt_time
 import json
 import os
 import time
@@ -534,7 +534,7 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                     'cmit_nm':
                     row.get('CLASS_NAME', '국회본회의'),
                     'bg_ptm':
-                    datetime.time(9, 0),  # Default time since API doesn't provide it
+                    dt_time(9, 0),  # Default time since API doesn't provide it
                     'down_url':
                     row.get('PDF_LINK_URL', '')
                 })
@@ -557,7 +557,7 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                 session.cmit_nm = row.get('CLASS_NAME', '국회본회의')
                 session.down_url = row.get('PDF_LINK_URL', '')
                 if not session.bg_ptm:  # Only update if not already set
-                    session.bg_ptm = datetime.time(9, 0)
+                    session.bg_ptm = dt_time(9, 0)
                 session.save()
                 updated_count += 1
                 logger.info(f"🔄 Updated existing session: {session_id}")
