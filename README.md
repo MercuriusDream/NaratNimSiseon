@@ -103,7 +103,7 @@ python manage.py migrate
 python manage.py collectstatic --noinput
 ```
 
-### 6️⃣ Redis 서버 실행
+### 6️⃣ Redis 서버 실행 (선택사항)
 ```bash
 # Windows: Redis 설치 후 실행
 # macOS: brew install redis && redis-server
@@ -111,6 +111,8 @@ python manage.py collectstatic --noinput
 
 redis-server
 ```
+
+**⚠️ 참고**: Replit과 같은 제한된 환경에서는 Redis가 실행되지 않을 수 있습니다. 이 경우 시스템이 자동으로 동기식 처리로 전환되어 데이터 수집이 정상 작동합니다.
 
 ---
 
@@ -125,25 +127,31 @@ python start_services.py
 ```bash
 # 1. Django 서버
 cd backend
-python manage.py runserver 0.0.0.0:8000
+python manage.py runserver 0.0.0.0:3000
 
-# 2. Celery 워커 (새 터미널)
+# 2. Celery 워커 (Redis 사용 가능 시)
 celery -A backend worker -l info
 
-# 3. Celery Beat 스케줄러 (새 터미널)  
+# 3. Celery Beat 스케줄러 (Redis 사용 가능 시)
 celery -A backend beat -l info
 
-# 4. React 프론트엔드 (새 터미널)
+# 4. React 프론트엔드 (새 터미널) - 개발 모드
 cd frontend
 npm install
 npm start
 ```
+
+**💡 Redis 없이 실행하기**: Redis/Celery가 사용 불가능한 환경에서는 Django만 실행해도 데이터 수집이 동기식으로 정상 작동합니다.
 
 ### 📊 데이터 수집 시작
 ```bash
 cd backend
 python manage.py start_collection
 ```
+
+**데이터 수집 모드**:
+- **Redis 사용 가능**: 비동기 백그라운드 처리로 빠른 수집
+- **Redis 불가능**: 동기식 처리로 안정적인 수집 (Replit 환경에서 권장)
 
 ### 🔧 API 파싱 문제 해결
 API 응답 구조가 변경되어 파싱 오류가 발생하는 경우:
@@ -164,10 +172,18 @@ python manage.py monitor_collection
 
 ## 🌐 접속 주소
 
-- **Django Backend**: http://localhost:8000
-- **React Frontend**: http://localhost:3000
-- **Django Admin**: http://localhost:8000/admin
-- **API Documentation**: http://localhost:8000/api
+### 로컬 개발환경
+- **Django Backend**: http://localhost:3000
+- **React Frontend**: http://localhost:3000 (프로덕션 빌드)
+- **Django Admin**: http://localhost:3000/admin
+- **API Documentation**: http://localhost:3000/api
+
+### Replit 환경
+- **웹 애플리케이션**: Replit 제공 URL (자동 할당)
+- **Django Admin**: `[Replit-URL]/admin`
+- **API Documentation**: `[Replit-URL]/api`
+
+**💡 참고**: Replit에서는 포트 3000이 외부 접속용으로 자동 설정됩니다.
 
 ---
 
@@ -179,9 +195,18 @@ python manage.py monitor_collection
 |------|----------|
 | `ModuleNotFoundError` | `pip install -r requirements.txt` 재실행 |
 | 데이터베이스 연결 오류 | `.env` 파일의 DB 설정 확인, PostgreSQL 서버 상태 점검 |
-| Redis 연결 오류 | Redis 서버 실행 상태 확인 |
+| Redis 연결 오류 | Redis 서버 실행 상태 확인 (없어도 동기식으로 작동) |
+| Redis TLS 할당 오류 (Replit) | 시스템이 자동으로 동기식 처리로 전환 |
 | 정적 파일 오류 | `python manage.py collectstatic --noinput` 실행 |
 | 포트 충돌 | 기존 프로세스 종료 후 재실행 |
+
+### 🔧 Replit 환경 특화 문제해결
+
+**Redis TLS 할당 오류**: Replit/Nix 환경에서 Redis가 jemalloc 라이브러리 문제로 실행되지 않을 수 있습니다. 이는 정상적인 현상이며, 시스템이 자동으로 동기식 처리로 전환하여 모든 기능이 정상 작동합니다.
+
+**성능 차이**: 
+- Redis 사용 시: 백그라운드 비동기 처리 (더 빠름)
+- Redis 없이: 동기식 처리 (약간 느리지만 정상 작동)
 
 ### 로그 확인
 ```bash
