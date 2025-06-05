@@ -504,6 +504,18 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                 logger.warning(f"⚠️ No CONFER_NUM found for session {i}")
                 continue
 
+            # Parse date properly
+            conf_date = None
+            if row.get('CONF_DATE'):
+                try:
+                    conf_date = datetime.strptime(row.get('CONF_DATE'), '%Y년 %m월 %d일').date()
+                except ValueError:
+                    try:
+                        conf_date = datetime.strptime(row.get('CONF_DATE'), '%Y-%m-%d').date()
+                    except ValueError:
+                        logger.warning(f"Could not parse date: {row.get('CONF_DATE')}")
+                        conf_date = None
+
             session, created = Session.objects.get_or_create(
                 conf_id=session_id,
                 defaults={
@@ -516,13 +528,13 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                     row.get('TITLE', '').split(' ')[3] if len(
                         row.get('TITLE', '').split(' ')) > 3 else '',
                     'conf_dt':
-                    row.get('CONF_DATE', ''),
+                    conf_date,
                     'conf_knd':
                     row.get('CLASS_NAME', '국회본회의'),
                     'cmit_nm':
                     row.get('CLASS_NAME', '국회본회의'),
                     'bg_ptm':
-                    '',  # Not available in this API
+                    datetime.time(9, 0),  # Default time since API doesn't provide it
                     'down_url':
                     row.get('PDF_LINK_URL', '')
                 })
@@ -540,10 +552,12 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                     row.get('TITLE', '').split(' ')) > 2 else ''
                 session.dgr = row.get('TITLE', '').split(' ')[3] if len(
                     row.get('TITLE', '').split(' ')) > 3 else ''
-                session.conf_dt = row.get('CONF_DATE', '')
+                session.conf_dt = conf_date
                 session.conf_knd = row.get('CLASS_NAME', '국회본회의')
                 session.cmit_nm = row.get('CLASS_NAME', '국회본회의')
                 session.down_url = row.get('PDF_LINK_URL', '')
+                if not session.bg_ptm:  # Only update if not already set
+                    session.bg_ptm = datetime.time(9, 0)
                 session.save()
                 updated_count += 1
                 logger.info(f"🔄 Updated existing session: {session_id}")
