@@ -13,7 +13,11 @@ import os
 import time
 from pathlib import Path
 
+print("🐛 IMMEDIATE DEBUG: Configuring logger")
 logger = logging.getLogger(__name__)
+print(f"🐛 IMMEDIATE DEBUG: Logger configured: {logger}")
+print(f"🐛 IMMEDIATE DEBUG: Logger level: {logger.level}")
+print(f"🐛 IMMEDIATE DEBUG: Logger handlers: {logger.handlers}")
 
 # Configure Gemini API with error handling
 try:
@@ -72,23 +76,41 @@ def celery_or_sync(func):
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_latest_sessions(self=None, force=False, debug=False):
     """Fetch latest assembly sessions from the API."""
+    # Add immediate debug output
+    print(f"🐛 IMMEDIATE DEBUG: Function called with force={force}, debug={debug}")
+    
     try:
+        print(f"🐛 IMMEDIATE DEBUG: About to call logger.info")
         logger.info(f"🔍 Starting session fetch (force={force}, debug={debug})")
+        print(f"🐛 IMMEDIATE DEBUG: Logger.info called successfully")
         
         # Check if we have the required settings
-        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+        print(f"🐛 IMMEDIATE DEBUG: Checking settings")
+        if not hasattr(settings, 'ASSEMBLY_API_KEY'):
+            print(f"🐛 IMMEDIATE DEBUG: ASSEMBLY_API_KEY attribute not found")
             logger.error("❌ ASSEMBLY_API_KEY not found in settings")
             raise ValueError("ASSEMBLY_API_KEY not configured")
+        
+        if not settings.ASSEMBLY_API_KEY:
+            print(f"🐛 IMMEDIATE DEBUG: ASSEMBLY_API_KEY is empty")
+            logger.error("❌ ASSEMBLY_API_KEY is empty")
+            raise ValueError("ASSEMBLY_API_KEY not configured")
+        
+        print(f"🐛 IMMEDIATE DEBUG: Settings check passed")
         
         if debug:
             logger.info(f"🐛 DEBUG: Function started successfully")
             logger.info(f"🐛 DEBUG: Settings check passed")
     
     except Exception as e:
+        print(f"🐛 IMMEDIATE DEBUG: Exception caught: {e}")
+        print(f"🐛 IMMEDIATE DEBUG: Exception type: {type(e).__name__}")
         logger.error(f"❌ Error at start of fetch_latest_sessions: {e}")
         logger.error(f"❌ Error type: {type(e).__name__}")
         import traceback
-        logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+        traceback_str = traceback.format_exc()
+        print(f"🐛 IMMEDIATE DEBUG: Traceback: {traceback_str}")
+        logger.error(f"❌ Full traceback: {traceback_str}")
         raise
     
     try:
