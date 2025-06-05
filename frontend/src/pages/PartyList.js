@@ -4,21 +4,32 @@ import { Link } from 'react-router-dom';
 import NavigationHeader from '../components/NavigationHeader';
 import Footer from '../components/Footer';
 import SentimentChart from '../components/SentimentChart';
+import CategoryChart from '../components/CategoryChart';
+import CategoryFilter from '../components/CategoryFilter';
 
 function PartyList() {
   const [parties, setParties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [timeRange, setTimeRange] = useState('all');
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [categoryData, setCategoryData] = useState([]);
+  const [showCategoryFilter, setShowCategoryFilter] = useState(false);
 
   useEffect(() => {
     fetchParties();
-  }, [timeRange]);
+    fetchCategoryData();
+  }, [timeRange, selectedCategories]);
 
   const fetchParties = async () => {
     try {
       setLoading(true);
-      const response = await api.get(`/parties/?time_range=${timeRange}`);
+      const params = new URLSearchParams({ time_range: timeRange });
+      if (selectedCategories.length > 0) {
+        params.append('categories', selectedCategories.join(','));
+      }
+      
+      const response = await api.get(`/parties/?${params.toString()}`);
       
       // Handle different response structures
       let partiesData = [];
@@ -38,6 +49,20 @@ function PartyList() {
       console.error('Error fetching parties:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCategoryData = async () => {
+    try {
+      const params = new URLSearchParams({ time_range: timeRange });
+      if (selectedCategories.length > 0) {
+        params.append('categories', selectedCategories.join(','));
+      }
+      
+      const response = await api.get(`/analytics/categories/?${params.toString()}`);
+      setCategoryData(response.data.results || response.data || []);
+    } catch (err) {
+      console.error('Error fetching category data:', err);
     }
   };
 
@@ -72,39 +97,58 @@ function PartyList() {
         <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8">정당 목록</h1>
 
-      {/* Time Range Filter */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <div className="flex justify-center space-x-4">
-          <button
-            onClick={() => setTimeRange('all')}
-            className={`px-4 py-2 rounded-md ${
-              timeRange === 'all'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            전체
-          </button>
-          <button
-            onClick={() => setTimeRange('year')}
-            className={`px-4 py-2 rounded-md ${
-              timeRange === 'year'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            최근 1년
-          </button>
-          <button
-            onClick={() => setTimeRange('month')}
-            className={`px-4 py-2 rounded-md ${
-              timeRange === 'month'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            최근 1개월
-          </button>
+      {/* Filters */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+        <div className="lg:col-span-3">
+          {/* Time Range Filter */}
+          <div className="bg-white rounded-lg shadow p-6 mb-4">
+            <h3 className="text-lg font-semibold mb-4">기간 필터</h3>
+            <div className="flex justify-center space-x-4">
+              <button
+                onClick={() => setTimeRange('all')}
+                className={`px-4 py-2 rounded-md ${
+                  timeRange === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                전체
+              </button>
+              <button
+                onClick={() => setTimeRange('year')}
+                className={`px-4 py-2 rounded-md ${
+                  timeRange === 'year'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                최근 1년
+              </button>
+              <button
+                onClick={() => setTimeRange('month')}
+                className={`px-4 py-2 rounded-md ${
+                  timeRange === 'month'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                최근 1개월
+              </button>
+            </div>
+          </div>
+
+          {/* Category Analytics */}
+          {categoryData.length > 0 && (
+            <CategoryChart data={categoryData} title="카테고리별 정당 감성 분석" />
+          )}
+        </div>
+
+        {/* Category Filter Sidebar */}
+        <div className="lg:col-span-1">
+          <CategoryFilter 
+            onCategoryChange={setSelectedCategories}
+            selectedCategories={selectedCategories}
+          />
         </div>
       </div>
 

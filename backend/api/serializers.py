@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Session, Bill, Speaker, Statement, Party
+from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory
 from django.utils import timezone
 
 class SpeakerSerializer(serializers.ModelSerializer):
@@ -27,6 +27,7 @@ class StatementSerializer(serializers.ModelSerializer):
     party_name = serializers.CharField(source='speaker.plpt_nm', read_only=True)
     session_date = serializers.DateField(source='session.conf_dt', read_only=True)
     bill_name = serializers.CharField(source='bill.bill_nm', read_only=True)
+    categories = StatementCategorySerializer(many=True, read_only=True)
 
     class Meta:
         model = Statement
@@ -101,3 +102,26 @@ class PartySerializer(serializers.ModelSerializer):
     class Meta:
         model = Party
         fields = '__all__'
+
+
+class SubcategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subcategory
+        fields = ['id', 'name', 'description']
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    subcategories = SubcategorySerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'description', 'subcategories']
+
+
+class StatementCategorySerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    subcategory_name = serializers.CharField(source='subcategory.name', read_only=True)
+    
+    class Meta:
+        model = StatementCategory
+        fields = ['category', 'subcategory', 'category_name', 'subcategory_name', 'confidence_score']
