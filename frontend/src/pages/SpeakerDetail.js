@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api';
+import NavigationHeader from '../components/NavigationHeader';
+import Footer from '../components/Footer';
 import SentimentChart from '../components/SentimentChart';
 
 function SpeakerDetail() {
@@ -58,7 +60,10 @@ function SpeakerDetail() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="flex overflow-hidden flex-col bg-white min-h-screen">
+      <NavigationHeader />
+      <main className="flex flex-col w-full">
+        <div className="container mx-auto px-4 py-8">
       {/* Speaker Header */}
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <div className="flex items-center">
@@ -188,6 +193,9 @@ function SpeakerDetail() {
           ))}
         </div>
       </div>
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 }

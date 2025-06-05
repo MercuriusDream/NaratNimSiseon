@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { Link } from 'react-router-dom';
+import NavigationHeader from '../components/NavigationHeader';
+import Footer from '../components/Footer';
 
 function SpeakerList() {
   const [speakers, setSpeakers] = useState([]);
@@ -72,7 +74,10 @@ function SpeakerList() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="flex overflow-hidden flex-col bg-white min-h-screen">
+      <NavigationHeader />
+      <main className="flex flex-col w-full">
+        <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8">국회의원 목록</h1>
 
       {/* Filters */}
@@ -194,6 +199,9 @@ function SpeakerList() {
           </button>
         </nav>
       </div>
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 }

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api';
 import { Link } from 'react-router-dom';
+import NavigationHeader from '../components/NavigationHeader';
+import Footer from '../components/Footer';
 import SentimentChart from '../components/SentimentChart';
 
 function PartyDetail() {
@@ -56,7 +58,10 @@ function PartyDetail() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="flex overflow-hidden flex-col bg-white min-h-screen">
+      <NavigationHeader />
+      <main className="flex flex-col w-full">
+        <div className="container mx-auto px-4 py-8">
       {/* Party Header */}
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <h1 className="text-3xl font-bold mb-4">{party.name}</h1>
@@ -235,6 +240,9 @@ function PartyDetail() {
           </table>
         </div>
       </div>
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import NavigationHeader from '../components/NavigationHeader';
+import Footer from '../components/Footer';
 import SessionCard from '../components/SessionCard';
 
 function SessionList() {
@@ -73,7 +75,10 @@ function SessionList() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="flex overflow-hidden flex-col bg-white min-h-screen">
+      <NavigationHeader />
+      <main className="flex flex-col w-full">
+        <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8">국회 회의록</h1>
 
       {/* Filters */}
@@ -165,6 +170,9 @@ function SessionList() {
           </button>
         </nav>
       </div>
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 }
