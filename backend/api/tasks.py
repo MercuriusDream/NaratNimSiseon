@@ -60,13 +60,13 @@ def fetch_latest_sessions(self=None, force=False):
     """Fetch latest assembly sessions from the API."""
     logger.info(f"🔍 Starting session fetch (force={force})")
     try:
-        url = "https://open.assembly.go.kr/portal/openapi/nekcaiymatialqlxr"
+        url = "https://open.assembly.go.kr/portal/openapi/nzbyfwhwaoanttzje"
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
             "Type": "json",
             "pIndex": 1,
             "pSize": 100,
-            "UNIT_CD": "100022"  # 22nd Assembly
+            "DAE_NUM": "22"  # 22nd Assembly
         }
 
         # If not force, only fetch sessions from the last 24 hours
@@ -90,12 +90,12 @@ def fetch_latest_sessions(self=None, force=False):
         # Handle the nested structure: data['nekcaiymatialqlxr'][1]['row']
         # Note: [0] contains metadata, [1] contains actual row data
         sessions_data = None
-        if 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 1:
-            sessions_data = data['nekcaiymatialqlxr'][1].get('row', [])
-        elif 'nekcaiymatialqlxr' in data and len(
-                data['nekcaiymatialqlxr']) > 0:
+        if 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 1:
+            sessions_data = data['nzbyfwhwaoanttzje'][1].get('row', [])
+        elif 'nzbyfwhwaoanttzje' in data and len(
+                data['nzbyfwhwaoanttzje']) > 0:
             # Try first element as fallback
-            sessions_data = data['nekcaiymatialqlxr'][0].get('row', [])
+            sessions_data = data['nzbyfwhwaoanttzje'][0].get('row', [])
         elif 'row' in data:
             # Fallback for old API structure
             sessions_data = data['row']
@@ -116,7 +116,7 @@ def fetch_latest_sessions(self=None, force=False):
                     f"🔄 Processing session {i}/{len(sessions_data)}: {row.get('MEETINGSESSION', 'Unknown')}"
                 )
                 # Use CONF_ID if available, otherwise construct from available data
-                session_id = row.get('CONF_ID') or row.get('CONF_NO') or f"{row['MEETINGSESSION']}_{row['CHA']}"
+                session_id = row.get('CONFER_NUM')
                 session, created = Session.objects.get_or_create(
                     conf_id=session_id,
                     defaults={
@@ -167,21 +167,20 @@ def fetch_latest_sessions(self=None, force=False):
         )
 
     except Exception as e:
+        if e == RequestException:
+            if self:
+                try:
+                    self.retry(exc=e)
+                except MaxRetriesExceededError:
+                    logger.error(
+                        "Max retries exceeded for fetch_latest_sessions")
+                    raise
+            else:
+                logger.error("Sync execution failed, no retry available")
+                raise
         logger.error(f"❌ Critical error in fetch_latest_sessions: {e}")
         logger.error(f"📊 Session count in DB: {Session.objects.count()}")
         raise
-
-    except RequestException as e:
-        logger.error(f"Error fetching sessions: {e}")
-        if self:  # Only retry if running as Celery task
-            try:
-                self.retry(exc=e)
-            except MaxRetriesExceededError:
-                logger.error("Max retries exceeded for fetch_latest_sessions")
-                raise
-        else:
-            logger.error("Sync execution failed, no retry available")
-            raise
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -200,7 +199,9 @@ def fetch_session_details(self=None, session_id=None, force=False):
         response.raise_for_status()
         data = response.json()
 
-        logger.info(f"📊 Session details API response structure: {list(data.keys()) if data else 'Empty response'}")
+        logger.info(
+            f"📊 Session details API response structure: {list(data.keys()) if data else 'Empty response'}"
+        )
 
         # Check for different possible response structures
         session_details = None
@@ -217,7 +218,7 @@ def fetch_session_details(self=None, session_id=None, force=False):
         if not session_details:
             logger.warning(f"❌ No details found for session {session_id}")
             logger.info(f"📋 Full API response: {data}")
-            
+
             # Try to fetch bills anyway, some sessions might have bills without detailed info
             if is_celery_available():
                 fetch_session_bills.delay(session_id, force=force)
