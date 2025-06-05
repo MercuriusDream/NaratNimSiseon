@@ -74,19 +74,22 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
             }
             logger.info(
                 f"📅 Fetching sessions for: {current_date.strftime('%Y-%m')}")
-            
+
             if debug:
                 logger.info(f"🐛 DEBUG: API URL: {url}")
                 logger.info(f"🐛 DEBUG: API Params: {params}")
-            
+
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
-            
+
             if debug:
-                logger.info(f"🐛 DEBUG: API Response status: {response.status_code}")
-                logger.info(f"🐛 DEBUG: Full API response: {json.dumps(data, indent=2, ensure_ascii=False)}")
-            
+                logger.info(
+                    f"🐛 DEBUG: API Response status: {response.status_code}")
+                logger.info(
+                    f"🐛 DEBUG: Full API response: {json.dumps(data, indent=2, ensure_ascii=False)}"
+                )
+
             sessions_data = extract_sessions_from_response(data, debug=debug)
             if sessions_data:
                 process_sessions_data(sessions_data, force=force, debug=debug)
@@ -109,10 +112,11 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                 }
 
                 logger.info(f"📅 Fetching sessions for: {conf_date}")
-                
+
                 if debug:
                     logger.info(f"🐛 DEBUG: API URL: {url}")
-                    logger.info(f"🐛 DEBUG: API Params for {conf_date}: {params}")
+                    logger.info(
+                        f"🐛 DEBUG: API Params for {conf_date}: {params}")
 
                 try:
                     response = requests.get(url, params=params, timeout=30)
@@ -120,16 +124,22 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                     data = response.json()
 
                     if debug:
-                        logger.info(f"🐛 DEBUG: API Response status for {conf_date}: {response.status_code}")
-                        logger.info(f"🐛 DEBUG: Full API response for {conf_date}: {json.dumps(data, indent=2, ensure_ascii=False)}")
+                        logger.info(
+                            f"🐛 DEBUG: API Response status for {conf_date}: {response.status_code}"
+                        )
+                        logger.info(
+                            f"🐛 DEBUG: Full API response for {conf_date}: {json.dumps(data, indent=2, ensure_ascii=False)}"
+                        )
 
-                    sessions_data = extract_sessions_from_response(data, debug=debug)
+                    sessions_data = extract_sessions_from_response(data,
+                                                                   debug=debug)
                     if not sessions_data:
                         logger.info(
                             f"❌ No sessions found for {conf_date}, stopping..."
                         )
                         if debug:
-                            logger.info(f"🐛 DEBUG: Breaking loop at {conf_date}")
+                            logger.info(
+                                f"🐛 DEBUG: Breaking loop at {conf_date}")
                         break
 
                     process_sessions_data(sessions_data,
@@ -143,7 +153,9 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                 except Exception as e:
                     logger.warning(f"⚠️ Error fetching {conf_date}: {e}")
                     if debug:
-                        logger.info(f"🐛 DEBUG: Full error for {conf_date}: {type(e).__name__}: {e}")
+                        logger.info(
+                            f"🐛 DEBUG: Full error for {conf_date}: {type(e).__name__}: {e}"
+                        )
                     continue
 
         logger.info("🎉 Session fetch completed")
@@ -168,14 +180,22 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
 def extract_sessions_from_response(data, debug=False):
     """Extract sessions data from API response"""
     if debug:
-        logger.info(f"🐛 DEBUG: Full API response structure: {list(data.keys()) if data else 'Empty response'}")
+        logger.info(
+            f"🐛 DEBUG: Full API response structure: {list(data.keys()) if data else 'Empty response'}"
+        )
         if data and 'nzbyfwhwaoanttzje' in data:
-            logger.info(f"🐛 DEBUG: nzbyfwhwaoanttzje length: {len(data['nzbyfwhwaoanttzje'])}")
+            logger.info(
+                f"🐛 DEBUG: nzbyfwhwaoanttzje length: {len(data['nzbyfwhwaoanttzje'])}"
+            )
             if len(data['nzbyfwhwaoanttzje']) > 0:
-                logger.info(f"🐛 DEBUG: First element keys: {list(data['nzbyfwhwaoanttzje'][0].keys()) if isinstance(data['nzbyfwhwaoanttzje'][0], dict) else 'Not a dict'}")
+                logger.info(
+                    f"🐛 DEBUG: First element keys: {list(data['nzbyfwhwaoanttzje'][0].keys()) if isinstance(data['nzbyfwhwaoanttzje'][0], dict) else 'Not a dict'}"
+                )
             if len(data['nzbyfwhwaoanttzje']) > 1:
-                logger.info(f"🐛 DEBUG: Second element keys: {list(data['nzbyfwhwaoanttzje'][1].keys()) if isinstance(data['nzbyfwhwaoanttzje'][1], dict) else 'Not a dict'}")
-    
+                logger.info(
+                    f"🐛 DEBUG: Second element keys: {list(data['nzbyfwhwaoanttzje'][1].keys()) if isinstance(data['nzbyfwhwaoanttzje'][1], dict) else 'Not a dict'}"
+                )
+
     sessions_data = None
     if 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 1:
         sessions_data = data['nzbyfwhwaoanttzje'][1].get('row', [])
@@ -185,7 +205,8 @@ def extract_sessions_from_response(data, debug=False):
         # Try first element as fallback
         sessions_data = data['nzbyfwhwaoanttzje'][0].get('row', [])
         if debug:
-            logger.info(f"🐛 DEBUG: Using first element as fallback for sessions data")
+            logger.info(
+                f"🐛 DEBUG: Using first element as fallback for sessions data")
     elif 'row' in data:
         # Fallback for old API structure
         sessions_data = data['row']
@@ -193,13 +214,18 @@ def extract_sessions_from_response(data, debug=False):
             logger.info(f"🐛 DEBUG: Using direct 'row' key for sessions data")
 
     if debug:
-        logger.info(f"🐛 DEBUG: Extracted {len(sessions_data) if sessions_data else 0} sessions from response")
+        logger.info(
+            f"🐛 DEBUG: Extracted {len(sessions_data) if sessions_data else 0} sessions from response"
+        )
         if sessions_data and len(sessions_data) > 0:
-            logger.info(f"🐛 DEBUG: Sample session keys: {list(sessions_data[0].keys())}")
-            logger.info(f"🐛 DEBUG: First session sample data: {sessions_data[0]}")
+            logger.info(
+                f"🐛 DEBUG: Sample session keys: {list(sessions_data[0].keys())}"
+            )
+            logger.info(
+                f"🐛 DEBUG: First session sample data: {sessions_data[0]}")
         else:
             logger.info(f"🐛 DEBUG: No session data found in response")
-    
+
     logger.info(
         f"✅ Found {len(sessions_data) if sessions_data else 0} sessions in API response"
     )
@@ -214,8 +240,10 @@ def process_sessions_data(sessions_data, force=False, debug=False):
 
     if debug:
         logger.info(
-            f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)")
-        for i, row in enumerate(sessions_data[:10], 1):  # Show first 10 sessions
+            f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)"
+        )
+        for i, row in enumerate(sessions_data[:10],
+                                1):  # Show first 10 sessions
             session_id = row.get('CONFER_NUM')
             title = row.get('TITLE', 'Unknown')
             date = row.get('CONF_DATE', 'Unknown')
@@ -229,7 +257,8 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         if len(sessions_data) > 10:
             logger.info(
                 f"🐛 DEBUG: ... and {len(sessions_data) - 10} more sessions")
-        logger.info("🐛 DEBUG MODE: Data preview completed - not storing to database")
+        logger.info(
+            "🐛 DEBUG MODE: Data preview completed - not storing to database")
         return
 
     created_count = 0
@@ -321,7 +350,8 @@ def fetch_session_details(self=None,
     try:
         if debug:
             logger.info(
-                f"🐛 DEBUG: Would fetch details for session {session_id} (skipping in debug mode)")
+                f"🐛 DEBUG: Would fetch details for session {session_id} (skipping in debug mode)"
+            )
             return
         url = "https://open.assembly.go.kr/portal/openapi/VCONFDETAIL"
         params = {
@@ -407,7 +437,9 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
     """Fetch bills discussed in a specific session."""
     try:
         if debug:
-            logger.info(f"🐛 DEBUG: Would fetch bills for session {session_id} (skipping in debug mode)")
+            logger.info(
+                f"🐛 DEBUG: Would fetch bills for session {session_id} (skipping in debug mode)"
+            )
             return
         url = "https://open.assembly.go.kr/portal/openapi/VCONFBILLLIST"
         params = {
@@ -455,7 +487,9 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
     """Download and process PDF for a session."""
     try:
         if debug:
-            logger.info(f"🐛 DEBUG: Would process PDF for session {session_id} (skipping in debug mode)")
+            logger.info(
+                f"🐛 DEBUG: Would process PDF for session {session_id} (skipping in debug mode)"
+            )
             return
         session = Session.objects.get(conf_id=session_id)
 
