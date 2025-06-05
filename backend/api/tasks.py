@@ -95,6 +95,12 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                 process_sessions_data(sessions_data, force=force, debug=debug)
             elif debug:
                 logger.info("🐛 DEBUG: No sessions data found to process")
+                logger.info(f"🐛 DEBUG: Raw API response keys: {list(data.keys()) if data else 'No data'}")
+                if data:
+                    for key, value in data.items():
+                        logger.info(f"🐛 DEBUG: {key}: {type(value)} - {str(value)[:200]}...")
+            else:
+                logger.info("❌ No sessions data found in API response")
         else:
             # Force mode: fetch month by month going backwards
             logger.info("🔄 Force mode: Fetching sessions month by month")
@@ -252,6 +258,7 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             logger.info(f"   Title: {title}")
             logger.info(f"   Date: {date}")
             logger.info(f"   PDF: {pdf_url}")
+            logger.info(f"   All available keys: {list(row.keys())}")
             logger.info(f"   Full data: {row}")
             logger.info("   ---")
         if len(sessions_data) > 10:
