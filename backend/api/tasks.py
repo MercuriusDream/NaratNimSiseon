@@ -21,14 +21,17 @@ print(f"🐛 IMMEDIATE DEBUG: Logger handlers: {logger.handlers}")
 
 # Configure logger to actually show output
 import sys
+
 logger.setLevel(logging.DEBUG)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-print(f"🐛 IMMEDIATE DEBUG: Logger reconfigured with handlers: {logger.handlers}")
+print(
+    f"🐛 IMMEDIATE DEBUG: Logger reconfigured with handlers: {logger.handlers}")
 
 # Configure Gemini API with error handling
 try:
@@ -88,35 +91,41 @@ def celery_or_sync(func):
 def fetch_latest_sessions(self=None, force=False, debug=False):
     """Fetch latest assembly sessions from the API."""
     # Add immediate debug output
-    print(f"🐛 IMMEDIATE DEBUG: Function called with force={force}, debug={debug}")
-    
+    print(
+        f"🐛 IMMEDIATE DEBUG: Function called with force={force}, debug={debug}"
+    )
+
     try:
         print(f"🐛 IMMEDIATE DEBUG: About to call logger.info")
         logger.info(f"🔍 Starting session fetch (force={force}, debug={debug})")
         print(f"🐛 IMMEDIATE DEBUG: Logger.info called successfully")
-        
+
         # Check if we have the required settings
         print(f"🐛 IMMEDIATE DEBUG: Checking settings")
         if not hasattr(settings, 'ASSEMBLY_API_KEY'):
             print(f"🐛 IMMEDIATE DEBUG: ASSEMBLY_API_KEY attribute not found")
             logger.error("❌ ASSEMBLY_API_KEY not found in settings")
             raise ValueError("ASSEMBLY_API_KEY not configured")
-        
+
         if not settings.ASSEMBLY_API_KEY:
             print(f"🐛 IMMEDIATE DEBUG: ASSEMBLY_API_KEY is empty")
             logger.error("❌ ASSEMBLY_API_KEY is empty")
             raise ValueError("ASSEMBLY_API_KEY not configured")
-        
+
         print(f"🐛 IMMEDIATE DEBUG: Settings check passed")
-        print(f"🐛 IMMEDIATE DEBUG: API Key exists: {bool(settings.ASSEMBLY_API_KEY)}")
-        print(f"🐛 IMMEDIATE DEBUG: API Key first 10 chars: {settings.ASSEMBLY_API_KEY[:10]}...")
-        
+        print(
+            f"🐛 IMMEDIATE DEBUG: API Key exists: {bool(settings.ASSEMBLY_API_KEY)}"
+        )
+        print(
+            f"🐛 IMMEDIATE DEBUG: API Key first 10 chars: {settings.ASSEMBLY_API_KEY[:10]}..."
+        )
+
         if debug:
             print(f"🐛 DEBUG: Function started successfully")
             print(f"🐛 DEBUG: Settings check passed")
             logger.info(f"🐛 DEBUG: Function started successfully")
             logger.info(f"🐛 DEBUG: Settings check passed")
-    
+
     except Exception as e:
         print(f"🐛 IMMEDIATE DEBUG: Exception caught: {e}")
         print(f"🐛 IMMEDIATE DEBUG: Exception type: {type(e).__name__}")
@@ -127,7 +136,7 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
         print(f"🐛 IMMEDIATE DEBUG: Traceback: {traceback_str}")
         logger.error(f"❌ Full traceback: {traceback_str}")
         raise
-    
+
     try:
         print(f"🐛 IMMEDIATE DEBUG: About to start API calls")
         url = "https://open.assembly.go.kr/portal/openapi/nzbyfwhwaoanttzje"
@@ -135,11 +144,14 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
 
         # If not force, only fetch recent sessions
         if not force:
-            print(f"🐛 IMMEDIATE DEBUG: Not force mode, fetching current month only")
+            print(
+                f"🐛 IMMEDIATE DEBUG: Not force mode, fetching current month only"
+            )
             # Fetch current month only
             current_date = datetime.now()
-            conf_date = current_date.strftime('%Y-%m')
-            print(f"🐛 IMMEDIATE DEBUG: Current date calculated as: {conf_date}")
+            conf_date = (current_date - timedelta(days=30)).strftime('%Y-%m')
+            print(
+                f"🐛 IMMEDIATE DEBUG: Current date calculated as: {conf_date}")
             params = {
                 "KEY": settings.ASSEMBLY_API_KEY,
                 "Type": "json",
@@ -148,7 +160,8 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
             }
             print(f"🐛 IMMEDIATE DEBUG: Params created: {params}")
             logger.info(
-                f"📅 Fetching sessions for: {current_date.strftime('%Y-%m')}")
+                f"📅 Fetching sessions for: {(current_date-timedelta(days=30)).strftime('%Y-%m')}"
+            )
 
             if debug:
                 print(f"🐛 DEBUG: API URL: {url}")
@@ -158,38 +171,57 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
 
             print(f"🐛 IMMEDIATE DEBUG: About to make API request")
             response = requests.get(url, params=params, timeout=30)
-            print(f"🐛 IMMEDIATE DEBUG: API request completed, status: {response.status_code}")
+            print(
+                f"🐛 IMMEDIATE DEBUG: API request completed, status: {response.status_code}"
+            )
             response.raise_for_status()
             print(f"🐛 IMMEDIATE DEBUG: Response status check passed")
             data = response.json()
-            print(f"🐛 IMMEDIATE DEBUG: JSON parsing completed, data type: {type(data)}")
+            print(
+                f"🐛 IMMEDIATE DEBUG: JSON parsing completed, data type: {type(data)}"
+            )
 
             if debug:
                 print(f"🐛 DEBUG: API Response status: {response.status_code}")
-                print(f"🐛 DEBUG: Full API response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+                print(
+                    f"🐛 DEBUG: Full API response: {json.dumps(data, indent=2, ensure_ascii=False)}"
+                )
                 logger.info(
                     f"🐛 DEBUG: API Response status: {response.status_code}")
                 logger.info(
                     f"🐛 DEBUG: Full API response: {json.dumps(data, indent=2, ensure_ascii=False)}"
                 )
 
-            print(f"🐛 IMMEDIATE DEBUG: About to extract sessions from response")
+            print(
+                f"🐛 IMMEDIATE DEBUG: About to extract sessions from response")
             sessions_data = extract_sessions_from_response(data, debug=debug)
-            print(f"🐛 IMMEDIATE DEBUG: Sessions extraction completed, found {len(sessions_data) if sessions_data else 0} sessions")
-            
+            print(
+                f"🐛 IMMEDIATE DEBUG: Sessions extraction completed, found {len(sessions_data) if sessions_data else 0} sessions"
+            )
+
             if sessions_data:
-                print(f"🐛 IMMEDIATE DEBUG: About to process {len(sessions_data)} sessions")
+                print(
+                    f"🐛 IMMEDIATE DEBUG: About to process {len(sessions_data)} sessions"
+                )
                 process_sessions_data(sessions_data, force=force, debug=debug)
                 print(f"🐛 IMMEDIATE DEBUG: Sessions processing completed")
             elif debug:
                 print("🐛 DEBUG: No sessions data found to process")
-                print(f"🐛 DEBUG: Raw API response keys: {list(data.keys()) if data else 'No data'}")
+                print(
+                    f"🐛 DEBUG: Raw API response keys: {list(data.keys()) if data else 'No data'}"
+                )
                 logger.info("🐛 DEBUG: No sessions data found to process")
-                logger.info(f"🐛 DEBUG: Raw API response keys: {list(data.keys()) if data else 'No data'}")
+                logger.info(
+                    f"🐛 DEBUG: Raw API response keys: {list(data.keys()) if data else 'No data'}"
+                )
                 if data:
                     for key, value in data.items():
-                        print(f"🐛 DEBUG: {key}: {type(value)} - {str(value)[:200]}...")
-                        logger.info(f"🐛 DEBUG: {key}: {type(value)} - {str(value)[:200]}...")
+                        print(
+                            f"🐛 DEBUG: {key}: {type(value)} - {str(value)[:200]}..."
+                        )
+                        logger.info(
+                            f"🐛 DEBUG: {key}: {type(value)} - {str(value)[:200]}..."
+                        )
             else:
                 print("❌ No sessions data found in API response")
                 logger.info("❌ No sessions data found in API response")
@@ -197,21 +229,25 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
             # Force mode: fetch month by month going backwards
             print(f"🐛 IMMEDIATE DEBUG: Force mode enabled")
             logger.info("🔄 Force mode: Fetching sessions month by month")
-            current_date = datetime.now()
-            print(f"🐛 IMMEDIATE DEBUG: Starting from current date: {current_date}")
+            current_date = datetime.now() - timedelta(days=30)
+            print(
+                f"🐛 IMMEDIATE DEBUG: Starting from current date: {current_date}"
+            )
 
             for months_back in range(0, 24):  # Go back up to 24 months
                 # Use proper month calculation instead of days
                 year = current_date.year
                 month = current_date.month - months_back
-                
+
                 # Handle year rollover
                 while month <= 0:
                     month += 12
                     year -= 1
-                    
+
                 conf_date = f"{year:04d}-{month:02d}"
-                print(f"🐛 IMMEDIATE DEBUG: Calculated conf_date for months_back={months_back}: {conf_date}")
+                print(
+                    f"🐛 IMMEDIATE DEBUG: Calculated conf_date for months_back={months_back}: {conf_date}"
+                )
 
                 params = {
                     "KEY": settings.ASSEMBLY_API_KEY,
@@ -288,36 +324,50 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
 
 def extract_sessions_from_response(data, debug=False):
     """Extract sessions data from API response"""
-    print(f"🐛 IMMEDIATE DEBUG: extract_sessions_from_response called with debug={debug}")
+    print(
+        f"🐛 IMMEDIATE DEBUG: extract_sessions_from_response called with debug={debug}"
+    )
     print(f"🐛 IMMEDIATE DEBUG: Data type: {type(data)}")
-    print(f"🐛 IMMEDIATE DEBUG: Data keys: {list(data.keys()) if data else 'Empty response'}")
-    
+    print(
+        f"🐛 IMMEDIATE DEBUG: Data keys: {list(data.keys()) if data else 'Empty response'}"
+    )
+
     if debug:
-        print(f"🐛 DEBUG: Full API response structure: {list(data.keys()) if data else 'Empty response'}")
+        print(
+            f"🐛 DEBUG: Full API response structure: {list(data.keys()) if data else 'Empty response'}"
+        )
         logger.info(
             f"🐛 DEBUG: Full API response structure: {list(data.keys()) if data else 'Empty response'}"
         )
         if data and 'nzbyfwhwaoanttzje' in data:
-            print(f"🐛 DEBUG: nzbyfwhwaoanttzje length: {len(data['nzbyfwhwaoanttzje'])}")
+            print(
+                f"🐛 DEBUG: nzbyfwhwaoanttzje length: {len(data['nzbyfwhwaoanttzje'])}"
+            )
             logger.info(
                 f"🐛 DEBUG: nzbyfwhwaoanttzje length: {len(data['nzbyfwhwaoanttzje'])}"
             )
             if len(data['nzbyfwhwaoanttzje']) > 0:
-                print(f"🐛 DEBUG: First element keys: {list(data['nzbyfwhwaoanttzje'][0].keys()) if isinstance(data['nzbyfwhwaoanttzje'][0], dict) else 'Not a dict'}")
-                print(f"🐛 DEBUG: First element: {data['nzbyfwhwaoanttzje'][0]}")
+                print(
+                    f"🐛 DEBUG: First element keys: {list(data['nzbyfwhwaoanttzje'][0].keys()) if isinstance(data['nzbyfwhwaoanttzje'][0], dict) else 'Not a dict'}"
+                )
+                print(
+                    f"🐛 DEBUG: First element: {data['nzbyfwhwaoanttzje'][0]}")
                 logger.info(
                     f"🐛 DEBUG: First element keys: {list(data['nzbyfwhwaoanttzje'][0].keys()) if isinstance(data['nzbyfwhwaoanttzje'][0], dict) else 'Not a dict'}"
                 )
             if len(data['nzbyfwhwaoanttzje']) > 1:
-                print(f"🐛 DEBUG: Second element keys: {list(data['nzbyfwhwaoanttzje'][1].keys()) if isinstance(data['nzbyfwhwaoanttzje'][1], dict) else 'Not a dict'}")
-                print(f"🐛 DEBUG: Second element: {data['nzbyfwhwaoanttzje'][1]}")
+                print(
+                    f"🐛 DEBUG: Second element keys: {list(data['nzbyfwhwaoanttzje'][1].keys()) if isinstance(data['nzbyfwhwaoanttzje'][1], dict) else 'Not a dict'}"
+                )
+                print(
+                    f"🐛 DEBUG: Second element: {data['nzbyfwhwaoanttzje'][1]}")
                 logger.info(
                     f"🐛 DEBUG: Second element keys: {list(data['nzbyfwhwaoanttzje'][1].keys()) if isinstance(data['nzbyfwhwaoanttzje'][1], dict) else 'Not a dict'}"
                 )
 
     sessions_data = None
     print(f"🐛 IMMEDIATE DEBUG: Starting sessions data extraction")
-    
+
     if 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 1:
         print(f"🐛 IMMEDIATE DEBUG: Using second element for sessions data")
         sessions_data = data['nzbyfwhwaoanttzje'][1].get('row', [])
@@ -325,11 +375,14 @@ def extract_sessions_from_response(data, debug=False):
             print(f"🐛 DEBUG: Using second element for sessions data")
             logger.info(f"🐛 DEBUG: Using second element for sessions data")
     elif 'nzbyfwhwaoanttzje' in data and len(data['nzbyfwhwaoanttzje']) > 0:
-        print(f"🐛 IMMEDIATE DEBUG: Using first element as fallback for sessions data")
+        print(
+            f"🐛 IMMEDIATE DEBUG: Using first element as fallback for sessions data"
+        )
         # Try first element as fallback
         sessions_data = data['nzbyfwhwaoanttzje'][0].get('row', [])
         if debug:
-            print(f"🐛 DEBUG: Using first element as fallback for sessions data")
+            print(
+                f"🐛 DEBUG: Using first element as fallback for sessions data")
             logger.info(
                 f"🐛 DEBUG: Using first element as fallback for sessions data")
     elif 'row' in data:
@@ -340,17 +393,25 @@ def extract_sessions_from_response(data, debug=False):
             print(f"🐛 DEBUG: Using direct 'row' key for sessions data")
             logger.info(f"🐛 DEBUG: Using direct 'row' key for sessions data")
     else:
-        print(f"🐛 IMMEDIATE DEBUG: No sessions data found in any expected location")
+        print(
+            f"🐛 IMMEDIATE DEBUG: No sessions data found in any expected location"
+        )
 
-    print(f"🐛 IMMEDIATE DEBUG: Extracted {len(sessions_data) if sessions_data else 0} sessions from response")
-    
+    print(
+        f"🐛 IMMEDIATE DEBUG: Extracted {len(sessions_data) if sessions_data else 0} sessions from response"
+    )
+
     if debug:
-        print(f"🐛 DEBUG: Extracted {len(sessions_data) if sessions_data else 0} sessions from response")
+        print(
+            f"🐛 DEBUG: Extracted {len(sessions_data) if sessions_data else 0} sessions from response"
+        )
         logger.info(
             f"🐛 DEBUG: Extracted {len(sessions_data) if sessions_data else 0} sessions from response"
         )
         if sessions_data and len(sessions_data) > 0:
-            print(f"🐛 DEBUG: Sample session keys: {list(sessions_data[0].keys())}")
+            print(
+                f"🐛 DEBUG: Sample session keys: {list(sessions_data[0].keys())}"
+            )
             print(f"🐛 DEBUG: First session sample data: {sessions_data[0]}")
             logger.info(
                 f"🐛 DEBUG: Sample session keys: {list(sessions_data[0].keys())}"
@@ -361,7 +422,9 @@ def extract_sessions_from_response(data, debug=False):
             print(f"🐛 DEBUG: No session data found in response")
             logger.info(f"🐛 DEBUG: No session data found in response")
 
-    print(f"✅ Found {len(sessions_data) if sessions_data else 0} sessions in API response")
+    print(
+        f"✅ Found {len(sessions_data) if sessions_data else 0} sessions in API response"
+    )
     logger.info(
         f"✅ Found {len(sessions_data) if sessions_data else 0} sessions in API response"
     )
@@ -370,24 +433,29 @@ def extract_sessions_from_response(data, debug=False):
 
 def process_sessions_data(sessions_data, force=False, debug=False):
     """Process the sessions data and create/update session objects"""
-    print(f"🐛 IMMEDIATE DEBUG: process_sessions_data called with {len(sessions_data) if sessions_data else 0} sessions, debug={debug}")
-    
+    print(
+        f"🐛 IMMEDIATE DEBUG: process_sessions_data called with {len(sessions_data) if sessions_data else 0} sessions, debug={debug}"
+    )
+
     if not sessions_data:
         print("❌ No sessions data to process")
         logger.warning("❌ No sessions data to process")
         return
 
     if debug:
-        print(f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)")
+        print(
+            f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)"
+        )
         logger.info(
             f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)"
         )
-        for i, row in enumerate(sessions_data[:10], 1):  # Show first 10 sessions
+        for i, row in enumerate(sessions_data[:10],
+                                1):  # Show first 10 sessions
             session_id = row.get('CONFER_NUM')
             title = row.get('TITLE', 'Unknown')
             date = row.get('CONF_DATE', 'Unknown')
             pdf_url = row.get('PDF_LINK_URL', 'No PDF')
-            
+
             print(f"🐛 DEBUG Session {i}: ID={session_id}")
             print(f"   Title: {title}")
             print(f"   Date: {date}")
@@ -395,7 +463,7 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             print(f"   All available keys: {list(row.keys())}")
             print(f"   Full data: {row}")
             print("   ---")
-            
+
             logger.info(f"🐛 DEBUG Session {i}: ID={session_id}")
             logger.info(f"   Title: {title}")
             logger.info(f"   Date: {date}")
@@ -403,7 +471,7 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             logger.info(f"   All available keys: {list(row.keys())}")
             logger.info(f"   Full data: {row}")
             logger.info("   ---")
-            
+
         if len(sessions_data) > 10:
             print(f"🐛 DEBUG: ... and {len(sessions_data) - 10} more sessions")
             logger.info(
@@ -736,9 +804,11 @@ def process_statements(self=None,
 
                 # Use Gemini to analyze the statement
                 if not model:
-                    logger.warning("Gemini model not available, skipping sentiment analysis")
+                    logger.warning(
+                        "Gemini model not available, skipping sentiment analysis"
+                    )
                     continue
-                
+
                 prompt = f"""
                 Analyze the following statement from a National Assembly meeting:
                 
