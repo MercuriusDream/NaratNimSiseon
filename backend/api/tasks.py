@@ -87,6 +87,14 @@ def celery_or_sync(func):
     return wrapper
 
 
+from celery import shared_task
+import logging
+from .utils import DataCollector
+from .llm_analyzer import LLMPolicyAnalyzer
+
+logger = logging.getLogger(__name__)
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_latest_sessions(self=None, force=False, debug=False):
     """Fetch latest assembly sessions from the API."""
@@ -791,6 +799,7 @@ def process_statements(self=None,
         statements = text.split('\n\n')
 
         # Rate limiting: 30 requests per 60 seconds = 1 request every 2 seconds
+
         request_delay = 2.1  # Slightly more than 2 seconds to be safe
 
         for i, statement in enumerate(statements):
@@ -811,14 +820,14 @@ def process_statements(self=None,
 
                 prompt = f"""
                 Analyze the following statement from a National Assembly meeting:
-                
+
                 {statement}
-                
+
                 Please provide:
                 1. The speaker's name and party
                 2. A sentiment score from -1 (very negative) to 1 (very positive)
                 3. A brief explanation for the sentiment score
-                
+
                 Format the response as JSON:
                 {{
                     "speaker": {{

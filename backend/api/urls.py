@@ -3,7 +3,11 @@ from rest_framework.routers import DefaultRouter
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.db.models import Count, Avg
-from .views import SessionViewSet, BillViewSet, SpeakerViewSet, StatementViewSet, PartyViewSet
+from .views import (
+    SessionViewSet, BillViewSet, SpeakerViewSet, StatementViewSet, PartyViewSet,
+    CategoryListView,
+    category_analytics, category_trend_analysis, trigger_statement_analysis
+)
 from .models import Session, Bill, Speaker, Statement
 
 @api_view(['GET'])
@@ -36,4 +40,10 @@ router.register(r'parties', PartyViewSet)
 urlpatterns = [
     path('', include(router.urls)),
     path('stats/', stats_view, name='stats'),
+
+    # Category and analytics endpoints
+    path('categories/', CategoryListView.as_view(), name='category-list'),
+    path('analytics/categories/', category_analytics, name='category-analytics'),
+    path('analytics/categories/<int:category_id>/trends/', category_trend_analysis, name='category-trends'),
+    path('analysis/trigger/', trigger_statement_analysis, name='trigger-analysis'),
 ]

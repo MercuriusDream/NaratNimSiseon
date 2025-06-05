@@ -71,6 +71,8 @@ class Statement(models.Model):
     text = models.TextField(help_text=_("발언 내용"), verbose_name=_("발언 내용"))
     sentiment_score = models.FloatField(help_text=_("감성 점수 (-1 ~ 1)"), verbose_name=_("감성 점수"))
     sentiment_reason = models.TextField(help_text=_("감성 분석 근거"), verbose_name=_("감성 분석 근거"))
+    category_analysis = models.TextField(blank=True, help_text=_("카테고리 분석 결과"), verbose_name=_("카테고리 분석 결과"))
+    policy_keywords = models.TextField(blank=True, help_text=_("정책 키워드"), verbose_name=_("정책 키워드"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
 
