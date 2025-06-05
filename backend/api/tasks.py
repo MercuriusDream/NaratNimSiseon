@@ -213,9 +213,6 @@ def process_sessions_data(sessions_data):
             continue
 
     logger.info(f"🎉 Sessions processed: {created_count} created, {updated_count} updated")
-
-        
-
     except Exception as e:
         if e == RequestException:
             if self:
