@@ -1,4 +1,3 @@
-
 import requests
 import pdfplumber
 import google.generativeai as genai
@@ -62,7 +61,7 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
     logger.info(f"🔍 Starting session fetch (force={force}, debug={debug})")
     try:
         url = "https://open.assembly.go.kr/portal/openapi/nzbyfwhwaoanttzje"
-        
+
         # If not force, only fetch recent sessions
         if not force:
             # Fetch current month only
@@ -73,7 +72,8 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                 "DAE_NUM": "22",  # 22nd Assembly
                 "CONF_DATE": current_date.strftime('%Y-%m')
             }
-            logger.info(f"📅 Fetching sessions for: {current_date.strftime('%Y-%m')}")
+            logger.info(
+                f"📅 Fetching sessions for: {current_date.strftime('%Y-%m')}")
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
@@ -84,38 +84,42 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
             # Force mode: fetch month by month going backwards
             logger.info("🔄 Force mode: Fetching sessions month by month")
             current_date = datetime.now()
-            
+
             for months_back in range(0, 24):  # Go back up to 24 months
                 target_date = current_date - timedelta(days=30 * months_back)
                 conf_date = target_date.strftime('%Y-%m')
-                
+
                 params = {
                     "KEY": settings.ASSEMBLY_API_KEY,
                     "Type": "json",
                     "DAE_NUM": "22",  # 22nd Assembly
                     "CONF_DATE": conf_date
                 }
-                
+
                 logger.info(f"📅 Fetching sessions for: {conf_date}")
                 try:
                     response = requests.get(url, params=params, timeout=30)
                     response.raise_for_status()
                     data = response.json()
-                    
+
                     sessions_data = extract_sessions_from_response(data)
                     if not sessions_data:
-                        logger.info(f"❌ No sessions found for {conf_date}, stopping...")
+                        logger.info(
+                            f"❌ No sessions found for {conf_date}, stopping..."
+                        )
                         break
-                    
-                    process_sessions_data(sessions_data, force=force, debug=debug)
-                    
+
+                    process_sessions_data(sessions_data,
+                                          force=force,
+                                          debug=debug)
+
                     # Small delay between requests to be respectful
                     time.sleep(1)
-                    
+
                 except Exception as e:
                     logger.warning(f"⚠️ Error fetching {conf_date}: {e}")
                     continue
-        
+
         logger.info("🎉 Session fetch completed")
 
     except Exception as e:
@@ -124,7 +128,8 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                 try:
                     self.retry(exc=e)
                 except MaxRetriesExceededError:
-                    logger.error("Max retries exceeded for fetch_latest_sessions")
+                    logger.error(
+                        "Max retries exceeded for fetch_latest_sessions")
                     raise
             else:
                 logger.error("Sync execution failed, no retry available")
@@ -145,8 +150,10 @@ def extract_sessions_from_response(data):
     elif 'row' in data:
         # Fallback for old API structure
         sessions_data = data['row']
-    
-    logger.info(f"✅ Found {len(sessions_data) if sessions_data else 0} sessions in API response")
+
+    logger.info(
+        f"✅ Found {len(sessions_data) if sessions_data else 0} sessions in API response"
+    )
     return sessions_data
 
 
@@ -155,39 +162,53 @@ def process_sessions_data(sessions_data, force=False, debug=False):
     if not sessions_data:
         logger.warning("❌ No sessions data to process")
         return
-    
+
     if debug:
-        logger.info(f"🐛 DEBUG MODE: Would process {len(sessions_data)} sessions")
+        logger.info(
+            f"🐛 DEBUG MODE: Would process {len(sessions_data)} sessions")
         for i, row in enumerate(sessions_data[:5], 1):  # Show first 5 sessions
             logger.info(f"🐛 DEBUG Session {i}: {row}")
         if len(sessions_data) > 5:
-            logger.info(f"🐛 DEBUG: ... and {len(sessions_data) - 5} more sessions")
+            logger.info(
+                f"🐛 DEBUG: ... and {len(sessions_data) - 5} more sessions")
         return
-    
+
     created_count = 0
     updated_count = 0
 
     for i, row in enumerate(sessions_data, 1):
         try:
-            logger.info(f"🔄 Processing session {i}/{len(sessions_data)}: {row.get('TITLE', 'Unknown')}")
-            
+            logger.info(
+                f"🔄 Processing session {i}/{len(sessions_data)}: {row.get('TITLE', 'Unknown')}"
+            )
+
             # Use CONFER_NUM as the proper session ID
             session_id = row.get('CONFER_NUM')
             if not session_id:
                 logger.warning(f"⚠️ No CONFER_NUM found for session {i}")
                 continue
-                
+
             session, created = Session.objects.get_or_create(
                 conf_id=session_id,
                 defaults={
-                    'era_co': f'제{row.get("DAE_NUM", 22)}대',
-                    'sess': row.get('TITLE', '').split(' ')[2] if len(row.get('TITLE', '').split(' ')) > 2 else '',
-                    'dgr': row.get('TITLE', '').split(' ')[3] if len(row.get('TITLE', '').split(' ')) > 3 else '',
-                    'conf_dt': row.get('CONF_DATE', ''),
-                    'conf_knd': row.get('CLASS_NAME', '국회본회의'),
-                    'cmit_nm': row.get('CLASS_NAME', '국회본회의'),
-                    'bg_ptm': '',  # Not available in this API
-                    'down_url': row.get('PDF_LINK_URL', '')
+                    'era_co':
+                    f'제{row.get("DAE_NUM", 22)}대',
+                    'sess':
+                    row.get('TITLE', '').split(' ')[2] if len(
+                        row.get('TITLE', '').split(' ')) > 2 else '',
+                    'dgr':
+                    row.get('TITLE', '').split(' ')[3] if len(
+                        row.get('TITLE', '').split(' ')) > 3 else '',
+                    'conf_dt':
+                    row.get('CONF_DATE', ''),
+                    'conf_knd':
+                    row.get('CLASS_NAME', '국회본회의'),
+                    'cmit_nm':
+                    row.get('CLASS_NAME', '국회본회의'),
+                    'bg_ptm':
+                    '',  # Not available in this API
+                    'down_url':
+                    row.get('PDF_LINK_URL', '')
                 })
 
             if created:
@@ -199,8 +220,10 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             # If session exists and force is True, update the session
             if not created and force:
                 session.era_co = f'제{row.get("DAE_NUM", 22)}대'
-                session.sess = row.get('TITLE', '').split(' ')[2] if len(row.get('TITLE', '').split(' ')) > 2 else ''
-                session.dgr = row.get('TITLE', '').split(' ')[3] if len(row.get('TITLE', '').split(' ')) > 3 else ''
+                session.sess = row.get('TITLE', '').split(' ')[2] if len(
+                    row.get('TITLE', '').split(' ')) > 2 else ''
+                session.dgr = row.get('TITLE', '').split(' ')[3] if len(
+                    row.get('TITLE', '').split(' ')) > 3 else ''
                 session.conf_dt = row.get('CONF_DATE', '')
                 session.conf_knd = row.get('CLASS_NAME', '국회본회의')
                 session.cmit_nm = row.get('CLASS_NAME', '국회본회의')
@@ -211,25 +234,35 @@ def process_sessions_data(sessions_data, force=False, debug=False):
 
             # Queue session details fetch (with fallback)
             if is_celery_available():
-                fetch_session_details.delay(session_id, force=force, debug=debug)
+                fetch_session_details.delay(session_id,
+                                            force=force,
+                                            debug=debug)
                 logger.info(f"📋 Queued details fetch for: {session_id}")
             else:
-                fetch_session_details(session_id=session_id, force=force, debug=debug)
+                fetch_session_details(session_id=session_id,
+                                      force=force,
+                                      debug=debug)
                 logger.info(f"📋 Processed details fetch for: {session_id}")
 
         except Exception as e:
             logger.error(f"❌ Error processing session row {i}: {e}")
             continue
 
-    logger.info(f"🎉 Sessions processed: {created_count} created, {updated_count} updated")
+    logger.info(
+        f"🎉 Sessions processed: {created_count} created, {updated_count} updated"
+    )
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_session_details(self=None, session_id=None, force=False, debug=False):
+def fetch_session_details(self=None,
+                          session_id=None,
+                          force=False,
+                          debug=False):
     """Fetch detailed information for a specific session."""
     try:
         if debug:
-            logger.info(f"🐛 DEBUG: Would fetch details for session {session_id}")
+            logger.info(
+                f"🐛 DEBUG: Would fetch details for session {session_id}")
             return
         url = "https://open.assembly.go.kr/portal/openapi/VCONFDETAIL"
         params = {
@@ -267,7 +300,9 @@ def fetch_session_details(self=None, session_id=None, force=False, debug=False):
             if is_celery_available():
                 fetch_session_bills.delay(session_id, force=force, debug=debug)
             else:
-                fetch_session_bills(session_id=session_id, force=force, debug=debug)
+                fetch_session_bills(session_id=session_id,
+                                    force=force,
+                                    debug=debug)
             return
 
         logger.info(f"✅ Found session details for: {session_id}")
@@ -283,14 +318,18 @@ def fetch_session_details(self=None, session_id=None, force=False, debug=False):
         if is_celery_available():
             fetch_session_bills.delay(session_id, force=force, debug=debug)
         else:
-            fetch_session_bills(session_id=session_id, force=force, debug=debug)
+            fetch_session_bills(session_id=session_id,
+                                force=force,
+                                debug=debug)
 
         # Process PDF if URL is available (with fallback)
         if session.down_url:
             if is_celery_available():
                 process_session_pdf.delay(session_id, force=force, debug=debug)
             else:
-                process_session_pdf(session_id=session_id, force=force, debug=debug)
+                process_session_pdf(session_id=session_id,
+                                    force=force,
+                                    debug=debug)
 
     except (RequestException, Session.DoesNotExist) as e:
         logger.error(f"Error fetching session details: {e}")
@@ -347,7 +386,8 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
                 self.retry(exc=e)
             except MaxRetriesExceededError:
                 logger.error(
-                    f"Max retries exceeded for fetch_session_bills: {session_id}")
+                    f"Max retries exceeded for fetch_session_bills: {session_id}"
+                )
                 raise
 
 
@@ -385,9 +425,15 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
 
         # Process text and extract statements (with fallback)
         if is_celery_available():
-            process_statements.delay(session_id, text, force=force, debug=debug)
+            process_statements.delay(session_id,
+                                     text,
+                                     force=force,
+                                     debug=debug)
         else:
-            process_statements(session_id=session_id, text=text, force=force, debug=debug)
+            process_statements(session_id=session_id,
+                               text=text,
+                               force=force,
+                               debug=debug)
 
         # Clean up
         os.remove(pdf_path)
@@ -399,16 +445,23 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                 self.retry(exc=e)
             except MaxRetriesExceededError:
                 logger.error(
-                    f"Max retries exceeded for process_session_pdf: {session_id}")
+                    f"Max retries exceeded for process_session_pdf: {session_id}"
+                )
                 raise
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_statements(self=None, session_id=None, text=None, force=False, debug=False):
+def process_statements(self=None,
+                       session_id=None,
+                       text=None,
+                       force=False,
+                       debug=False):
     """Process extracted text and analyze sentiments."""
     try:
         if debug:
-            logger.info(f"🐛 DEBUG: Would process {len(text.split()) if text else 0} words of text for session {session_id}")
+            logger.info(
+                f"🐛 DEBUG: Would process {len(text.split()) if text else 0} words of text for session {session_id}"
+            )
             if text:
                 logger.info(f"🐛 DEBUG: Text preview: {text[:200]}...")
             return
@@ -489,7 +542,8 @@ def process_statements(self=None, session_id=None, text=None, force=False, debug
                 self.retry(exc=e)
             except MaxRetriesExceededError:
                 logger.error(
-                    f"Max retries exceeded for process_statements: {session_id}")
+                    f"Max retries exceeded for process_statements: {session_id}"
+                )
                 raise
 
 
