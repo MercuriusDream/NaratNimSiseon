@@ -24,9 +24,9 @@ model = genai.GenerativeModel('gemma-3-27b-it')
 # Check if Celery/Redis is available
 def is_celery_available():
     """Check if Celery/Redis is available for async tasks"""
+    from kombu.exceptions import OperationalError
+    from celery import current_app
     try:
-        from celery.app import current_app
-        from kombu.exceptions import OperationalError
         current_app.control.inspect().active()
         return True
     except (ImportError, OperationalError, OSError, ConnectionError):

@@ -1,4 +1,3 @@
-
 """
 Management command to force collect and parse all assembly data.
 This command bypasses existing data checks and updates everything.
@@ -19,38 +18,33 @@ class Command(BaseCommand):
             '--limit',
             type=int,
             default=100,
-            help='Limit number of sessions to process (default: 100)'
-        )
+            help='Limit number of sessions to process (default: 100)')
 
     def handle(self, *args, **options):
         self.stdout.write(
-            self.style.SUCCESS('🚀 Starting FORCE data collection...')
-        )
+            self.style.SUCCESS('🚀 Starting FORCE data collection...'))
         self.stdout.write(
-            '⚠️  This will update existing data and may take a while.'
-        )
-        
+            '⚠️  This will update existing data and may take a while.')
+
         try:
             from api.tasks import fetch_latest_sessions, is_celery_available
-            
+
             if is_celery_available():
                 self.stdout.write('🚀 Using Celery for async processing')
                 fetch_latest_sessions.delay(force=True)
                 self.stdout.write(
-                    self.style.SUCCESS('✅ Force collection task started!')
-                )
+                    self.style.SUCCESS('✅ Force collection task started!'))
                 self.stdout.write(
                     '📊 Check the logs or run "python manage.py monitor_collection" to track progress.'
                 )
             else:
-                self.stdout.write('🔄 Running synchronously (Celery not available)')
+                self.stdout.write(
+                    '🔄 Running synchronously (Celery not available)')
                 fetch_latest_sessions(force=True)
                 self.stdout.write(
-                    self.style.SUCCESS('✅ Force collection completed!')
-                )
-                
+                    self.style.SUCCESS('✅ Force collection completed!'))
+
         except Exception as e:
             self.stdout.write(
-                self.style.ERROR(f'❌ Error starting collection: {e}')
-            )
-            logger.error(f"Force collection error: {e}")n error: {e}")
+                self.style.ERROR(f'❌ Error starting collection: {e}'))
+            logger.error(f"Force collection error: {e}")
