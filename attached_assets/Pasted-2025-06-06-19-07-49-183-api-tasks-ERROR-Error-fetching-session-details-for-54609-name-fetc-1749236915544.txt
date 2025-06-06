@@ -1,0 +1,26 @@
+2025-06-06 19:07:49,183 - api.tasks - ERROR - ❌ Error fetching session details for 54609: name 'fetch_session_bills' is not defined
+2025-06-06 19:07:49,183 - api.tasks - ERROR - ❌ Error processing session row 1: name 'fetch_session_bills' is not defined
+2025-06-06 19:07:49,183 - api.tasks - INFO - 🎉 Sessions processed: 0 created, 1 updated
+🐛 IMMEDIATE DEBUG: Calculated conf_date for months_back=1: 2025-04
+2025-06-06 19:07:50,183 - api.tasks - INFO - 📅 Fetching sessions for: 2025-04
+🐛 IMMEDIATE DEBUG: extract_sessions_from_response called with debug=False
+🐛 IMMEDIATE DEBUG: Data type: <class 'dict'>
+🐛 IMMEDIATE DEBUG: Data keys: ['nzbyfwhwaoanttzje']
+🐛 IMMEDIATE DEBUG: Starting sessions data extraction
+🐛 IMMEDIATE DEBUG: Using second element for sessions data
+🐛 IMMEDIATE DEBUG: Extracted 100 sessions from response
+✅ Found 100 sessions in API response
+2025-06-06 19:07:52,084 - api.tasks - INFO - ✅ Found 100 sessions in API response
+🐛 IMMEDIATE DEBUG: process_sessions_data called with 100 sessions, debug=False
+🔍 RAW API SESSION DATA STRUCTURE:
+================================================================================
+🔍 GROUPED SESSIONS: Found 8 unique sessions from 100 agenda items
+2025-06-06 19:07:52,084 - api.tasks - INFO - 🔍 GROUPED SESSIONS: Found 8 unique sessions from 100 agenda items
+2025-06-06 19:07:52,084 - api.tasks - INFO - 🔄 Processing session 1/8: 제22대 제424회 제6차 국회본회의 (2025년 04월 24일) (2 agenda items)
+2025-06-06 19:07:52,131 - api.tasks - INFO - ♻️  Session already exists: 54598
+2025-06-06 19:07:52,178 - api.tasks - INFO - 🔄 Updated existing session: 54598
+2025-06-06 19:07:58,180 - api.tasks - INFO - 🔍 Fetching details for session: 54598
+2025-06-06 19:07:59,169 - api.tasks - INFO - 📊 Session details API response structure: ['VCONFDETAIL']
+2025-06-06 19:07:59,261 - api.tasks - INFO - ✅ Updated session details for: 54598
+2025-06-06 19:08:05,264 - api.tasks - ERROR - ❌ Error fetching session details for 54598: name 'fetch_session_bills' is not defined
+2025-06-06 19:08:05,264 - api.tasks - ERROR - ❌ Error processing session row 1: name 'fetch_session_bills' is not defined

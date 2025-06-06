@@ -114,7 +114,9 @@ def fetch_speaker_details(speaker_name):
         response.raise_for_status()
         data = response.json()
 
-        logger.info(f"🐛 DEBUG: ALLNAMEMBER API response for {speaker_name}: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        logger.info(
+            f"🐛 DEBUG: ALLNAMEMBER API response for {speaker_name}: {json.dumps(data, indent=2, ensure_ascii=False)}"
+        )
 
         # Extract member data
         member_data = None
@@ -139,32 +141,40 @@ def fetch_speaker_details(speaker_name):
                     'gtelt_eraco': member_data.get('GTELT_ERACO', ''),
                     'ntr_div': member_data.get('NTR_DIV', ''),
                     'naas_pic': member_data.get('NAAS_PIC', '')
-                }
-            )
+                })
 
             if not created:
                 # Update existing speaker with new information
                 speaker.naas_nm = member_data.get('NAAS_NM', speaker.naas_nm)
-                speaker.naas_ch_nm = member_data.get('NAAS_CH_NM', speaker.naas_ch_nm)
+                speaker.naas_ch_nm = member_data.get('NAAS_CH_NM',
+                                                     speaker.naas_ch_nm)
                 speaker.plpt_nm = member_data.get('PLPT_NM', speaker.plpt_nm)
-                speaker.elecd_nm = member_data.get('ELECD_NM', speaker.elecd_nm)
-                speaker.elecd_div_nm = member_data.get('ELECD_DIV_NM', speaker.elecd_div_nm)
+                speaker.elecd_nm = member_data.get('ELECD_NM',
+                                                   speaker.elecd_nm)
+                speaker.elecd_div_nm = member_data.get('ELECD_DIV_NM',
+                                                       speaker.elecd_div_nm)
                 speaker.cmit_nm = member_data.get('CMIT_NM', speaker.cmit_nm)
-                speaker.blng_cmit_nm = member_data.get('BLNG_CMIT_NM', speaker.blng_cmit_nm)
-                speaker.rlct_div_nm = member_data.get('RLCT_DIV_NM', speaker.rlct_div_nm)
-                speaker.gtelt_eraco = member_data.get('GTELT_ERACO', speaker.gtelt_eraco)
+                speaker.blng_cmit_nm = member_data.get('BLNG_CMIT_NM',
+                                                       speaker.blng_cmit_nm)
+                speaker.rlct_div_nm = member_data.get('RLCT_DIV_NM',
+                                                      speaker.rlct_div_nm)
+                speaker.gtelt_eraco = member_data.get('GTELT_ERACO',
+                                                      speaker.gtelt_eraco)
                 speaker.ntr_div = member_data.get('NTR_DIV', speaker.ntr_div)
-                speaker.naas_pic = member_data.get('NAAS_PIC', speaker.naas_pic)
+                speaker.naas_pic = member_data.get('NAAS_PIC',
+                                                   speaker.naas_pic)
                 speaker.save()
 
-            logger.info(f"✅ Fetched/updated speaker details for: {speaker_name}")
+            logger.info(
+                f"✅ Fetched/updated speaker details for: {speaker_name}")
             return speaker
         else:
             logger.warning(f"⚠️ No member data found for: {speaker_name}")
             return None
 
     except Exception as e:
-        logger.error(f"❌ Error fetching speaker details for {speaker_name}: {e}")
+        logger.error(
+            f"❌ Error fetching speaker details for {speaker_name}: {e}")
         return None
 
 
@@ -524,9 +534,9 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         return
 
     # Always show the first few sessions to understand the data structure
+    '''
     print("🔍 RAW API SESSION DATA STRUCTURE:")
     print("=" * 80)
-    '''
     for i, row in enumerate(sessions_data[:5],
                             1):  # Show first 5 sessions always
         print(f"📋 SESSION {i} RAW DATA:")
@@ -754,7 +764,7 @@ def fetch_session_details(self=None,
 
         # Update session with detailed info if available
         session = Session.objects.get(conf_id=session_id)
-        
+
         # Update session fields with detailed information
         if session_details.get('CONF_TIME'):
             try:
@@ -763,14 +773,14 @@ def fetch_session_details(self=None,
                 session.bg_ptm = datetime.strptime(time_str, '%H:%M').time()
             except ValueError:
                 session.bg_ptm = dt_time(9, 0)  # Default time
-        
+
         if session_details.get('ED_TIME'):
             try:
                 time_str = session_details.get('ED_TIME', '18:00')
                 session.ed_ptm = datetime.strptime(time_str, '%H:%M').time()
             except ValueError:
                 session.ed_ptm = dt_time(18, 0)  # Default time
-        
+
         session.save()
         logger.info(f"✅ Updated session details for: {session_id}")
 
@@ -778,7 +788,9 @@ def fetch_session_details(self=None,
         if is_celery_available():
             fetch_session_bills.delay(session_id, force=force, debug=debug)
         else:
-            fetch_session_bills(session_id=session_id, force=force, debug=debug)
+            fetch_session_bills(session_id=session_id,
+                                force=force,
+                                debug=debug)
 
     except Exception as e:
         if isinstance(e, RequestException):
@@ -786,7 +798,8 @@ def fetch_session_details(self=None,
                 try:
                     self.retry(exc=e)
                 except MaxRetriesExceededError:
-                    logger.error(f"Max retries exceeded for session {session_id}")
+                    logger.error(
+                        f"Max retries exceeded for session {session_id}")
                     raise
             else:
                 logger.error("Sync execution failed, no retry available")
