@@ -1245,11 +1245,11 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
 
 
 def extract_statements_with_regex(text, session_id, debug=False):
-    """Extract statements from PDF text using regex patterns."""
+    """Extract statements from PDF text using improved regex patterns."""
     import re
 
     logger.info(
-        f"📄 Extracting statements from PDF text using regex (session: {session_id})"
+        f"📄 Extracting statements from PDF text using improved regex (session: {session_id})"
     )
 
     # Clean up the text first
@@ -1258,8 +1258,8 @@ def extract_statements_with_regex(text, session_id, debug=False):
 
     statements = []
 
-    # Pattern to match speaker statements
-    # Looks for "◯[speaker_name] [content]" pattern
+    # More sophisticated pattern to match speaker statements
+    # Looks for "◯[speaker_name] [content]" pattern with better filtering
     speaker_pattern = r'◯([^◯\n]+?)\s+([^◯]+?)(?=◯|$)'
 
     matches = re.findall(speaker_pattern, text, re.DOTALL | re.MULTILINE)
@@ -1267,40 +1267,104 @@ def extract_statements_with_regex(text, session_id, debug=False):
     for speaker_raw, content_raw in matches:
         # Clean speaker name
         speaker_name = speaker_raw.strip()
-        speaker_name = re.sub(r'\s*(의원|위원장|장관|국장|의장|부의장)\s*', '',
-                              speaker_name).strip()
-
+        
+        # Remove common titles and roles but keep the actual name
+        speaker_name = re.sub(r'\s*(의원|위원장|장관|국장|의장|부의장|차관|실장|국무총리|대통령|부총리)\s*', '', speaker_name).strip()
+        
         # Skip if no speaker name or content
         if not speaker_name or not content_raw.strip():
             continue
 
+        # Filter out role-based speakers that aren't actual people
+        role_patterns = [
+            r'.*대리$',  # Ends with '대리' (acting/deputy roles)
+            r'^의사$',   # Just '의사' (chairperson)
+            r'^위원장$', # Just '위원장' (committee chair)
+            r'.*위원회.*', # Committee names
+            r'.*부.*장관.*', # Ministry titles
+            r'.*청장.*',  # Agency heads
+            r'.*실장.*',  # Office heads
+            r'^사회자$',  # Moderator
+            r'^진행자$',  # Host/facilitator
+            r'.*개정법률안.*', # Bill names
+            r'.*특별법.*',    # Special law names
+            r'.*진흥법.*',    # Promotion law names
+            r'.*관리법.*',    # Management law names
+            r'.*촉진법.*',    # Facilitation law names
+            r'.*보호법.*',    # Protection law names
+            r'.*육성.*',      # Development/nurturing
+            r'.*지원.*',      # Support
+            r'^재난$',        # Disaster
+            r'^인구감소지역$', # Population decline regions
+            r'^우주개발$',    # Space development
+            r'^여성과학기술인$', # Women in science and technology
+        ]
+        
+        # Check if speaker name matches any role pattern
+        is_role = any(re.match(pattern, speaker_name) for pattern in role_patterns)
+        if is_role:
+            if debug:
+                logger.info(f"🐛 DEBUG: Skipping role-based speaker: {speaker_name}")
+            continue
+
         # Clean content
         content = content_raw.strip()
-        content = re.sub(r'\([^)]*\)', '',
-                         content)  # Remove parenthetical notes
+        content = re.sub(r'\([^)]*\)', '', content)  # Remove parenthetical notes
         content = re.sub(r'\s+', ' ', content).strip()
 
-        # Skip procedural statements or very short content
-        if len(content) < 50:
+        # Skip very short content
+        if len(content) < 100:  # Increased minimum length
             continue
 
-        # Skip procedural phrases
+        # Enhanced procedural phrases to skip
         procedural_phrases = [
-            '투표해 주시기 바랍니다', '투표를 마치겠습니다', '가결되었음을 선포합니다', '수고하셨습니다', '상정합니다',
-            '의결하도록 하겠습니다'
+            '투표해 주시기 바랍니다', '투표를 마치겠습니다', '가결되었음을 선포합니다', 
+            '수고하셨습니다', '상정합니다', '의결하도록 하겠습니다', '원안가결되었음을 선포합니다',
+            '폐회를 선포합니다', '개회를 선포합니다', '회의를 시작하겠습니다',
+            '다음 안건으로 넘어가겠습니다', '심사보고를 듣겠습니다',
+            '제안설명을 듣겠습니다', '대안심사소위원회에서 심사한',
+            '위원장께서 나오셔서', '잠깐만 기다려 주십시오',
+            '의사일정', '회의록에 게재하기로', '산회를 선포합니다'
         ]
 
-        if any(phrase in content for phrase in procedural_phrases):
+        # Check for procedural content
+        is_procedural = any(phrase in content for phrase in procedural_phrases)
+        
+        # Also check if content is mostly procedural (short sentences about voting, etc.)
+        procedural_keywords = ['투표', '가결', '부결', '가부동수', '재석', '찬성', '반대', '기권']
+        word_count = len(content.split())
+        procedural_word_count = sum(1 for word in procedural_keywords if word in content)
+        
+        # If more than 30% of words are procedural and content is short, skip it
+        if word_count < 50 and procedural_word_count / word_count > 0.3:
+            is_procedural = True
+
+        if is_procedural:
+            if debug:
+                logger.info(f"🐛 DEBUG: Skipping procedural content from {speaker_name}")
             continue
 
-        statements.append({'speaker_name': speaker_name, 'text': content})
+        # Only include statements that seem to be substantial policy discussions
+        policy_indicators = [
+            '법률안', '개정', '제안', '필요', '문제', '개선', '정책', '방안', 
+            '대책', '예산', '추진', '계획', '검토', '의견', '생각', '판단',
+            '국민', '시민', '사회', '경제', '정치', '교육', '복지', '환경',
+            '안전', '보안', '발전', '성장', '혁신', '개혁', '변화'
+        ]
+        
+        has_policy_content = any(indicator in content for indicator in policy_indicators)
+        
+        # For substantial statements (over 200 chars), be less strict about policy indicators
+        if len(content) > 200 or has_policy_content:
+            statements.append({'speaker_name': speaker_name, 'text': content})
 
     logger.info(
-        f"✅ Extracted {len(statements)} statements using regex (session: {session_id})"
+        f"✅ Extracted {len(statements)} statements using improved regex (session: {session_id})"
     )
 
     if debug:
-        for i, stmt in enumerate(statements[:3], 1):
+        logger.info("🐛 DEBUG: Sample extracted statements:")
+        for i, stmt in enumerate(statements[:5], 1):
             logger.info(
                 f"🐛 DEBUG Statement {i}: {stmt['speaker_name']} - {stmt['text'][:100]}..."
             )
