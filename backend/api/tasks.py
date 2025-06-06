@@ -100,6 +100,72 @@ def format_conf_id(conf_id):
     return str(conf_id).zfill(6)
 
 
+def fetch_speaker_details(speaker_name):
+    """Fetch speaker details from ALLNAMEMBER API"""
+    try:
+        url = "https://open.assembly.go.kr/portal/openapi/ALLNAMEMBER"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "NAAS_NM": speaker_name,
+            "Type": "json"
+        }
+        
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract member data
+        member_data = None
+        if 'ALLNAMEMBER' in data and len(data['ALLNAMEMBER']) > 1:
+            rows = data['ALLNAMEMBER'][1].get('row', [])
+            if rows and len(rows) > 0:
+                member_data = rows[0]  # Get first match
+        
+        if member_data:
+            # Create or update speaker with detailed information
+            speaker, created = Speaker.objects.get_or_create(
+                naas_cd=member_data.get('NAAS_CD', f"TEMP_{speaker_name}"),
+                defaults={
+                    'naas_nm': member_data.get('NAAS_NM', speaker_name),
+                    'naas_ch_nm': member_data.get('NAAS_CH_NM', ''),
+                    'plpt_nm': member_data.get('PLPT_NM', '정당정보없음'),
+                    'elecd_nm': member_data.get('ELECD_NM', ''),
+                    'elecd_div_nm': member_data.get('ELECD_DIV_NM', ''),
+                    'cmit_nm': member_data.get('CMIT_NM', ''),
+                    'blng_cmit_nm': member_data.get('BLNG_CMIT_NM', ''),
+                    'rlct_div_nm': member_data.get('RLCT_DIV_NM', ''),
+                    'gtelt_eraco': member_data.get('GTELT_ERACO', ''),
+                    'ntr_div': member_data.get('NTR_DIV', ''),
+                    'naas_pic': member_data.get('NAAS_PIC', '')
+                }
+            )
+            
+            if not created:
+                # Update existing speaker with new information
+                speaker.naas_nm = member_data.get('NAAS_NM', speaker.naas_nm)
+                speaker.naas_ch_nm = member_data.get('NAAS_CH_NM', speaker.naas_ch_nm)
+                speaker.plpt_nm = member_data.get('PLPT_NM', speaker.plpt_nm)
+                speaker.elecd_nm = member_data.get('ELECD_NM', speaker.elecd_nm)
+                speaker.elecd_div_nm = member_data.get('ELECD_DIV_NM', speaker.elecd_div_nm)
+                speaker.cmit_nm = member_data.get('CMIT_NM', speaker.cmit_nm)
+                speaker.blng_cmit_nm = member_data.get('BLNG_CMIT_NM', speaker.blng_cmit_nm)
+                speaker.rlct_div_nm = member_data.get('RLCT_DIV_NM', speaker.rlct_div_nm)
+                speaker.gtelt_eraco = member_data.get('GTELT_ERACO', speaker.gtelt_eraco)
+                speaker.ntr_div = member_data.get('NTR_DIV', speaker.ntr_div)
+                speaker.naas_pic = member_data.get('NAAS_PIC', speaker.naas_pic)
+                speaker.save()
+            
+            logger.info(f"✅ Fetched/updated speaker details for: {speaker_name}")
+            return speaker
+        else:
+            logger.warning(f"⚠️ No member data found for: {speaker_name}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"❌ Error fetching speaker details for {speaker_name}: {e}")
+        return None
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_latest_sessions(self=None, force=False, debug=False):
     """Fetch latest assembly sessions from the API."""
@@ -910,24 +976,53 @@ def process_statements(self=None,
                 2. A sentiment score from -1 (very negative) to 1 (very positive)
                 3. A brief explanation for the sentiment score in Korean
 
-                Format the response as JSON, but do NOT format using ```json. print out as is:
+                Format the response as JSON only:
                 {{
-                    "speaker": {{
-                        "name": "name"
-                    }},
+                    "speaker_name": "name",
                     "sentiment_score": score,
                     "reason": "explanation"
                 }}
                 """
                 response = model.generate_content(prompt)
                 result = response.text
-                print(result)
+                
+                # Handle ```json formatting in response
+                if result.startswith('```json'):
+                    result = result.replace('```json', '').replace('```', '').strip()
+                elif result.startswith('```'):
+                    result = result.replace('```', '').strip()
+                
+                print(f"Cleaned result: {result}")
 
                 # Parse the result and create Statement object
                 data = json.loads(result)
-                speaker, _ = Speaker.objects.get_or_create(
-                    naas_nm=data['speaker']['name'],
-                    defaults={'plpt_nm': data['speaker']['party']})
+                
+                # Try to get or create speaker, fetch details if needed
+                speaker = None
+                speaker_name = data['speaker_name']
+                
+                # First try to find existing speaker
+                existing_speakers = Speaker.objects.filter(naas_nm__icontains=speaker_name)
+                if existing_speakers.exists():
+                    speaker = existing_speakers.first()
+                else:
+                    # Fetch speaker details from ALLNAMEMBER API
+                    speaker = fetch_speaker_details(speaker_name)
+                
+                if not speaker:
+                    # Fallback: create basic speaker record
+                    speaker, _ = Speaker.objects.get_or_create(
+                        naas_cd=f"TEMP_{speaker_name}",
+                        defaults={
+                            'naas_nm': speaker_name,
+                            'plpt_nm': '정당정보없음',
+                            'elecd_nm': '',
+                            'elecd_div_nm': '',
+                            'rlct_div_nm': '',
+                            'gtelt_eraco': '',
+                            'ntr_div': ''
+                        }
+                    )
 
                 Statement.objects.create(
                     session=session,

@@ -91,8 +91,17 @@ function PartyList() {
 
   if (!Array.isArray(parties) || parties.length === 0) {
     return (
-      <div className="text-center text-gray-600 p-4">
-        표시할 정당이 없습니다.
+      <div className="flex overflow-hidden flex-col bg-white min-h-screen">
+        <NavigationHeader />
+        <main className="flex flex-col w-full">
+          <div className="container mx-auto px-4 py-8">
+            <h1 className="text-3xl font-bold mb-8">정당 목록</h1>
+            <div className="text-center text-gray-600 p-4">
+              표시할 정당이 없습니다.
+            </div>
+          </div>
+        </main>
+        <Footer />
       </div>
     );
   }
@@ -161,7 +170,7 @@ function PartyList() {
 
       {/* Parties Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {parties.map(party => (
+        {Array.isArray(parties) && parties.map(party => (
           <div key={party.id} className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
