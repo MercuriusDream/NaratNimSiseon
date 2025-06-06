@@ -1300,14 +1300,23 @@ JSON 형식으로 응답해주세요:
 
         # Parse Stage 1 response
         stage1_text = stage1_response.text.strip()
+        logger.info(f"🔍 Raw Stage 1 response: {stage1_text[:500]}...")
+        
         if stage1_text.startswith('```json'):
             stage1_text = stage1_text[7:-3].strip()
         elif stage1_text.startswith('```'):
             stage1_text = stage1_text[3:-3].strip()
 
+        logger.info(f"🔍 Cleaned Stage 1 response: {stage1_text[:500]}...")
+
         import json as json_module
         stage1_data = json_module.loads(stage1_text)
         speakers_detected = stage1_data.get('speakers_detected', [])
+        
+        logger.info(f"🔍 Parsed speakers_detected: {speakers_detected}")
+        
+        for i, speaker in enumerate(speakers_detected):
+            logger.info(f"🔍 Speaker {i+1} details: {speaker}")
 
         logger.info(f"✅ Stage 1 completed: Found {len(speakers_detected)} potential speakers")
 
@@ -1317,20 +1326,35 @@ JSON 형식으로 응답해주세요:
         analyzed_statements = []
 
         for i, speaker_info in enumerate(speakers_detected, 1):
-            if not speaker_info.get('is_substantial') or speaker_info.get('speech_type') != 'policy_discussion':
-                if debug:
-                    logger.info(f"🐛 DEBUG: Skipping non-substantial speaker: {speaker_info.get('speaker_name')}")
+            speaker_name = speaker_info.get('speaker_name', 'Unknown')
+            is_substantial = speaker_info.get('is_substantial', False)
+            speech_type = speaker_info.get('speech_type', 'unknown')
+            
+            logger.info(f"🔍 Processing speaker {i}: {speaker_name}")
+            logger.info(f"   - is_substantial: {is_substantial}")
+            logger.info(f"   - speech_type: {speech_type}")
+            
+            if not is_substantial or speech_type != 'policy_discussion':
+                logger.info(f"⚠️ Skipping speaker {speaker_name} - substantial: {is_substantial}, type: {speech_type}")
                 continue
 
             # Extract the actual speech content using markers
-            speaker_name = speaker_info.get('speaker_name', '').strip()
             start_marker = speaker_info.get('start_marker', '')
             end_marker = speaker_info.get('end_marker', '')
 
+            logger.info(f"🔍 Extracting speech for {speaker_name}")
+            logger.info(f"   - start_marker: '{start_marker[:50]}...'")
+            logger.info(f"   - end_marker: '{end_marker[:50]}...'")
+
             # Find speech content between markers
             speech_content = extract_speech_between_markers(text, start_marker, end_marker, speaker_name)
+            
+            logger.info(f"   - extracted length: {len(speech_content) if speech_content else 0}")
+            if speech_content:
+                logger.info(f"   - content preview: '{speech_content[:100]}...'")
 
             if not speech_content or len(speech_content) < 100:
+                logger.info(f"⚠️ Skipping {speaker_name} - insufficient content (length: {len(speech_content) if speech_content else 0})")
                 continue
 
             logger.info(f"🤖 Analyzing statement {i}/{len(speakers_detected)} from {speaker_name} (session: {session_id})")
