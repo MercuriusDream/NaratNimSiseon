@@ -471,36 +471,46 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         print("   " + "-" * 60)
     print("=" * 80)
 
+    # Group sessions by CONFER_NUM since multiple agenda items can belong to the same session
+    sessions_by_id = {}
+    for row in sessions_data:
+        session_id = row.get('CONFER_NUM')
+        if session_id:
+            if session_id not in sessions_by_id:
+                sessions_by_id[session_id] = []
+            sessions_by_id[session_id].append(row)
+    
+    print(f"🔍 GROUPED SESSIONS: Found {len(sessions_by_id)} unique sessions from {len(sessions_data)} agenda items")
+    logger.info(f"🔍 GROUPED SESSIONS: Found {len(sessions_by_id)} unique sessions from {len(sessions_data)} agenda items")
+
     if debug:
         print(
-            f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)"
+            f"🐛 DEBUG MODE: Processing {len(sessions_by_id)} unique sessions (preview only - no database writes)"
         )
         logger.info(
-            f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)"
+            f"🐛 DEBUG MODE: Processing {len(sessions_by_id)} unique sessions (preview only - no database writes)"
         )
-        # Additional debug for all sessions in debug mode
-        for i, row in enumerate(sessions_data, 1):
-            session_id = (row.get('CONFER_NUM') or 
-                         row.get('CONF_ID') or 
-                         row.get('SESS_ID') or 
-                         row.get('ID'))
-            title = row.get('TITLE', 'Unknown')
-            date = row.get('CONF_DATE', 'Unknown')
-            pdf_url = row.get('PDF_LINK_URL', 'No PDF')
+        
+        for i, (session_id, agenda_items) in enumerate(sessions_by_id.items(), 1):
+            first_item = agenda_items[0]  # Use first agenda item for main session info
+            title = first_item.get('TITLE', 'Unknown')
+            date = first_item.get('CONF_DATE', 'Unknown')
+            pdf_url = first_item.get('PDF_LINK_URL', 'No PDF')
 
             print(f"🐛 DEBUG Session {i}: ID={session_id}")
             print(f"   Title: {title}")
             print(f"   Date: {date}")
             print(f"   PDF: {pdf_url}")
-            print(f"   All available keys: {list(row.keys())}")
+            print(f"   Agenda items: {len(agenda_items)}")
+            for j, item in enumerate(agenda_items, 1):
+                print(f"     {j}. {item.get('SUB_NAME', 'No agenda item name')}")
             print("   ---")
 
             logger.info(f"🐛 DEBUG Session {i}: ID={session_id}")
             logger.info(f"   Title: {title}")
             logger.info(f"   Date: {date}")
             logger.info(f"   PDF: {pdf_url}")
-            logger.info(f"   All available keys: {list(row.keys())}")
-            logger.info("   ---")
+            logger.info(f"   Agenda items: {len(agenda_items)}")
 
         print("🐛 DEBUG MODE: Data preview completed - not storing to database")
         logger.info(
@@ -510,14 +520,14 @@ def process_sessions_data(sessions_data, force=False, debug=False):
     created_count = 0
     updated_count = 0
 
-    for i, row in enumerate(sessions_data, 1):
+    for i, (session_id, agenda_items) in enumerate(sessions_by_id.items(), 1):
+        # Use the first agenda item for the main session information
+        row = agenda_items[0]
         try:
             logger.info(
-                f"🔄 Processing session {i}/{len(sessions_data)}: {row.get('TITLE', 'Unknown')}"
+                f"🔄 Processing session {i}/{len(sessions_by_id)}: {row.get('TITLE', 'Unknown')} ({len(agenda_items)} agenda items)"
             )
 
-            # Use CONFER_NUM as the proper session ID
-            session_id = row.get('CONFER_NUM')
             if not session_id:
                 logger.warning(f"⚠️ No CONFER_NUM found for session {i}")
                 continue
