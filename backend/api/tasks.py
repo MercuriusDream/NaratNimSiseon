@@ -1688,14 +1688,23 @@ def get_or_create_speaker(speaker_name, debug=False):
             naas_nm__icontains=speaker_name).first()
 
         if not speaker:
-            # Create temporary speaker record with retry logic
+            # Create temporary speaker record with fallback values for all fields
             max_retries = 3
             for attempt in range(max_retries):
                 try:
                     speaker = Speaker.objects.create(
                         naas_cd=f"TEMP_{speaker_name}_{int(time.time())}",
                         naas_nm=speaker_name,
-                        plpt_nm="정당정보없음")
+                        naas_ch_nm="정보 없음",
+                        plpt_nm="정당정보없음",
+                        elecd_nm="정보 없음",
+                        elecd_div_nm="정보 없음",
+                        cmit_nm="정보 없음",
+                        blng_cmit_nm="정보 없음",
+                        rlct_div_nm="정보 없음",
+                        gtelt_eraco="정보 없음",
+                        ntr_div="정보 없음",
+                        naas_pic="")
 
                     if debug:
                         logger.info(
