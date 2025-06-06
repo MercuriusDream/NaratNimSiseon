@@ -1108,14 +1108,6 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
         statements_data = parse_and_analyze_statements_from_text(
             full_text, session_id, debug)
 
-        except Exception as e:
-            logger.error(f"❌ Error extracting text from PDF {session_id}: {e}")
-            return
-        finally:
-            # Clean up temporary file
-            if temp_pdf_path.exists():
-                temp_pdf_path.unlink()
-
         # Process extracted and analyzed statements
         created_count = 0
         for statement_data in statements_data:
@@ -1148,7 +1140,7 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
                     session=session, speaker=speaker,
                     text=statement_text).first()
 
-                if existing_statement and not force:
+                if existing_statement:
                     logger.info(
                         f"ℹ️ Statement already exists for {speaker_name}")
                     continue
@@ -1197,19 +1189,7 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
         )
 
     except Exception as e:
-        if isinstance(e, RequestException):
-            if self:
-                try:
-                    self.retry(exc=e)
-                except MaxRetriesExceededError:
-                    logger.error(
-                        f"Max retries exceeded for PDF processing {session_id}"
-                    )
-                    raise
-            else:
-                logger.error("Sync execution failed, no retry available")
-                raise
-        logger.error(f"❌ Error processing PDF for session {session_id}: {e}")
+        logger.error(f"❌ Error processing PDF statements for session {session_id}: {e}")
         raise
 
 
