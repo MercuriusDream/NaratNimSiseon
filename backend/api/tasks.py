@@ -1085,15 +1085,28 @@ def analyze_statement_categories(self=None, statement_id=None):
                 logger.error(f"Max retries exceeded for statement analysis {statement_id}")
                 raise
 
-                # Skip processing if no LLM available
-                if not model:
-                    logger.warning(
-                        "❌ LLM not available, skipping statement extraction")
-                    return
+    except Exception as e:
+        logger.error(f"❌ Error analyzing statement {statement_id}: {e}")
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error(f"Max retries exceeded for statement analysis {statement_id}")
+                raise
 
-                # Parse and analyze statements from text using LLM
-                statements_data = parse_and_analyze_statements_from_text(
-                    full_text, session_id, debug)
+
+def process_pdf_statements(full_text, session_id, session, debug=False):
+    """Helper function to process PDF statements."""
+    try:
+        # Skip processing if no LLM available
+        if not model:
+            logger.warning(
+                "❌ LLM not available, skipping statement extraction")
+            return
+
+        # Parse and analyze statements from text using LLM
+        statements_data = parse_and_analyze_statements_from_text(
+            full_text, session_id, debug)
 
         except Exception as e:
             logger.error(f"❌ Error extracting text from PDF {session_id}: {e}")
