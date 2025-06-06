@@ -38,7 +38,7 @@ try:
     import google.generativeai as genai
     if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemma-3-27b-it')
+        model = genai.GenerativeModel('gemini-2.0-flash-lite')
     else:
         logger.warning("GEMINI_API_KEY not found in settings")
         genai = None
@@ -998,11 +998,13 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                     if page_text:
                         full_text += page_text + "\n"
 
-                logger.info(f"📄 Extracted {len(full_text)} characters from PDF")
+                logger.info(
+                    f"📄 Extracted {len(full_text)} characters from PDF")
 
                 # Skip processing if no LLM available
                 if not model:
-                    logger.warning("❌ LLM not available, skipping statement extraction")
+                    logger.warning(
+                        "❌ LLM not available, skipping statement extraction")
                     return
 
                 # Parse statements from text using LLM
@@ -1023,26 +1025,27 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
             try:
                 speaker_name = statement_data.get('speaker_name', '').strip()
                 statement_text = statement_data.get('text', '').strip()
-                
+
                 if not speaker_name or not statement_text:
-                    logger.warning(f"⚠️ Skipping statement with missing speaker or text")
+                    logger.warning(
+                        f"⚠️ Skipping statement with missing speaker or text")
                     continue
 
                 # Get or create speaker
                 speaker = get_or_create_speaker(speaker_name, debug)
                 if not speaker:
-                    logger.warning(f"⚠️ Could not create speaker: {speaker_name}")
+                    logger.warning(
+                        f"⚠️ Could not create speaker: {speaker_name}")
                     continue
 
                 # Check if statement already exists to avoid duplicates
                 existing_statement = Statement.objects.filter(
-                    session=session,
-                    speaker=speaker,
-                    text=statement_text
-                ).first()
+                    session=session, speaker=speaker,
+                    text=statement_text).first()
 
                 if existing_statement and not force:
-                    logger.info(f"ℹ️ Statement already exists for {speaker_name}")
+                    logger.info(
+                        f"ℹ️ Statement already exists for {speaker_name}")
                     continue
 
                 # Create statement
@@ -1054,7 +1057,9 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                     sentiment_reason="Pending analysis")
 
                 created_count += 1
-                logger.info(f"✨ Created statement for {speaker_name}: {statement_text[:50]}...")
+                logger.info(
+                    f"✨ Created statement for {speaker_name}: {statement_text[:50]}..."
+                )
 
                 # Queue sentiment analysis if LLM is available
                 if model and not debug:
@@ -1095,7 +1100,8 @@ def parse_statements_from_text(text, session_id, debug=False):
     # Truncate text if it's too long (keep first 50000 characters)
     if len(text) > 50000:
         text = text[:50000] + "...[텍스트 생략]"
-        logger.info(f"📄 Truncated PDF text to 50000 characters for LLM processing")
+        logger.info(
+            f"📄 Truncated PDF text to 50000 characters for LLM processing")
 
     prompt = f"""
 다음은 국회 회의록 PDF에서 추출한 텍스트입니다. 이 텍스트를 분석하여 각 발언자의 발언을 구조화된 형태로 추출해주세요.
@@ -1124,16 +1130,18 @@ def parse_statements_from_text(text, session_id, debug=False):
 """
 
     try:
-        logger.info(f"🤖 Sending PDF text to LLM for statement extraction (session: {session_id})")
+        logger.info(
+            f"🤖 Sending PDF text to LLM for statement extraction (session: {session_id})"
+        )
         response = model.generate_content(prompt)
-        
+
         if not response.text:
             logger.warning(f"❌ No response from LLM for session {session_id}")
             return []
 
         # Clean the response text
         response_text = response.text.strip()
-        
+
         # Remove markdown code blocks if present
         if response_text.startswith('```json'):
             response_text = response_text[7:]
@@ -1141,7 +1149,7 @@ def parse_statements_from_text(text, session_id, debug=False):
             response_text = response_text[3:]
         if response_text.endswith('```'):
             response_text = response_text[:-3]
-        
+
         response_text = response_text.strip()
 
         # Parse JSON response
@@ -1149,8 +1157,10 @@ def parse_statements_from_text(text, session_id, debug=False):
         parsed_response = json_module.loads(response_text)
         statements = parsed_response.get('statements', [])
 
-        logger.info(f"✅ LLM extracted {len(statements)} statements from PDF (session: {session_id})")
-        
+        logger.info(
+            f"✅ LLM extracted {len(statements)} statements from PDF (session: {session_id})"
+        )
+
         if debug:
             logger.info(f"🐛 DEBUG: LLM extracted {len(statements)} statements")
             for i, stmt in enumerate(statements[:3], 1):  # Show first 3
@@ -1161,11 +1171,15 @@ def parse_statements_from_text(text, session_id, debug=False):
         return statements
 
     except json.JSONDecodeError as e:
-        logger.error(f"❌ Failed to parse LLM JSON response for session {session_id}: {e}")
+        logger.error(
+            f"❌ Failed to parse LLM JSON response for session {session_id}: {e}"
+        )
         logger.error(f"❌ Raw LLM response: {response.text[:500]}...")
         return []
     except Exception as e:
-        logger.error(f"❌ Error using LLM for statement extraction (session {session_id}): {e}")
+        logger.error(
+            f"❌ Error using LLM for statement extraction (session {session_id}): {e}"
+        )
         return []
 
 
