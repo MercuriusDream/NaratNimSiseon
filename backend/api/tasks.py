@@ -1113,6 +1113,7 @@ def analyze_statement_categories(self=None, statement_id=None):
         logger.error(
             f"❌ Failed to parse LLM JSON response for statement {statement_id}: {e}"
         )
+        logger.error(f"❌ Response parsing failed - check LLM output format")
     except Exception as e:
         logger.error(f"❌ Error analyzing statement {statement_id}: {e}")
         if self:
@@ -1303,18 +1304,17 @@ def parse_and_analyze_statements_from_text(text, session_id, debug=False):
             logger.warning(f"❌ No response from LLM for session {session_id}")
             return []
 
-        # Clean the response text
+        # Clean the response text by removing markdown code blocks
         response_text = response.text.strip()
-
-        # Remove markdown code blocks if present
+        
+        # Remove markdown code blocks completely
         if response_text.startswith('```json'):
-            response_text = response_text[7:]
-        if response_text.startswith('```'):
-            response_text = response_text[3:]
+            response_text = response_text[7:].strip()
+        elif response_text.startswith('```'):
+            response_text = response_text[3:].strip()
+            
         if response_text.endswith('```'):
-            response_text = response_text[:-3]
-
-        response_text = response_text.strip()
+            response_text = response_text[:-3].strip()
 
         # Parse JSON response
         import json as json_module
@@ -1340,7 +1340,7 @@ def parse_and_analyze_statements_from_text(text, session_id, debug=False):
         logger.error(
             f"❌ Failed to parse LLM JSON response for session {session_id}: {e}"
         )
-        logger.error(f"❌ Raw LLM response: {response.text[:500]}...")
+        logger.error(f"❌ Response parsing failed - check LLM output format")
         return []
     except Exception as e:
         logger.error(
