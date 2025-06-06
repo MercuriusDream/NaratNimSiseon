@@ -998,7 +998,14 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                     if page_text:
                         full_text += page_text + "\n"
 
-                # Parse statements from text
+                logger.info(f"📄 Extracted {len(full_text)} characters from PDF")
+
+                # Skip processing if no LLM available
+                if not model:
+                    logger.warning("❌ LLM not available, skipping statement extraction")
+                    return
+
+                # Parse statements from text using LLM
                 statements_data = parse_statements_from_text(
                     full_text, session_id, debug)
 
@@ -1014,21 +1021,40 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
         created_count = 0
         for statement_data in statements_data:
             try:
+                speaker_name = statement_data.get('speaker_name', '').strip()
+                statement_text = statement_data.get('text', '').strip()
+                
+                if not speaker_name or not statement_text:
+                    logger.warning(f"⚠️ Skipping statement with missing speaker or text")
+                    continue
+
                 # Get or create speaker
-                speaker = get_or_create_speaker(statement_data['speaker_name'],
-                                                debug)
+                speaker = get_or_create_speaker(speaker_name, debug)
                 if not speaker:
+                    logger.warning(f"⚠️ Could not create speaker: {speaker_name}")
+                    continue
+
+                # Check if statement already exists to avoid duplicates
+                existing_statement = Statement.objects.filter(
+                    session=session,
+                    speaker=speaker,
+                    text=statement_text
+                ).first()
+
+                if existing_statement and not force:
+                    logger.info(f"ℹ️ Statement already exists for {speaker_name}")
                     continue
 
                 # Create statement
                 statement = Statement.objects.create(
                     session=session,
                     speaker=speaker,
-                    text=statement_data['text'],
+                    text=statement_text,
                     sentiment_score=0.0,  # Will be analyzed later
                     sentiment_reason="Pending analysis")
 
                 created_count += 1
+                logger.info(f"✨ Created statement for {speaker_name}: {statement_text[:50]}...")
 
                 # Queue sentiment analysis if LLM is available
                 if model and not debug:
@@ -1036,6 +1062,7 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
 
             except Exception as e:
                 logger.error(f"❌ Error creating statement: {e}")
+                logger.error(f"❌ Statement data: {statement_data}")
                 continue
 
         logger.info(
@@ -1060,52 +1087,86 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
 
 
 def parse_statements_from_text(text, session_id, debug=False):
-    """Parse statements from PDF text content."""
-    statements = []
+    """Parse statements from PDF text content using LLM."""
+    if not model:
+        logger.warning("❌ LLM model not available for statement parsing")
+        return []
 
-    # Simple parsing - look for speaker patterns
-    # Korean parliament typically uses patterns like "○의원명:" or "○위원장:"
-    lines = text.split('\n')
-    current_speaker = None
-    current_text = ""
+    # Truncate text if it's too long (keep first 50000 characters)
+    if len(text) > 50000:
+        text = text[:50000] + "...[텍스트 생략]"
+        logger.info(f"📄 Truncated PDF text to 50000 characters for LLM processing")
 
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
+    prompt = f"""
+다음은 국회 회의록 PDF에서 추출한 텍스트입니다. 이 텍스트를 분석하여 각 발언자의 발언을 구조화된 형태로 추출해주세요.
 
-        # Look for speaker patterns
-        if line.startswith('○') and ':' in line:
-            # Save previous statement if exists
-            if current_speaker and current_text.strip():
-                statements.append({
-                    'speaker_name': current_speaker,
-                    'text': current_text.strip()
-                })
+회의록 텍스트:
+{text}
 
-            # Extract new speaker name
-            current_speaker = line.split(':')[0].replace('○', '').strip()
-            current_text = line.split(':', 1)[1] if ':' in line else ""
-        else:
-            # Continue accumulating text for current speaker
-            if current_speaker:
-                current_text += " " + line
+다음 JSON 형식으로 발언들을 추출해주세요:
+{{
+    "statements": [
+        {{
+            "speaker_name": "발언자명 (의원, 위원장, 장관 등의 직책 제외)",
+            "text": "발언 내용 전체"
+        }}
+    ]
+}}
 
-    # Don't forget the last statement
-    if current_speaker and current_text.strip():
-        statements.append({
-            'speaker_name': current_speaker,
-            'text': current_text.strip()
-        })
+주의사항:
+1. 발언자명에서 "의원", "위원장", "장관" 등의 직책은 제거하고 이름만 추출
+2. 각 발언의 완전한 내용을 포함
+3. 절차적 발언이나 형식적 문구는 제외
+4. 실질적인 정책 발언만 포함
+5. 발언자가 명확하지 않은 경우 제외
 
-    if debug:
-        logger.info(f"🐛 DEBUG: Parsed {len(statements)} statements from PDF")
-        for i, stmt in enumerate(statements[:3], 1):  # Show first 3
-            logger.info(
-                f"🐛 DEBUG Statement {i}: {stmt['speaker_name'][:20]}... - {stmt['text'][:50]}..."
-            )
+응답은 반드시 유효한 JSON 형식이어야 합니다.
+"""
 
-    return statements
+    try:
+        logger.info(f"🤖 Sending PDF text to LLM for statement extraction (session: {session_id})")
+        response = model.generate_content(prompt)
+        
+        if not response.text:
+            logger.warning(f"❌ No response from LLM for session {session_id}")
+            return []
+
+        # Clean the response text
+        response_text = response.text.strip()
+        
+        # Remove markdown code blocks if present
+        if response_text.startswith('```json'):
+            response_text = response_text[7:]
+        if response_text.startswith('```'):
+            response_text = response_text[3:]
+        if response_text.endswith('```'):
+            response_text = response_text[:-3]
+        
+        response_text = response_text.strip()
+
+        # Parse JSON response
+        import json
+        parsed_response = json.loads(response_text)
+        statements = parsed_response.get('statements', [])
+
+        logger.info(f"✅ LLM extracted {len(statements)} statements from PDF (session: {session_id})")
+        
+        if debug:
+            logger.info(f"🐛 DEBUG: LLM extracted {len(statements)} statements")
+            for i, stmt in enumerate(statements[:3], 1):  # Show first 3
+                logger.info(
+                    f"🐛 DEBUG Statement {i}: {stmt.get('speaker_name', 'Unknown')[:20]}... - {stmt.get('text', '')[:50]}..."
+                )
+
+        return statements
+
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Failed to parse LLM JSON response for session {session_id}: {e}")
+        logger.error(f"❌ Raw LLM response: {response.text[:500]}...")
+        return []
+    except Exception as e:
+        logger.error(f"❌ Error using LLM for statement extraction (session {session_id}): {e}")
+        return []
 
 
 def get_or_create_speaker(speaker_name, debug=False):
