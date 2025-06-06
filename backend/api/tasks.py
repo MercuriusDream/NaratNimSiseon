@@ -806,3 +806,91 @@ def fetch_session_details(self=None,
                 raise
         logger.error(f"❌ Error fetching session details for {session_id}: {e}")
         raise
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
+    """Fetch bills for a specific session."""
+    try:
+        if debug:
+            logger.info(f"🐛 DEBUG: Fetching bills for session {session_id} in debug mode")
+            
+        url = "https://open.assembly.go.kr/portal/openapi/nekcaiymatialqlxr"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "Type": "json",
+            "UNIT_CD": session_id
+        }
+
+        logger.info(f"🔍 Fetching bills for session: {session_id}")
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        logger.info(f"📊 Bills API response structure: {list(data.keys()) if data else 'Empty response'}")
+
+        # Extract bills data
+        bills_data = None
+        if 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 1:
+            bills_data = data['nekcaiymatialqlxr'][1].get('row', [])
+        elif 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 0:
+            bills_data = data['nekcaiymatialqlxr'][0].get('row', [])
+        elif 'row' in data:
+            bills_data = data['row']
+
+        if not bills_data:
+            logger.info(f"ℹ️  No bills found for session {session_id}")
+            return
+
+        # Get session object
+        try:
+            session = Session.objects.get(conf_id=session_id)
+        except Session.DoesNotExist:
+            logger.error(f"❌ Session {session_id} not found in database")
+            return
+
+        created_count = 0
+        for bill_data in bills_data:
+            try:
+                bill_id = bill_data.get('BILL_ID')
+                if not bill_id:
+                    continue
+
+                bill, created = Bill.objects.get_or_create(
+                    bill_id=bill_id,
+                    defaults={
+                        'session': session,
+                        'bill_nm': bill_data.get('BILL_NAME', ''),
+                        'link_url': bill_data.get('DETAIL_LINK_URL', '')
+                    }
+                )
+
+                if created:
+                    created_count += 1
+                    logger.info(f"✨ Created new bill: {bill_id}")
+                elif force:
+                    # Update existing bill if force is True
+                    bill.bill_nm = bill_data.get('BILL_NAME', bill.bill_nm)
+                    bill.link_url = bill_data.get('DETAIL_LINK_URL', bill.link_url)
+                    bill.save()
+                    logger.info(f"🔄 Updated existing bill: {bill_id}")
+
+            except Exception as e:
+                logger.error(f"❌ Error processing bill {bill_data.get('BILL_ID', 'unknown')}: {e}")
+                continue
+
+        logger.info(f"🎉 Bills processed for session {session_id}: {created_count} created")
+
+    except Exception as e:
+        if isinstance(e, RequestException):
+            if self:
+                try:
+                    self.retry(exc=e)
+                except MaxRetriesExceededError:
+                    logger.error(f"Max retries exceeded for bills fetch {session_id}")
+                    raise
+            else:
+                logger.error("Sync execution failed, no retry available")
+                raise
+        logger.error(f"❌ Error fetching bills for session {session_id}: {e}")
+        raise
