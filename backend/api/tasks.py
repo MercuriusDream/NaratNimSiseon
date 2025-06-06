@@ -1085,18 +1085,6 @@ def analyze_statement_categories(self=None, statement_id=None):
                 logger.error(f"Max retries exceeded for statement analysis {statement_id}")
                 raise
 
-    except Exception as e:
-        logger.error(f"❌ Error analyzing statement {statement_id}: {e}")
-        if self:
-            try:
-                self.retry(exc=e)
-            except MaxRetriesExceededError:
-                logger.error(f"Max retries exceeded for statement analysis {statement_id}")
-                raise
-
-                logger.info(
-                    f"📄 Extracted {len(full_text)} characters from PDF")
-
                 # Skip processing if no LLM available
                 if not model:
                     logger.warning(
