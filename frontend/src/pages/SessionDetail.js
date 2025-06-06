@@ -22,7 +22,7 @@ function SessionDetail() {
         ]);
         
         setSession(sessionRes.data);
-        setStatements(statementsRes.data);
+        setStatements(Array.isArray(statementsRes.data) ? statementsRes.data : []);
       } catch (err) {
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
         console.error('Error fetching session data:', err);
@@ -102,7 +102,7 @@ function SessionDetail() {
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-2xl font-bold mb-4">발언 목록</h2>
         <div className="space-y-6">
-          {statements.map(statement => (
+          {Array.isArray(statements) && statements.map(statement => (
             <div key={statement.id} className="border-b pb-6 last:border-b-0">
               <div className="flex items-center justify-between mb-2">
                 <div>
@@ -128,6 +128,11 @@ function SessionDetail() {
               </p>
             </div>
           ))}
+          {(!Array.isArray(statements) || statements.length === 0) && (
+            <div className="text-center text-gray-500 py-8">
+              발언 데이터가 없습니다.
+            </div>
+          )}
         </div>
       </div>
         </div>
