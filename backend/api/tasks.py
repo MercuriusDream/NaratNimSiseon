@@ -624,8 +624,9 @@ def fetch_session_details(self=None,
                 session_details = None
 
         if not session_details:
-            logger.warning(f"❌ No details found for session {session_id}")
-            logger.info(f"📋 Full API response: {data}")
+            logger.info(f"ℹ️  No detailed info available for session {session_id} (this is normal for some sessions)")
+            if debug:
+                logger.info(f"📋 Full API response: {data}")
 
             # Try to fetch bills anyway, some sessions might have bills without detailed info
             if is_celery_available():
@@ -690,11 +691,19 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
             "CONF_ID": session_id
         }
 
+        logger.info(f"🔍 Fetching bills for session: {session_id}")
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
 
+        # Check for API error responses
+        if 'RESULT' in data and data['RESULT'].get('CODE') == 'INFO-200':
+            logger.info(f"ℹ️  No bills found for session {session_id} (this is normal for some sessions)")
+            return
+
         session = Session.objects.get(conf_id=session_id)
+        bills_created = 0
+        bills_updated = 0
 
         for row in data.get('row', []):
             bill, created = Bill.objects.get_or_create(bill_id=row['BILL_ID'],
@@ -706,14 +715,22 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
                                                            row['LINK_URL']
                                                        })
 
-            # If bill exists and force is True, update the bill
-            if not created and force:
+            if created:
+                bills_created += 1
+                logger.info(f"✨ Created new bill: {row['BILL_ID']}")
+            elif force:
+                # If bill exists and force is True, update the bill
                 bill.bill_nm = row['BILL_NM']
                 bill.link_url = row['LINK_URL']
                 bill.save()
+                bills_updated += 1
+                logger.info(f"🔄 Updated existing bill: {row['BILL_ID']}")
+
+        if bills_created > 0 or bills_updated > 0:
+            logger.info(f"🎉 Bills processed for session {session_id}: {bills_created} created, {bills_updated} updated")
 
     except (RequestException, Session.DoesNotExist) as e:
-        logger.error(f"Error fetching session bills: {e}")
+        logger.error(f"❌ Error fetching session bills for {session_id}: {e}")
         if self:
             try:
                 self.retry(exc=e)
