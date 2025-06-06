@@ -698,7 +698,7 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
             "Type": "json",
-            "CONF_ID": format_conf_id(session_id)
+            "CONF_ID": "N"+format_conf_id(session_id)
         }
 
         logger.info(f"🔍 Fetching bills for session: {session_id}")
