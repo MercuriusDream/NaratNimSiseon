@@ -749,8 +749,4 @@ def fetch_session_details(self=None,
             else:
                 fetch_session_bills(session_id=session_id,
                                     force=force,
-                                    json formatting in response
-                if result.startswith('```json'):
-                    result = result.replace('```json', '').replace('```', '').strip()
-                elif result.startswith('```'):
-                    result = result.replace('```', '')
+                                    debug=debug)
