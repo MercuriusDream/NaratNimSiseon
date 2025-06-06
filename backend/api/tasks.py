@@ -1245,160 +1245,168 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
         raise
 
 
-def parse_and_analyze_statements_from_text(text, session_id, debug=False):
-    """Parse statements from PDF text and analyze them comprehensively using LLM."""
+def extract_statements_with_regex(text, session_id, debug=False):
+    """Extract statements from PDF text using regex patterns."""
+    import re
+    
+    logger.info(f"📄 Extracting statements from PDF text using regex (session: {session_id})")
+    
+    # Clean up the text first
+    text = re.sub(r'\n+', '\n', text)  # Remove multiple newlines
+    text = re.sub(r'\s+', ' ', text)   # Normalize whitespace
+    
+    statements = []
+    
+    # Pattern to match speaker statements
+    # Looks for "◯[speaker_name] [content]" pattern
+    speaker_pattern = r'◯([^◯\n]+?)\s+([^◯]+?)(?=◯|$)'
+    
+    matches = re.findall(speaker_pattern, text, re.DOTALL | re.MULTILINE)
+    
+    for speaker_raw, content_raw in matches:
+        # Clean speaker name
+        speaker_name = speaker_raw.strip()
+        speaker_name = re.sub(r'\s*(의원|위원장|장관|국장|의장|부의장)\s*', '', speaker_name).strip()
+        
+        # Skip if no speaker name or content
+        if not speaker_name or not content_raw.strip():
+            continue
+            
+        # Clean content
+        content = content_raw.strip()
+        content = re.sub(r'\([^)]*\)', '', content)  # Remove parenthetical notes
+        content = re.sub(r'\s+', ' ', content).strip()
+        
+        # Skip procedural statements or very short content
+        if len(content) < 50:
+            continue
+            
+        # Skip procedural phrases
+        procedural_phrases = [
+            '투표해 주시기 바랍니다',
+            '투표를 마치겠습니다',
+            '가결되었음을 선포합니다',
+            '수고하셨습니다',
+            '상정합니다',
+            '의결하도록 하겠습니다'
+        ]
+        
+        if any(phrase in content for phrase in procedural_phrases):
+            continue
+        
+        statements.append({
+            'speaker_name': speaker_name,
+            'text': content
+        })
+    
+    logger.info(f"✅ Extracted {len(statements)} statements using regex (session: {session_id})")
+    
+    if debug:
+        for i, stmt in enumerate(statements[:3], 1):
+            logger.info(f"🐛 DEBUG Statement {i}: {stmt['speaker_name']} - {stmt['text'][:100]}...")
+    
+    return statements
+
+
+def analyze_single_statement(statement_data, session_id, debug=False):
+    """Analyze a single statement using LLM."""
     if not model:
-        logger.warning(
-            "❌ LLM model not available for statement parsing and analysis")
-        return []
-
-    # Truncate text if it's too long (keep first 50000 characters)
-    if len(text) > 50000:
-        text = text[:50000] + "...[텍스트 생략]"
-        logger.info(
-            f"📄 Truncated PDF text to 50000 characters for LLM processing")
-
+        logger.warning("❌ LLM model not available for statement analysis")
+        return statement_data
+    
+    speaker_name = statement_data.get('speaker_name', '')
+    text = statement_data.get('text', '')
+    
     prompt = f"""
-다음은 국회 회의록 PDF에서 추출한 텍스트입니다. 이 텍스트를 분석하여 각 발언자의 발언을 구조화된 형태로 추출하고, 각 발언에 대해 감성 분석과 정책 분류를 수행해주세요.
+다음 국회 발언을 분석하여 감성 분석과 정책 분류를 수행해주세요.
 
-회의록 텍스트:
-{text}
+발언자: {speaker_name}
+발언 내용: {text}
 
-다음 JSON 형식으로 발언들을 추출하고 분석해주세요:
+다음 JSON 형식으로 분석 결과를 제공해주세요:
 {{
-    "statements": [
+    "sentiment_score": -1부터 1까지의 감성 점수 (숫자),
+    "sentiment_reason": "감성 분석 근거",
+    "policy_categories": [
         {{
-            "speaker_name": "발언자명 (의원, 위원장, 장관 등의 직책 제외)",
-            "text": "발언 내용 전체",
-            "sentiment_score": -1부터 1까지의 감성 점수 (숫자),
-            "sentiment_reason": "감성 분석 근거",
-            "policy_categories": [
-                {{
-                    "main_category": "주요 정책 분야 (경제, 사회복지, 교육, 외교안보, 환경, 법무, 과학기술, 문화체육, 농림축산, 국정감사 중 하나)",
-                    "sub_category": "세부 분야",
-                    "confidence": 0부터 1까지의 확신도 (숫자)
-                }}
-            ],
-            "policy_keywords": ["정책 관련 주요 키워드들"]
+            "main_category": "주요 정책 분야 (경제, 사회복지, 교육, 외교안보, 환경, 법무, 과학기술, 문화체육, 농림축산, 국정감사 중 하나)",
+            "sub_category": "세부 분야",
+            "confidence": 0부터 1까지의 확신도 (숫자)
         }}
-    ]
+    ],
+    "policy_keywords": ["정책 관련 주요 키워드들"]
 }}
 
 분석 기준:
-1. 발언자명에서 "의원", "위원장", "장관" 등의 직책은 제거하고 이름만 추출
-2. 각 발언의 완전한 내용을 포함
-3. 절차적 발언이나 형식적 문구는 제외하고 실질적인 정책 발언만 포함
-4. 감성 분석: -1(매우 부정적) ~ 1(매우 긍정적)
-5. 정책 분류: 발언 내용을 기반으로 관련 정책 분야 분류
-6. 주요 키워드: 정책과 관련된 핵심 용어들 추출
-7. 발언자가 명확하지 않은 경우 제외
+1. 감성 분석: -1(매우 부정적) ~ 1(매우 긍정적)
+2. 정책 분류: 발언 내용을 기반으로 관련 정책 분야 분류
+3. 주요 키워드: 정책과 관련된 핵심 용어들 추출
 
 응답은 반드시 유효한 JSON 형식이어야 합니다.
 """
-
+    
     try:
-        logger.info(
-            f"🤖 Sending PDF text to LLM for comprehensive statement analysis (session: {session_id})"
-        )
         response = model.generate_content(prompt)
-
+        
         if not response.text:
-            logger.warning(f"❌ No response from LLM for session {session_id}")
-            return []
-
-        # Clean the response text by removing markdown code blocks
+            logger.warning(f"❌ No LLM response for statement from {speaker_name}")
+            return statement_data
+        
+        # Clean response
         response_text = response.text.strip()
-
-        # Remove markdown code blocks completely
         if response_text.startswith('```json'):
             response_text = response_text[7:].strip()
         elif response_text.startswith('```'):
             response_text = response_text[3:].strip()
-
         if response_text.endswith('```'):
             response_text = response_text[:-3].strip()
-
-        # Additional cleaning for malformed JSON
-        # Remove any trailing commas before closing brackets/braces
-        import re
-        response_text = re.sub(r',(\s*[}\]])', r'\1', response_text)
-
-        # Try to find and extract valid JSON if response contains extra text
-        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            response_text = json_match.group(0)
-
-        # Parse JSON response with multiple fallback attempts
+        
+        # Parse JSON
         import json as json_module
-        parsed_response = None
-
-        # First attempt: direct parsing
-        try:
-            parsed_response = json_module.loads(response_text)
-        except json.JSONDecodeError as e:
-            logger.warning(f"⚠️ First JSON parse attempt failed: {e}")
-
-            # Second attempt: try to fix common issues
-            try:
-                # Replace problematic characters and try again
-                cleaned_text = response_text.replace('\n', '\\n').replace(
-                    '\r', '\\r').replace('\t', '\\t')
-                # Fix unescaped quotes in strings (basic attempt)
-                cleaned_text = re.sub(r'(?<!\\)"(?=.*")', '\\"', cleaned_text)
-                parsed_response = json_module.loads(cleaned_text)
-                logger.info("✅ JSON parsing succeeded on second attempt")
-            except json.JSONDecodeError as e2:
-                logger.warning(f"⚠️ Second JSON parse attempt failed: {e2}")
-
-                # Third attempt: try to extract just the statements array
-                try:
-                    statements_match = re.search(
-                        r'"statements"\s*:\s*\[(.*?)\]', response_text,
-                        re.DOTALL)
-                    if statements_match:
-                        # Create a minimal valid JSON structure
-                        parsed_response = {"statements": []}
-                        logger.warning(
-                            "⚠️ Using fallback empty statements due to JSON parsing issues"
-                        )
-                    else:
-                        raise e2
-                except:
-                    raise e2
-
-        if not parsed_response:
-            raise json.JSONDecodeError(
-                "Failed to parse JSON after all attempts", response_text, 0)
-        statements = parsed_response.get('statements', [])
-
-        logger.info(
-            f"✅ LLM extracted and analyzed {len(statements)} statements from PDF (session: {session_id})"
-        )
-
+        analysis_data = json_module.loads(response_text)
+        
+        # Merge analysis data with original statement
+        statement_data.update({
+            'sentiment_score': analysis_data.get('sentiment_score', 0.0),
+            'sentiment_reason': analysis_data.get('sentiment_reason', 'LLM 분석 완료'),
+            'policy_categories': analysis_data.get('policy_categories', []),
+            'policy_keywords': analysis_data.get('policy_keywords', [])
+        })
+        
         if debug:
-            logger.info(
-                f"🐛 DEBUG: LLM extracted and analyzed {len(statements)} statements"
-            )
-            for i, stmt in enumerate(statements[:3], 1):  # Show first 3
-                logger.info(
-                    f"🐛 DEBUG Statement {i}: {stmt.get('speaker_name', 'Unknown')[:20]}... - Sentiment: {stmt.get('sentiment_score', 0)} - Categories: {len(stmt.get('policy_categories', []))}"
-                )
-
-        return statements
-
-    except json.JSONDecodeError as e:
-        logger.error(
-            f"❌ Failed to parse LLM JSON response for session {session_id}: {e}"
-        )
-        logger.error(
-            f"❌ Problematic response excerpt: {response.text[:500]}...")
-        logger.error(f"❌ Response parsing failed - check LLM output format")
-        return []
+            logger.info(f"🐛 DEBUG: Analyzed statement from {speaker_name} - Sentiment: {statement_data.get('sentiment_score', 0)}")
+        
+        return statement_data
+        
     except Exception as e:
-        logger.error(
-            f"❌ Error using LLM for comprehensive statement analysis (session {session_id}): {e}"
-        )
+        logger.error(f"❌ Error analyzing statement from {speaker_name}: {e}")
+        return statement_data
+
+
+def parse_and_analyze_statements_from_text(text, session_id, debug=False):
+    """Parse statements from PDF text using regex, then analyze each individually."""
+    # Step 1: Extract statements using regex
+    statements = extract_statements_with_regex(text, session_id, debug)
+    
+    if not statements:
+        logger.warning(f"❌ No statements extracted from PDF (session: {session_id})")
         return []
+    
+    # Step 2: Analyze each statement individually
+    analyzed_statements = []
+    for i, statement in enumerate(statements, 1):
+        logger.info(f"🤖 Analyzing statement {i}/{len(statements)} from {statement.get('speaker_name', 'Unknown')} (session: {session_id})")
+        
+        analyzed_statement = analyze_single_statement(statement, session_id, debug)
+        analyzed_statements.append(analyzed_statement)
+        
+        # Brief pause between API calls to avoid rate limiting
+        if not debug:
+            time.sleep(0.5)
+    
+    logger.info(f"✅ Completed analysis of {len(analyzed_statements)} statements (session: {session_id})")
+    
+    return analyzed_statements
 
 
 def create_statement_categories(statement, policy_categories):
