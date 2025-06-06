@@ -38,7 +38,7 @@ try:
     import google.generativeai as genai
     if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        model = genai.GenerativeModel('gemma-3-27b-it')
     else:
         logger.warning("GEMINI_API_KEY not found in settings")
         genai = None
@@ -996,7 +996,6 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                     page_text = page.extract_text()
                     if page_text:
                         full_text += page_text + "\n"
-                        print(full_text)
 
                 logger.info(
                     f"📄 Extracted {len(full_text)} characters from PDF")
@@ -1248,63 +1247,64 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
 def extract_statements_with_regex(text, session_id, debug=False):
     """Extract statements from PDF text using regex patterns."""
     import re
-    
-    logger.info(f"📄 Extracting statements from PDF text using regex (session: {session_id})")
-    
+
+    logger.info(
+        f"📄 Extracting statements from PDF text using regex (session: {session_id})"
+    )
+
     # Clean up the text first
     text = re.sub(r'\n+', '\n', text)  # Remove multiple newlines
-    text = re.sub(r'\s+', ' ', text)   # Normalize whitespace
-    
+    text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+
     statements = []
-    
+
     # Pattern to match speaker statements
     # Looks for "◯[speaker_name] [content]" pattern
     speaker_pattern = r'◯([^◯\n]+?)\s+([^◯]+?)(?=◯|$)'
-    
+
     matches = re.findall(speaker_pattern, text, re.DOTALL | re.MULTILINE)
-    
+
     for speaker_raw, content_raw in matches:
         # Clean speaker name
         speaker_name = speaker_raw.strip()
-        speaker_name = re.sub(r'\s*(의원|위원장|장관|국장|의장|부의장)\s*', '', speaker_name).strip()
-        
+        speaker_name = re.sub(r'\s*(의원|위원장|장관|국장|의장|부의장)\s*', '',
+                              speaker_name).strip()
+
         # Skip if no speaker name or content
         if not speaker_name or not content_raw.strip():
             continue
-            
+
         # Clean content
         content = content_raw.strip()
-        content = re.sub(r'\([^)]*\)', '', content)  # Remove parenthetical notes
+        content = re.sub(r'\([^)]*\)', '',
+                         content)  # Remove parenthetical notes
         content = re.sub(r'\s+', ' ', content).strip()
-        
+
         # Skip procedural statements or very short content
         if len(content) < 50:
             continue
-            
+
         # Skip procedural phrases
         procedural_phrases = [
-            '투표해 주시기 바랍니다',
-            '투표를 마치겠습니다',
-            '가결되었음을 선포합니다',
-            '수고하셨습니다',
-            '상정합니다',
+            '투표해 주시기 바랍니다', '투표를 마치겠습니다', '가결되었음을 선포합니다', '수고하셨습니다', '상정합니다',
             '의결하도록 하겠습니다'
         ]
-        
+
         if any(phrase in content for phrase in procedural_phrases):
             continue
-        
-        statements.append({
-            'speaker_name': speaker_name,
-            'text': content
-        })
-    
-    logger.info(f"✅ Extracted {len(statements)} statements using regex (session: {session_id})")
-    
+
+        statements.append({'speaker_name': speaker_name, 'text': content})
+
+    logger.info(
+        f"✅ Extracted {len(statements)} statements using regex (session: {session_id})"
+    )
+
     if debug:
         for i, stmt in enumerate(statements[:3], 1):
-            logger.info(f"🐛 DEBUG Statement {i}: {stmt['speaker_name']} - {stmt['text'][:100]}...")
-    
+            logger.info(
+                f"🐛 DEBUG Statement {i}: {stmt['speaker_name']} - {stmt['text'][:100]}..."
+            )
+
     return statements
 
 
@@ -1313,10 +1313,10 @@ def analyze_single_statement(statement_data, session_id, debug=False):
     if not model:
         logger.warning("❌ LLM model not available for statement analysis")
         return statement_data
-    
+
     speaker_name = statement_data.get('speaker_name', '')
     text = statement_data.get('text', '')
-    
+
     prompt = f"""
 다음 국회 발언을 분석하여 감성 분석과 정책 분류를 수행해주세요.
 
@@ -1344,14 +1344,15 @@ def analyze_single_statement(statement_data, session_id, debug=False):
 
 응답은 반드시 유효한 JSON 형식이어야 합니다.
 """
-    
+
     try:
         response = model.generate_content(prompt)
-        
+
         if not response.text:
-            logger.warning(f"❌ No LLM response for statement from {speaker_name}")
+            logger.warning(
+                f"❌ No LLM response for statement from {speaker_name}")
             return statement_data
-        
+
         # Clean response
         response_text = response.text.strip()
         if response_text.startswith('```json'):
@@ -1360,24 +1361,30 @@ def analyze_single_statement(statement_data, session_id, debug=False):
             response_text = response_text[3:].strip()
         if response_text.endswith('```'):
             response_text = response_text[:-3].strip()
-        
+
         # Parse JSON
         import json as json_module
         analysis_data = json_module.loads(response_text)
-        
+
         # Merge analysis data with original statement
         statement_data.update({
-            'sentiment_score': analysis_data.get('sentiment_score', 0.0),
-            'sentiment_reason': analysis_data.get('sentiment_reason', 'LLM 분석 완료'),
-            'policy_categories': analysis_data.get('policy_categories', []),
-            'policy_keywords': analysis_data.get('policy_keywords', [])
+            'sentiment_score':
+            analysis_data.get('sentiment_score', 0.0),
+            'sentiment_reason':
+            analysis_data.get('sentiment_reason', 'LLM 분석 완료'),
+            'policy_categories':
+            analysis_data.get('policy_categories', []),
+            'policy_keywords':
+            analysis_data.get('policy_keywords', [])
         })
-        
+
         if debug:
-            logger.info(f"🐛 DEBUG: Analyzed statement from {speaker_name} - Sentiment: {statement_data.get('sentiment_score', 0)}")
-        
+            logger.info(
+                f"🐛 DEBUG: Analyzed statement from {speaker_name} - Sentiment: {statement_data.get('sentiment_score', 0)}"
+            )
+
         return statement_data
-        
+
     except Exception as e:
         logger.error(f"❌ Error analyzing statement from {speaker_name}: {e}")
         return statement_data
@@ -1387,25 +1394,31 @@ def parse_and_analyze_statements_from_text(text, session_id, debug=False):
     """Parse statements from PDF text using regex, then analyze each individually."""
     # Step 1: Extract statements using regex
     statements = extract_statements_with_regex(text, session_id, debug)
-    
+
     if not statements:
-        logger.warning(f"❌ No statements extracted from PDF (session: {session_id})")
+        logger.warning(
+            f"❌ No statements extracted from PDF (session: {session_id})")
         return []
-    
+
     # Step 2: Analyze each statement individually
     analyzed_statements = []
     for i, statement in enumerate(statements, 1):
-        logger.info(f"🤖 Analyzing statement {i}/{len(statements)} from {statement.get('speaker_name', 'Unknown')} (session: {session_id})")
-        
-        analyzed_statement = analyze_single_statement(statement, session_id, debug)
+        logger.info(
+            f"🤖 Analyzing statement {i}/{len(statements)} from {statement.get('speaker_name', 'Unknown')} (session: {session_id})"
+        )
+
+        analyzed_statement = analyze_single_statement(statement, session_id,
+                                                      debug)
         analyzed_statements.append(analyzed_statement)
-        
+
         # Brief pause between API calls to avoid rate limiting
         if not debug:
             time.sleep(0.5)
-    
-    logger.info(f"✅ Completed analysis of {len(analyzed_statements)} statements (session: {session_id})")
-    
+
+    logger.info(
+        f"✅ Completed analysis of {len(analyzed_statements)} statements (session: {session_id})"
+    )
+
     return analyzed_statements
 
 
