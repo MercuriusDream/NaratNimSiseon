@@ -1145,8 +1145,8 @@ def parse_statements_from_text(text, session_id, debug=False):
         response_text = response_text.strip()
 
         # Parse JSON response
-        import json
-        parsed_response = json.loads(response_text)
+        import json as json_module
+        parsed_response = json_module.loads(response_text)
         statements = parsed_response.get('statements', [])
 
         logger.info(f"✅ LLM extracted {len(statements)} statements from PDF (session: {session_id})")
