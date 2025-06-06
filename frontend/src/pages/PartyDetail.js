@@ -22,7 +22,7 @@ function PartyDetail() {
     try {
       setLoading(true);
       const response = await api.get(
-        `parties/${id}/?time_range=${timeRange}&sort_by=${sortBy}`
+        `/api/parties/${id}/?time_range=${timeRange}&sort_by=${sortBy}`
       );
       setParty(response.data);
     } catch (err) {

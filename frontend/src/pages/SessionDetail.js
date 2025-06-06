@@ -20,7 +20,7 @@ function SessionDetail() {
           axios.get(`/api/sessions/${id}/`),
           axios.get(`/api/sessions/${id}/statements/`)
         ]);
-        
+
         setSession(sessionRes.data);
         setStatements(Array.isArray(statementsRes.data) ? statementsRes.data : []);
       } catch (err) {
@@ -142,4 +142,4 @@ function SessionDetail() {
   );
 }
 
-export default SessionDetail; 
+export default SessionDetail;

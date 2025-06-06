@@ -28,9 +28,9 @@ function PartyList() {
       if (selectedCategories.length > 0) {
         params.append('categories', selectedCategories.join(','));
       }
-      
-      const response = await api.get(`/parties/?${params.toString()}`);
-      
+
+      const response = await api.get(`/api/parties/?${params.toString()}`);
+
       // Handle different response structures and ensure we always have an array
       let partiesData = [];
       if (response.data) {
@@ -42,13 +42,13 @@ function PartyList() {
           partiesData = response.data.data;
         }
       }
-      
+
       // Ensure partiesData is always an array
       if (!Array.isArray(partiesData)) {
         console.warn('Parties data is not an array:', partiesData);
         partiesData = [];
       }
-      
+
       setParties(partiesData);
     } catch (err) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -65,7 +65,7 @@ function PartyList() {
       if (selectedCategories.length > 0) {
         params.append('categories', selectedCategories.join(','));
       }
-      
+
       const response = await api.get(`/analytics/categories/?${params.toString()}`);
       setCategoryData(response.data.results || response.data || []);
     } catch (err) {

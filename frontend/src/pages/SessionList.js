@@ -3,6 +3,7 @@ import api from '../api';
 import NavigationHeader from '../components/NavigationHeader';
 import Footer from '../components/Footer';
 import SessionCard from '../components/SessionCard';
+import { ENDPOINTS } from '../api'; // Import ENDPOINTS
 
 function SessionList() {
   const [sessions, setSessions] = useState([]);
@@ -31,7 +32,7 @@ function SessionList() {
         ...filters
       });
       console.log('Fetching sessions with params:', params.toString());
-      const response = await api.get(`sessions/?${params}`);
+      const response = await api.get(`${ENDPOINTS.SESSIONS}?${params}`); // Use ENDPOINTS.SESSIONS
       console.log('API Response:', response.data);
       console.log('Sessions count:', response.data.count);
       console.log('Results length:', response.data.results?.length);

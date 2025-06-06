@@ -18,10 +18,10 @@ function SpeakerDetail() {
       try {
         setLoading(true);
         const [speakerRes, statementsRes] = await Promise.all([
-          api.get(`speakers/${id}/`),
+          api.get(`api/speakers/${id}/`),
           api.get(`speakers/${id}/statements/?time_range=${timeRange}`)
         ]);
-        
+
         setSpeaker(speakerRes.data);
         setStatements(statementsRes.data);
       } catch (err) {
@@ -200,4 +200,4 @@ function SpeakerDetail() {
   );
 }
 
-export default SpeakerDetail; 
+export default SpeakerDetail;
