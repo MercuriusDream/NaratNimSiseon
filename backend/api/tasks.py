@@ -1085,6 +1085,15 @@ def analyze_statement_categories(self=None, statement_id=None):
                 logger.error(f"Max retries exceeded for statement analysis {statement_id}")
                 raise
 
+    except Exception as e:
+        logger.error(f"❌ Error analyzing statement {statement_id}: {e}")
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error(f"Max retries exceeded for statement analysis {statement_id}")
+                raise
+
                 logger.info(
                     f"📄 Extracted {len(full_text)} characters from PDF")
 
@@ -1311,21 +1320,21 @@ def create_statement_categories(statement, policy_categories):
     """Create category associations for a statement based on LLM analysis."""
     try:
         from .models import Category, Subcategory, StatementCategory
-        
+
         for category_data in policy_categories:
             main_category = category_data.get('main_category', '').strip()
             sub_category = category_data.get('sub_category', '').strip()
             confidence = category_data.get('confidence', 0.0)
-            
+
             if not main_category:
                 continue
-                
+
             # Get or create main category
             category, created = Category.objects.get_or_create(
                 name=main_category,
                 defaults={'description': f'{main_category} 관련 정책'}
             )
-            
+
             # Get or create subcategory if provided
             subcategory = None
             if sub_category:
@@ -1334,7 +1343,7 @@ def create_statement_categories(statement, policy_categories):
                     category=category,
                     defaults={'description': f'{sub_category} 관련 세부 정책'}
                 )
-            
+
             # Create statement category association
             StatementCategory.objects.get_or_create(
                 statement=statement,
@@ -1342,9 +1351,9 @@ def create_statement_categories(statement, policy_categories):
                 subcategory=subcategory,
                 defaults={'confidence_score': confidence}
             )
-            
+
         logger.info(f"✅ Created {len(policy_categories)} category associations for statement {statement.id}")
-        
+
     except Exception as e:
         logger.error(f"❌ Error creating statement categories: {e}")
 
