@@ -996,6 +996,7 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                     page_text = page.extract_text()
                     if page_text:
                         full_text += page_text + "\n"
+                        print(full_text)
 
                 logger.info(
                     f"📄 Extracted {len(full_text)} characters from PDF")
@@ -1005,7 +1006,8 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
 
         except Exception as e:
             logger.error(
-                f"❌ Error extracting text from PDF for session {session_id}: {e}")
+                f"❌ Error extracting text from PDF for session {session_id}: {e}"
+            )
             return
         finally:
             # Clean up temporary file
@@ -1306,13 +1308,13 @@ def parse_and_analyze_statements_from_text(text, session_id, debug=False):
 
         # Clean the response text by removing markdown code blocks
         response_text = response.text.strip()
-        
+
         # Remove markdown code blocks completely
         if response_text.startswith('```json'):
             response_text = response_text[7:].strip()
         elif response_text.startswith('```'):
             response_text = response_text[3:].strip()
-            
+
         if response_text.endswith('```'):
             response_text = response_text[:-3].strip()
 
@@ -1320,7 +1322,7 @@ def parse_and_analyze_statements_from_text(text, session_id, debug=False):
         # Remove any trailing commas before closing brackets/braces
         import re
         response_text = re.sub(r',(\s*[}\]])', r'\1', response_text)
-        
+
         # Try to find and extract valid JSON if response contains extra text
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
@@ -1329,38 +1331,44 @@ def parse_and_analyze_statements_from_text(text, session_id, debug=False):
         # Parse JSON response with multiple fallback attempts
         import json as json_module
         parsed_response = None
-        
+
         # First attempt: direct parsing
         try:
             parsed_response = json_module.loads(response_text)
         except json.JSONDecodeError as e:
             logger.warning(f"⚠️ First JSON parse attempt failed: {e}")
-            
+
             # Second attempt: try to fix common issues
             try:
                 # Replace problematic characters and try again
-                cleaned_text = response_text.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+                cleaned_text = response_text.replace('\n', '\\n').replace(
+                    '\r', '\\r').replace('\t', '\\t')
                 # Fix unescaped quotes in strings (basic attempt)
                 cleaned_text = re.sub(r'(?<!\\)"(?=.*")', '\\"', cleaned_text)
                 parsed_response = json_module.loads(cleaned_text)
                 logger.info("✅ JSON parsing succeeded on second attempt")
             except json.JSONDecodeError as e2:
                 logger.warning(f"⚠️ Second JSON parse attempt failed: {e2}")
-                
+
                 # Third attempt: try to extract just the statements array
                 try:
-                    statements_match = re.search(r'"statements"\s*:\s*\[(.*?)\]', response_text, re.DOTALL)
+                    statements_match = re.search(
+                        r'"statements"\s*:\s*\[(.*?)\]', response_text,
+                        re.DOTALL)
                     if statements_match:
                         # Create a minimal valid JSON structure
                         parsed_response = {"statements": []}
-                        logger.warning("⚠️ Using fallback empty statements due to JSON parsing issues")
+                        logger.warning(
+                            "⚠️ Using fallback empty statements due to JSON parsing issues"
+                        )
                     else:
                         raise e2
                 except:
                     raise e2
-        
+
         if not parsed_response:
-            raise json.JSONDecodeError("Failed to parse JSON after all attempts", response_text, 0)
+            raise json.JSONDecodeError(
+                "Failed to parse JSON after all attempts", response_text, 0)
         statements = parsed_response.get('statements', [])
 
         logger.info(
@@ -1382,7 +1390,8 @@ def parse_and_analyze_statements_from_text(text, session_id, debug=False):
         logger.error(
             f"❌ Failed to parse LLM JSON response for session {session_id}: {e}"
         )
-        logger.error(f"❌ Problematic response excerpt: {response.text[:500]}...")
+        logger.error(
+            f"❌ Problematic response excerpt: {response.text[:500]}...")
         logger.error(f"❌ Response parsing failed - check LLM output format")
         return []
     except Exception as e:
