@@ -12,11 +12,21 @@ import {
 
 const SentimentChart = ({ data }) => {
   // Transform data for the chart
-  const chartData = data.map(item => ({
-    name: item.speaker.naas_nm,
-    sentiment: item.sentiment_score,
-    party: item.speaker.plpt_nm
-  }));
+  const processChartData = () => {
+    const dataArray = Array.isArray(data) ? data : 
+                     (data?.data && Array.isArray(data.data)) ? data.data : 
+                     (data?.results && Array.isArray(data.results)) ? data.results : [];
+
+    if (dataArray.length === 0) return [];
+
+    return dataArray.map(item => ({
+      date: item.date || item.session?.conf_dt || 'Unknown',
+      sentiment: parseFloat(item.sentiment_score || 0),
+      speaker: item.speaker?.naas_nm || 'Unknown Speaker'
+    }));
+  };
+
+  const chartData = processChartData();
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }) => {

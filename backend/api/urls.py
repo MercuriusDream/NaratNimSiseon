@@ -31,11 +31,11 @@ def stats_view(request):
         return Response({'error': str(e)}, status=500)
 
 router = DefaultRouter()
-router.register(r'sessions', SessionViewSet)
-router.register(r'bills', BillViewSet)
-router.register(r'speakers', SpeakerViewSet)
-router.register(r'statements', StatementViewSet)
-router.register(r'parties', PartyViewSet)
+router.register(r'sessions', SessionViewSet, basename='session')
+router.register(r'bills', BillViewSet, basename='bill')
+router.register(r'speakers', SpeakerViewSet, basename='speaker')
+router.register(r'statements', StatementViewSet, basename='statement')
+router.register(r'parties', PartyViewSet, basename='party')
 
 urlpatterns = [
     path('', include(router.urls)),

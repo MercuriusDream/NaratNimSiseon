@@ -50,19 +50,23 @@ const RecentChanges = () => {
     );
   }
 
+  const dataArray = Array.isArray(changes) ? changes : 
+                  (changes?.data && Array.isArray(changes.data)) ? changes.data : 
+                  (changes?.results && Array.isArray(changes.results)) ? changes.results : [];
+
   return (
     <section className="py-20 bg-gray-50">
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-4xl font-bold text-gray-900 mb-6">최근 의안 변화</h2>
           <p className="text-xl text-gray-600 mb-12">정당별 의안별 입장 변화를 시각적으로 보여줍니다.</p>
-          {changes.length === 0 ? (
+          {dataArray.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-600">표시할 최근 변화가 없습니다.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {changes.map((change) => (
+              {dataArray.map((change) => (
                 <ChangeArticle
                   key={change.id}
                   title={change.bill_nm}

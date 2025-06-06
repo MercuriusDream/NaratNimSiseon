@@ -20,11 +20,15 @@ function BillDetail() {
           axios.get(`/api/bills/${id}/`),
           axios.get(`/api/bills/${id}/statements/`)
         ]);
-        
+
         setBill(billRes.data);
         // Ensure statements is always an array
         const statementsData = statementsRes.data;
-        setStatements(Array.isArray(statementsData) ? statementsData : statementsData.results || []);
+        const statementsArray = Array.isArray(statementsData) ? statementsData : 
+                               (statementsData?.data && Array.isArray(statementsData.data)) ? statementsData.data : 
+                               (statementsData?.results && Array.isArray(statementsData.results)) ? statementsData.results : [];
+        setStatements(statementsArray);
+        setLoading(false);
       } catch (err) {
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
         console.error('Error fetching bill data:', err);
@@ -159,4 +163,4 @@ function BillDetail() {
   );
 }
 
-export default BillDetail; 
+export default BillDetail;
