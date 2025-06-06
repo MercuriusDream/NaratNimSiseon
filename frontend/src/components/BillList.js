@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import BillCard from './BillCard';
-import api from '../api'; // Import the axios instance
-import { ENDPOINTS } from '../apiConfig'; // Import endpoint paths
+import api from '../api';
+import { ENDPOINTS } from '../apiConfig';
 
-const BillList = ({ filter = 'all', searchTerm = '', selectedCategory = null }) => {
+const BillList = ({ filter = 'all', searchTerm = '', selectedCategory = '' }) => {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -26,9 +27,7 @@ const BillList = ({ filter = 'all', searchTerm = '', selectedCategory = null }) 
     fetchBills();
   }, [filter]);
 
-  const billsArray = Array.isArray(bills) ? bills : 
-                    (bills?.data && Array.isArray(bills.data)) ? bills.data : 
-                    (bills?.results && Array.isArray(bills.results)) ? bills.results : [];
+  const billsArray = (bills?.results && Array.isArray(bills.results)) ? bills.results : [];
 
   const filteredBills = billsArray.filter(bill => {
     const matchesSearch = searchTerm === '' || 

@@ -3,7 +3,7 @@ import api from '../api';
 import NavigationHeader from '../components/NavigationHeader';
 import Footer from '../components/Footer';
 import SessionCard from '../components/SessionCard';
-import { ENDPOINTS } from '../api'; // Import ENDPOINTS
+import { ENDPOINTS } from '../apiConfig'; // Import ENDPOINTS
 
 function SessionList() {
   const [sessions, setSessions] = useState([]);
