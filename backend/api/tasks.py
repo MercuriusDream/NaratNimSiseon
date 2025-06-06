@@ -1031,6 +1031,10 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                         f"⚠️ Skipping statement with missing speaker or text")
                     continue
 
+                # Refresh database connection before processing
+                from django.db import connection
+                connection.ensure_connection()
+
                 # Get or create speaker
                 speaker = get_or_create_speaker(speaker_name, debug)
                 if not speaker:
@@ -1048,22 +1052,36 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                         f"ℹ️ Statement already exists for {speaker_name}")
                     continue
 
-                # Create statement
-                statement = Statement.objects.create(
-                    session=session,
-                    speaker=speaker,
-                    text=statement_text,
-                    sentiment_score=0.0,  # Will be analyzed later
-                    sentiment_reason="Pending analysis")
+                # Create statement with retry logic
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        statement = Statement.objects.create(
+                            session=session,
+                            speaker=speaker,
+                            text=statement_text,
+                            sentiment_score=0.0,  # Will be analyzed later
+                            sentiment_reason="Pending analysis")
 
-                created_count += 1
-                logger.info(
-                    f"✨ Created statement for {speaker_name}: {statement_text[:50]}..."
-                )
+                        created_count += 1
+                        logger.info(
+                            f"✨ Created statement for {speaker_name}: {statement_text[:50]}..."
+                        )
 
-                # Queue sentiment analysis if LLM is available
-                if model and not debug:
-                    analyze_statement_sentiment.delay(statement.id)
+                        # Queue sentiment analysis if LLM is available
+                        if model and not debug:
+                            analyze_statement_sentiment.delay(statement.id)
+                        break
+
+                    except Exception as db_error:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"⚠️ Database error on attempt {attempt + 1}, retrying: {db_error}")
+                            # Close and reconnect database connection
+                            connection.close()
+                            time.sleep(1)  # Brief delay before retry
+                            continue
+                        else:
+                            raise db_error
 
             except Exception as e:
                 logger.error(f"❌ Error creating statement: {e}")
@@ -1194,24 +1212,47 @@ def get_or_create_speaker(speaker_name, debug=False):
                                                     '').replace('장관',
                                                                 '').strip()
 
-    # Try to find existing speaker
-    speaker = Speaker.objects.filter(naas_nm__icontains=speaker_name).first()
+    try:
+        # Ensure database connection
+        from django.db import connection
+        connection.ensure_connection()
 
-    if not speaker:
-        # Create temporary speaker record
-        speaker = Speaker.objects.create(
-            naas_cd=f"TEMP_{speaker_name}_{int(time.time())}",
-            naas_nm=speaker_name,
-            plpt_nm="정당정보없음")
+        # Try to find existing speaker
+        speaker = Speaker.objects.filter(naas_nm__icontains=speaker_name).first()
 
-        if debug:
-            logger.info(f"🐛 DEBUG: Created temporary speaker: {speaker_name}")
+        if not speaker:
+            # Create temporary speaker record with retry logic
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    speaker = Speaker.objects.create(
+                        naas_cd=f"TEMP_{speaker_name}_{int(time.time())}",
+                        naas_nm=speaker_name,
+                        plpt_nm="정당정보없음")
 
-        # Queue detailed speaker fetch
-        if not debug:
-            fetch_speaker_details(speaker_name)
+                    if debug:
+                        logger.info(f"🐛 DEBUG: Created temporary speaker: {speaker_name}")
 
-    return speaker
+                    # Queue detailed speaker fetch
+                    if not debug:
+                        fetch_speaker_details(speaker_name)
+                    break
+
+                except Exception as db_error:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"⚠️ Database error creating speaker on attempt {attempt + 1}: {db_error}")
+                        connection.close()
+                        time.sleep(1)
+                        continue
+                    else:
+                        logger.error(f"❌ Failed to create speaker after {max_retries} attempts: {db_error}")
+                        return None
+
+        return speaker
+
+    except Exception as e:
+        logger.error(f"❌ Error in get_or_create_speaker: {e}")
+        return None
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
