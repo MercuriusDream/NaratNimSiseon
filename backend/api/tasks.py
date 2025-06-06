@@ -825,36 +825,46 @@ def fetch_session_details(self=None,
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
-    """Fetch bills for a specific session."""
+    """Fetch bills for a specific session using VCONFBILLLIST API."""
     try:
         if debug:
             logger.info(f"🐛 DEBUG: Fetching bills for session {session_id} in debug mode")
             
-        url = "https://open.assembly.go.kr/portal/openapi/nekcaiymatialqlxr"
+        url = "https://open.assembly.go.kr/portal/openapi/VCONFBILLLIST"
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
             "Type": "json",
-            "UNIT_CD": session_id
+            "CONF_ID": format_conf_id(session_id)  # Zero-fill to 6 digits
         }
 
-        logger.info(f"🔍 Fetching bills for session: {session_id}")
+        logger.info(f"🔍 Fetching bills for session: {session_id} (formatted: {format_conf_id(session_id)})")
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
 
         logger.info(f"📊 Bills API response structure: {list(data.keys()) if data else 'Empty response'}")
 
-        # Extract bills data
+        if debug:
+            logger.info(f"🐛 DEBUG: Full VCONFBILLLIST response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+
+        # Extract bills data from VCONFBILLLIST response structure
         bills_data = None
-        if 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 1:
-            bills_data = data['nekcaiymatialqlxr'][1].get('row', [])
-        elif 'nekcaiymatialqlxr' in data and len(data['nekcaiymatialqlxr']) > 0:
-            bills_data = data['nekcaiymatialqlxr'][0].get('row', [])
+        if 'VCONFBILLLIST' in data and len(data['VCONFBILLLIST']) > 1:
+            bills_data = data['VCONFBILLLIST'][1].get('row', [])
+        elif 'VCONFBILLLIST' in data and len(data['VCONFBILLLIST']) > 0:
+            # Check if first element has row data
+            first_element = data['VCONFBILLLIST'][0]
+            if 'row' in first_element:
+                bills_data = first_element['row']
         elif 'row' in data:
             bills_data = data['row']
 
         if not bills_data:
             logger.info(f"ℹ️  No bills found for session {session_id}")
+            if debug:
+                logger.info(f"🐛 DEBUG: Available data keys: {list(data.keys()) if data else 'None'}")
+                if 'VCONFBILLLIST' in data:
+                    logger.info(f"🐛 DEBUG: VCONFBILLLIST structure: {data['VCONFBILLLIST']}")
             return
 
         # Get session object
@@ -865,6 +875,8 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
             return
 
         created_count = 0
+        updated_count = 0
+        
         for bill_data in bills_data:
             try:
                 bill_id = bill_data.get('BILL_ID')
@@ -875,8 +887,8 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
                     bill_id=bill_id,
                     defaults={
                         'session': session,
-                        'bill_nm': bill_data.get('BILL_NAME', ''),
-                        'link_url': bill_data.get('DETAIL_LINK_URL', '')
+                        'bill_nm': bill_data.get('BILL_NM', ''),
+                        'link_url': bill_data.get('LINK_URL', '')
                     }
                 )
 
@@ -885,16 +897,20 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
                     logger.info(f"✨ Created new bill: {bill_id}")
                 elif force:
                     # Update existing bill if force is True
-                    bill.bill_nm = bill_data.get('BILL_NAME', bill.bill_nm)
-                    bill.link_url = bill_data.get('DETAIL_LINK_URL', bill.link_url)
+                    bill.bill_nm = bill_data.get('BILL_NM', bill.bill_nm)
+                    bill.link_url = bill_data.get('LINK_URL', bill.link_url)
                     bill.save()
+                    updated_count += 1
                     logger.info(f"🔄 Updated existing bill: {bill_id}")
+
+                if debug:
+                    logger.info(f"🐛 DEBUG: Processed bill - ID: {bill_id}, Name: {bill_data.get('BILL_NM', '')[:50]}...")
 
             except Exception as e:
                 logger.error(f"❌ Error processing bill {bill_data.get('BILL_ID', 'unknown')}: {e}")
                 continue
 
-        logger.info(f"🎉 Bills processed for session {session_id}: {created_count} created")
+        logger.info(f"🎉 Bills processed for session {session_id}: {created_count} created, {updated_count} updated")
 
     except Exception as e:
         if isinstance(e, RequestException):
