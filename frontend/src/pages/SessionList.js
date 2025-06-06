@@ -30,12 +30,17 @@ function SessionList() {
         page,
         ...filters
       });
+      console.log('Fetching sessions with params:', params.toString());
       const response = await api.get(`sessions/?${params}`);
+      console.log('API Response:', response.data);
+      console.log('Sessions count:', response.data.count);
+      console.log('Results length:', response.data.results?.length);
       setSessions(response.data.results || []);
       setTotalPages(Math.ceil(response.data.count / 10));
     } catch (err) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
       console.error('Error fetching sessions:', err);
+      console.error('Error details:', err.response?.data);
     } finally {
       setLoading(false);
     }
