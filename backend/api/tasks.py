@@ -1083,7 +1083,7 @@ def analyze_statement_categories(self=None, statement_id=None):
                 self.retry(exc=e)
             except MaxRetriesExceededError:
                 logger.error(f"Max retries exceeded for statement analysis {statement_id}")
-
+                raise
 
                 logger.info(
                     f"📄 Extracted {len(full_text)} characters from PDF")
