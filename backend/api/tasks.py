@@ -998,6 +998,93 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                     if page_text:
                         full_text += page_text + "\n"
 
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def analyze_statement_categories(self=None, statement_id=None):
+    """Analyze categories and sentiment for an existing statement using LLM."""
+    if not model:
+        logger.warning("❌ Gemini model not available for statement analysis")
+        return
+
+    try:
+        from .models import Statement
+        statement = Statement.objects.get(id=statement_id)
+
+        prompt = f"""
+다음 국회 발언을 분석하여 감성 분석과 정책 분류를 수행해주세요.
+
+발언자: {statement.speaker.naas_nm}
+발언 내용: {statement.text}
+
+다음 JSON 형식으로 분석 결과를 제공해주세요:
+{{
+    "sentiment_score": -1부터 1까지의 감성 점수 (숫자),
+    "sentiment_reason": "감성 분석 근거",
+    "policy_categories": [
+        {{
+            "main_category": "주요 정책 분야 (경제, 사회복지, 교육, 외교안보, 환경, 법무, 과학기술, 문화체육, 농림축산, 국정감사 중 하나)",
+            "sub_category": "세부 분야",
+            "confidence": 0부터 1까지의 확신도 (숫자)
+        }}
+    ],
+    "policy_keywords": ["정책 관련 주요 키워드들"]
+}}
+
+분석 기준:
+1. 감성 분석: -1(매우 부정적) ~ 1(매우 긍정적)
+2. 정책 분류: 발언 내용을 기반으로 관련 정책 분야 분류
+3. 주요 키워드: 정책과 관련된 핵심 용어들 추출
+
+응답은 반드시 유효한 JSON 형식이어야 합니다.
+"""
+
+        response = model.generate_content(prompt)
+
+        if not response.text:
+            logger.warning(f"❌ No response from LLM for statement {statement_id}")
+            return
+
+        # Clean the response text
+        response_text = response.text.strip()
+        if response_text.startswith('```json'):
+            response_text = response_text[7:]
+        if response_text.startswith('```'):
+            response_text = response_text[3:]
+        if response_text.endswith('```'):
+            response_text = response_text[:-3]
+        response_text = response_text.strip()
+
+        # Parse JSON response
+        import json as json_module
+        analysis_data = json_module.loads(response_text)
+
+        # Update statement with analysis results
+        statement.sentiment_score = analysis_data.get('sentiment_score', 0.0)
+        statement.sentiment_reason = analysis_data.get('sentiment_reason', 'LLM 분석 완료')
+        statement.policy_keywords = ', '.join(analysis_data.get('policy_keywords', []))
+        statement.category_analysis = json.dumps(analysis_data.get('policy_categories', []), ensure_ascii=False)
+        statement.save()
+
+        # Create category associations
+        policy_categories = analysis_data.get('policy_categories', [])
+        if policy_categories:
+            create_statement_categories(statement, policy_categories)
+
+        logger.info(
+            f"✅ Analyzed statement {statement_id}: sentiment={statement.sentiment_score}, categories={len(policy_categories)}"
+        )
+
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Failed to parse LLM JSON response for statement {statement_id}: {e}")
+    except Exception as e:
+        logger.error(f"❌ Error analyzing statement {statement_id}: {e}")
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error(f"Max retries exceeded for statement analysis {statement_id}")
+
+
                 logger.info(
                     f"📄 Extracted {len(full_text)} characters from PDF")
 
@@ -1007,8 +1094,8 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                         "❌ LLM not available, skipping statement extraction")
                     return
 
-                # Parse statements from text using LLM
-                statements_data = parse_statements_from_text(
+                # Parse and analyze statements from text using LLM
+                statements_data = parse_and_analyze_statements_from_text(
                     full_text, session_id, debug)
 
         except Exception as e:
@@ -1019,12 +1106,16 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
             if temp_pdf_path.exists():
                 temp_pdf_path.unlink()
 
-        # Process extracted statements
+        # Process extracted and analyzed statements
         created_count = 0
         for statement_data in statements_data:
             try:
                 speaker_name = statement_data.get('speaker_name', '').strip()
                 statement_text = statement_data.get('text', '').strip()
+                sentiment_score = statement_data.get('sentiment_score', 0.0)
+                sentiment_reason = statement_data.get('sentiment_reason', 'LLM 분석 완료')
+                policy_categories = statement_data.get('policy_categories', [])
+                policy_keywords = statement_data.get('policy_keywords', [])
 
                 if not speaker_name or not statement_text:
                     logger.warning(
@@ -1060,17 +1151,20 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                             session=session,
                             speaker=speaker,
                             text=statement_text,
-                            sentiment_score=0.0,  # Will be analyzed later
-                            sentiment_reason="Pending analysis")
+                            sentiment_score=sentiment_score,
+                            sentiment_reason=sentiment_reason,
+                            policy_keywords=', '.join(policy_keywords) if policy_keywords else '',
+                            category_analysis=json.dumps(policy_categories, ensure_ascii=False) if policy_categories else '')
 
                         created_count += 1
                         logger.info(
-                            f"✨ Created statement for {speaker_name}: {statement_text[:50]}..."
+                            f"✨ Created statement for {speaker_name} with sentiment {sentiment_score}: {statement_text[:50]}..."
                         )
 
-                        # Queue sentiment analysis if LLM is available
-                        if model and not debug:
-                            analyze_statement_sentiment.delay(statement.id)
+                        # Create category associations if available
+                        if policy_categories and not debug:
+                            create_statement_categories(statement, policy_categories)
+
                         break
 
                     except Exception as db_error:
@@ -1109,10 +1203,10 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
         raise
 
 
-def parse_statements_from_text(text, session_id, debug=False):
-    """Parse statements from PDF text content using LLM."""
+def parse_and_analyze_statements_from_text(text, session_id, debug=False):
+    """Parse statements from PDF text and analyze them comprehensively using LLM."""
     if not model:
-        logger.warning("❌ LLM model not available for statement parsing")
+        logger.warning("❌ LLM model not available for statement parsing and analysis")
         return []
 
     # Truncate text if it's too long (keep first 50000 characters)
@@ -1122,34 +1216,46 @@ def parse_statements_from_text(text, session_id, debug=False):
             f"📄 Truncated PDF text to 50000 characters for LLM processing")
 
     prompt = f"""
-다음은 국회 회의록 PDF에서 추출한 텍스트입니다. 이 텍스트를 분석하여 각 발언자의 발언을 구조화된 형태로 추출해주세요.
+다음은 국회 회의록 PDF에서 추출한 텍스트입니다. 이 텍스트를 분석하여 각 발언자의 발언을 구조화된 형태로 추출하고, 각 발언에 대해 감성 분석과 정책 분류를 수행해주세요.
 
 회의록 텍스트:
 {text}
 
-다음 JSON 형식으로 발언들을 추출해주세요:
+다음 JSON 형식으로 발언들을 추출하고 분석해주세요:
 {{
     "statements": [
         {{
             "speaker_name": "발언자명 (의원, 위원장, 장관 등의 직책 제외)",
-            "text": "발언 내용 전체"
+            "text": "발언 내용 전체",
+            "sentiment_score": -1부터 1까지의 감성 점수 (숫자),
+            "sentiment_reason": "감성 분석 근거",
+            "policy_categories": [
+                {{
+                    "main_category": "주요 정책 분야 (경제, 사회복지, 교육, 외교안보, 환경, 법무, 과학기술, 문화체육, 농림축산, 국정감사 중 하나)",
+                    "sub_category": "세부 분야",
+                    "confidence": 0부터 1까지의 확신도 (숫자)
+                }}
+            ],
+            "policy_keywords": ["정책 관련 주요 키워드들"]
         }}
     ]
 }}
 
-주의사항:
+분석 기준:
 1. 발언자명에서 "의원", "위원장", "장관" 등의 직책은 제거하고 이름만 추출
 2. 각 발언의 완전한 내용을 포함
-3. 절차적 발언이나 형식적 문구는 제외
-4. 실질적인 정책 발언만 포함
-5. 발언자가 명확하지 않은 경우 제외
+3. 절차적 발언이나 형식적 문구는 제외하고 실질적인 정책 발언만 포함
+4. 감성 분석: -1(매우 부정적) ~ 1(매우 긍정적)
+5. 정책 분류: 발언 내용을 기반으로 관련 정책 분야 분류
+6. 주요 키워드: 정책과 관련된 핵심 용어들 추출
+7. 발언자가 명확하지 않은 경우 제외
 
 응답은 반드시 유효한 JSON 형식이어야 합니다.
 """
 
     try:
         logger.info(
-            f"🤖 Sending PDF text to LLM for statement extraction (session: {session_id})"
+            f"🤖 Sending PDF text to LLM for comprehensive statement analysis (session: {session_id})"
         )
         response = model.generate_content(prompt)
 
@@ -1176,14 +1282,14 @@ def parse_statements_from_text(text, session_id, debug=False):
         statements = parsed_response.get('statements', [])
 
         logger.info(
-            f"✅ LLM extracted {len(statements)} statements from PDF (session: {session_id})"
+            f"✅ LLM extracted and analyzed {len(statements)} statements from PDF (session: {session_id})"
         )
 
         if debug:
-            logger.info(f"🐛 DEBUG: LLM extracted {len(statements)} statements")
+            logger.info(f"🐛 DEBUG: LLM extracted and analyzed {len(statements)} statements")
             for i, stmt in enumerate(statements[:3], 1):  # Show first 3
                 logger.info(
-                    f"🐛 DEBUG Statement {i}: {stmt.get('speaker_name', 'Unknown')[:20]}... - {stmt.get('text', '')[:50]}..."
+                    f"🐛 DEBUG Statement {i}: {stmt.get('speaker_name', 'Unknown')[:20]}... - Sentiment: {stmt.get('sentiment_score', 0)} - Categories: {len(stmt.get('policy_categories', []))}"
                 )
 
         return statements
@@ -1196,9 +1302,51 @@ def parse_statements_from_text(text, session_id, debug=False):
         return []
     except Exception as e:
         logger.error(
-            f"❌ Error using LLM for statement extraction (session {session_id}): {e}"
+            f"❌ Error using LLM for comprehensive statement analysis (session {session_id}): {e}"
         )
         return []
+
+
+def create_statement_categories(statement, policy_categories):
+    """Create category associations for a statement based on LLM analysis."""
+    try:
+        from .models import Category, Subcategory, StatementCategory
+        
+        for category_data in policy_categories:
+            main_category = category_data.get('main_category', '').strip()
+            sub_category = category_data.get('sub_category', '').strip()
+            confidence = category_data.get('confidence', 0.0)
+            
+            if not main_category:
+                continue
+                
+            # Get or create main category
+            category, created = Category.objects.get_or_create(
+                name=main_category,
+                defaults={'description': f'{main_category} 관련 정책'}
+            )
+            
+            # Get or create subcategory if provided
+            subcategory = None
+            if sub_category:
+                subcategory, created = Subcategory.objects.get_or_create(
+                    name=sub_category,
+                    category=category,
+                    defaults={'description': f'{sub_category} 관련 세부 정책'}
+                )
+            
+            # Create statement category association
+            StatementCategory.objects.get_or_create(
+                statement=statement,
+                category=category,
+                subcategory=subcategory,
+                defaults={'confidence_score': confidence}
+            )
+            
+        logger.info(f"✅ Created {len(policy_categories)} category associations for statement {statement.id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error creating statement categories: {e}")
 
 
 def get_or_create_speaker(speaker_name, debug=False):
@@ -1255,62 +1403,7 @@ def get_or_create_speaker(speaker_name, debug=False):
         return None
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def analyze_statement_sentiment(self=None, statement_id=None):
-    """Analyze sentiment of a statement using LLM."""
-    if not model:
-        logger.warning("❌ Gemini model not available for sentiment analysis")
-        return
-
-    try:
-        statement = Statement.objects.get(id=statement_id)
-
-        prompt = f"""
-        다음 국회 발언의 감성을 분석해주세요. -1(매우 부정적)부터 1(매우 긍정적)까지의 점수와 근거를 제공해주세요.
-
-        발언 내용: {statement.text[:1000]}
-
-        응답 형식:
-        점수: [숫자]
-        근거: [분석 근거]
-        """
-
-        response = model.generate_content(prompt)
-
-        # Parse response
-        sentiment_score = 0.0
-        sentiment_reason = "분석 완료"
-
-        if response.text:
-            lines = response.text.strip().split('\n')
-            for line in lines:
-                if line.startswith('점수:'):
-                    try:
-                        sentiment_score = float(line.split(':')[1].strip())
-                    except:
-                        pass
-                elif line.startswith('근거:'):
-                    sentiment_reason = line.split(':', 1)[1].strip()
-
-        # Update statement
-        statement.sentiment_score = sentiment_score
-        statement.sentiment_reason = sentiment_reason
-        statement.save()
-
-        logger.info(
-            f"✅ Analyzed sentiment for statement {statement_id}: {sentiment_score}"
-        )
-
-    except Exception as e:
-        logger.error(
-            f"❌ Error analyzing sentiment for statement {statement_id}: {e}")
-        if self:
-            try:
-                self.retry(exc=e)
-            except MaxRetriesExceededError:
-                logger.error(
-                    f"Max retries exceeded for sentiment analysis {statement_id}"
-                )
+# Note: Sentiment analysis is now integrated into the comprehensive statement analysis above
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
