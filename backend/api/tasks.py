@@ -1000,8 +1000,11 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                 logger.info(
                     f"📄 Extracted {len(full_text)} characters from PDF")
 
+                # Fetch bill context for the session
+                bills_context = get_bills_context(session_id)
+
                 # Process the extracted text using the helper function
-                process_pdf_statements(full_text, session_id, session, debug)
+                process_pdf_statements(full_text, session_id, session, bills_context, debug)
 
         except Exception as e:
             logger.error(
@@ -1138,7 +1141,7 @@ def analyze_statement_categories(self=None, statement_id=None):
                 raise
 
 
-def process_pdf_statements(full_text, session_id, session, debug=False):
+def process_pdf_statements(full_text, session_id, session, bills_context, debug=False):
     """Helper function to process PDF statements."""
     try:
         # Skip processing if no LLM available
@@ -1148,8 +1151,8 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
             return
 
         # Parse and analyze statements from text using LLM
-        statements_data = parse_and_analyze_statements_from_text(
-            full_text, session_id, debug)
+        statements_data = extract_statements_with_llm_validation(
+            full_text, session_id, bills_context, debug)
 
         # Process extracted and analyzed statements
         created_count = 0
@@ -1244,131 +1247,231 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
         raise
 
 
-def extract_statements_with_regex(text, session_id, debug=False):
-    """Extract statements from PDF text using improved regex patterns."""
+def extract_statements_with_llm_validation(text, session_id, bills_context, debug=False):
+    """Extract statements using two-stage LLM approach: speaker detection + content analysis."""
+
+    if not model:
+        logger.warning("❌ LLM model not available, falling back to regex extraction")
+        return extract_statements_with_regex_fallback(text, session_id, debug)
+
+    logger.info(f"🤖 Starting two-stage LLM extraction for session: {session_id}")
+
+    try:
+        # Configure lighter model for speaker detection
+        speaker_detection_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+
+        # Stage 1: Speaker Detection and Boundary Identification
+        logger.info(f"🔍 Stage 1: Detecting speakers and speech boundaries (session: {session_id})")
+
+        speaker_detection_prompt = f"""
+다음은 국회 회의록 텍스트입니다. 이 텍스트에서 실제 국회의원들의 발언 구간을 정확히 식별해주세요.
+
+회의 관련 의안:
+{bills_context}
+
+회의록 텍스트:
+{text[:8000]}  # Limit text length for efficiency
+
+다음 기준으로 발언을 식별해주세요:
+1. ◯ 기호로 시작하는 발언만 추출
+2. 실제 사람 이름(국회의원)만 포함, 법률명이나 기관명 제외
+3. 절차적 발언(투표, 개회, 폐회 등)은 제외
+4. 최소 50자 이상의 의미있는 정책 토론 내용만 포함
+
+JSON 형식으로 응답해주세요:
+{{
+    "speakers_detected": [
+        {{
+            "speaker_name": "발언자 실명",
+            "start_marker": "발언 시작 부분 텍스트 (20자)",
+            "end_marker": "발언 종료 부분 텍스트 (20자)",
+            "is_substantial": true/false,
+            "speech_type": "policy_discussion/procedural/other"
+        }}
+    ]
+}}
+"""
+
+        stage1_response = speaker_detection_model.generate_content(speaker_detection_prompt)
+
+        if not stage1_response.text:
+            logger.warning("❌ No response from Stage 1 LLM, falling back to regex")
+            return extract_statements_with_regex_fallback(text, session_id, debug)
+
+        # Parse Stage 1 response
+        stage1_text = stage1_response.text.strip()
+        if stage1_text.startswith('```json'):
+            stage1_text = stage1_text[7:-3].strip()
+        elif stage1_text.startswith('```'):
+            stage1_text = stage1_text[3:-3].strip()
+
+        import json as json_module
+        stage1_data = json_module.loads(stage1_text)
+        speakers_detected = stage1_data.get('speakers_detected', [])
+
+        logger.info(f"✅ Stage 1 completed: Found {len(speakers_detected)} potential speakers")
+
+        # Stage 2: Extract and analyze substantial policy discussions
+        logger.info(f"🔍 Stage 2: Extracting and analyzing policy content (session: {session_id})")
+
+        analyzed_statements = []
+
+        for i, speaker_info in enumerate(speakers_detected, 1):
+            if not speaker_info.get('is_substantial') or speaker_info.get('speech_type') != 'policy_discussion':
+                if debug:
+                    logger.info(f"🐛 DEBUG: Skipping non-substantial speaker: {speaker_info.get('speaker_name')}")
+                continue
+
+            # Extract the actual speech content using markers
+            speaker_name = speaker_info.get('speaker_name', '').strip()
+            start_marker = speaker_info.get('start_marker', '')
+            end_marker = speaker_info.get('end_marker', '')
+
+            # Find speech content between markers
+            speech_content = extract_speech_between_markers(text, start_marker, end_marker, speaker_name)
+
+            if not speech_content or len(speech_content) < 100:
+                continue
+
+            logger.info(f"🤖 Analyzing statement {i}/{len(speakers_detected)} from {speaker_name} (session: {session_id})")
+
+            # Stage 2: Analyze the extracted speech
+            analysis_result = analyze_single_statement({
+                'speaker_name': speaker_name,
+                'text': speech_content
+            }, session_id, debug)
+
+            analyzed_statements.append(analysis_result)
+
+            # Brief pause between API calls
+            if not debug:
+                time.sleep(0.5)
+
+        logger.info(f"✅ Two-stage LLM extraction completed: {len(analyzed_statements)} statements (session: {session_id})")
+        return analyzed_statements
+
+    except Exception as e:
+        logger.error(f"❌ Error in two-stage LLM extraction: {e}")
+        logger.info("⚠️  Falling back to regex extraction")
+        return extract_statements_with_regex_fallback(text, session_id, debug)
+
+
+def extract_speech_between_markers(text, start_marker, end_marker, speaker_name):
+    """Extract speech content between start and end markers."""
+    try:
+        # Find the start position
+        start_pos = text.find(start_marker)
+        if start_pos == -1:
+            # Try to find by speaker pattern as fallback
+            speaker_pattern = f"◯{speaker_name}"
+            start_pos = text.find(speaker_pattern)
+            if start_pos == -1:
+                return ""
+
+        # Find the end position
+        end_pos = text.find(end_marker, start_pos + len(start_marker))
+        if end_pos == -1:
+            # Find next speaker as fallback
+            next_speaker_pos = text.find("◯", start_pos + len(start_marker))
+            if next_speaker_pos != -1:
+                end_pos = next_speaker_pos
+            else:
+                end_pos = len(text)
+
+        # Extract content
+        content = text[start_pos:end_pos].strip()
+
+        # Clean up the content
+        # Remove speaker name from beginning
+        if content.startswith(f"◯{speaker_name}"):
+            content = content[len(f"◯{speaker_name}"):].strip()
+
+        # Remove parenthetical notes and clean whitespace
+        import re
+        content = re.sub(r'\([^)]*\)', '', content)
+        content = re.sub(r'\s+', ' ', content).strip()
+
+        return content
+
+    except Exception as e:
+        logger.error(f"❌ Error extracting speech content: {e}")
+        return ""
+
+
+def extract_statements_with_regex_fallback(text, session_id, debug=False):
+    """Fallback regex extraction method (existing implementation)."""
     import re
 
-    logger.info(
-        f"📄 Extracting statements from PDF text using improved regex (session: {session_id})"
-    )
+    logger.info(f"📄 Extracting statements using regex fallback (session: {session_id})")
 
     # Clean up the text first
-    text = re.sub(r'\n+', '\n', text)  # Remove multiple newlines
-    text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+    text = re.sub(r'\n+', '\n', text)
+    text = re.sub(r'\s+', ' ', text)
 
     statements = []
-
-    # More sophisticated pattern to match speaker statements
-    # Looks for "◯[speaker_name] [content]" pattern with better filtering
     speaker_pattern = r'◯([^◯\n]+?)\s+([^◯]+?)(?=◯|$)'
-
     matches = re.findall(speaker_pattern, text, re.DOTALL | re.MULTILINE)
 
     for speaker_raw, content_raw in matches:
-        # Clean speaker name
         speaker_name = speaker_raw.strip()
-        
-        # Remove common titles and roles but keep the actual name
         speaker_name = re.sub(r'\s*(의원|위원장|장관|국장|의장|부의장|차관|실장|국무총리|대통령|부총리)\s*', '', speaker_name).strip()
-        
-        # Skip if no speaker name or content
+
         if not speaker_name or not content_raw.strip():
             continue
 
-        # Filter out role-based speakers that aren't actual people
+        # Enhanced filtering for non-person entities
         role_patterns = [
-            r'.*대리$',  # Ends with '대리' (acting/deputy roles)
-            r'^의사$',   # Just '의사' (chairperson)
-            r'^위원장$', # Just '위원장' (committee chair)
-            r'.*위원회.*', # Committee names
-            r'.*부.*장관.*', # Ministry titles
-            r'.*청장.*',  # Agency heads
-            r'.*실장.*',  # Office heads
-            r'^사회자$',  # Moderator
-            r'^진행자$',  # Host/facilitator
-            r'.*개정법률안.*', # Bill names
-            r'.*특별법.*',    # Special law names
-            r'.*진흥법.*',    # Promotion law names
-            r'.*관리법.*',    # Management law names
-            r'.*촉진법.*',    # Facilitation law names
-            r'.*보호법.*',    # Protection law names
-            r'.*육성.*',      # Development/nurturing
-            r'.*지원.*',      # Support
-            r'^재난$',        # Disaster
-            r'^인구감소지역$', # Population decline regions
-            r'^우주개발$',    # Space development
-            r'^여성과학기술인$', # Women in science and technology
+            r'.*대리$', r'^의사$', r'^위원장$', r'.*위원회.*', r'.*부.*장관.*', 
+            r'.*청장.*', r'.*실장.*', r'^사회자$', r'^진행자$', r'.*개정법률안.*', 
+            r'.*특별법.*', r'.*진흥법.*', r'.*관리법.*', r'.*촉진법.*', r'.*보호법.*', 
+            r'.*법률.*', r'.*법$', r'.*육성.*', r'.*지원.*', r'^재난$', r'^인구감소지역$', 
+            r'^우주개발$', r'^여성과학기술인$', r'.*기획재정부.*', r'.*총장\([^)]+\).*', 
+            r'^탄소소재$', r'^전기공사업법$', r'^특허법$', r'.*소재$', r'.*업법$', r'겸.*부$'
         ]
-        
-        # Check if speaker name matches any role pattern
+
+        korean_surname_pattern = r'^[김이박최정강조윤장임한오서신권황안송류전고문양손배백허남심노정하곽성차주우구신임나전민유진지엄채원천방공강현함변염양변홍]'
+
         is_role = any(re.match(pattern, speaker_name) for pattern in role_patterns)
-        if is_role:
+        is_likely_person = (
+            re.match(korean_surname_pattern, speaker_name) and 
+            2 <= len(speaker_name) <= 4 and
+            not any(char in speaker_name for char in ['(', ')', '법', '부', '청', '원회', '관', '장'])
+        )
+
+        if is_role or not is_likely_person:
             if debug:
-                logger.info(f"🐛 DEBUG: Skipping role-based speaker: {speaker_name}")
+                logger.info(f"🐛 DEBUG: Skipping non-person speaker: {speaker_name}")
             continue
 
-        # Clean content
         content = content_raw.strip()
-        content = re.sub(r'\([^)]*\)', '', content)  # Remove parenthetical notes
+        content = re.sub(r'\([^)]*\)', '', content)
         content = re.sub(r'\s+', ' ', content).strip()
 
-        # Skip very short content
-        if len(content) < 100:  # Increased minimum length
+        if len(content) < 100:
             continue
 
-        # Enhanced procedural phrases to skip
+        # Check for procedural content
         procedural_phrases = [
             '투표해 주시기 바랍니다', '투표를 마치겠습니다', '가결되었음을 선포합니다', 
             '수고하셨습니다', '상정합니다', '의결하도록 하겠습니다', '원안가결되었음을 선포합니다',
-            '폐회를 선포합니다', '개회를 선포합니다', '회의를 시작하겠습니다',
-            '다음 안건으로 넘어가겠습니다', '심사보고를 듣겠습니다',
-            '제안설명을 듣겠습니다', '대안심사소위원회에서 심사한',
-            '위원장께서 나오셔서', '잠깐만 기다려 주십시오',
-            '의사일정', '회의록에 게재하기로', '산회를 선포합니다'
+            '폐회를 선포합니다', '개회를 선포합니다', '회의를 시작하겠습니다'
         ]
 
-        # Check for procedural content
         is_procedural = any(phrase in content for phrase in procedural_phrases)
-        
-        # Also check if content is mostly procedural (short sentences about voting, etc.)
-        procedural_keywords = ['투표', '가결', '부결', '가부동수', '재석', '찬성', '반대', '기권']
-        word_count = len(content.split())
-        procedural_word_count = sum(1 for word in procedural_keywords if word in content)
-        
-        # If more than 30% of words are procedural and content is short, skip it
-        if word_count < 50 and procedural_word_count / word_count > 0.3:
-            is_procedural = True
-
         if is_procedural:
-            if debug:
-                logger.info(f"🐛 DEBUG: Skipping procedural content from {speaker_name}")
             continue
 
-        # Only include statements that seem to be substantial policy discussions
         policy_indicators = [
             '법률안', '개정', '제안', '필요', '문제', '개선', '정책', '방안', 
             '대책', '예산', '추진', '계획', '검토', '의견', '생각', '판단',
-            '국민', '시민', '사회', '경제', '정치', '교육', '복지', '환경',
-            '안전', '보안', '발전', '성장', '혁신', '개혁', '변화'
+            '국민', '시민', '사회', '경제', '정치', '교육', '복지', '환경'
         ]
-        
+
         has_policy_content = any(indicator in content for indicator in policy_indicators)
-        
-        # For substantial statements (over 200 chars), be less strict about policy indicators
         if len(content) > 200 or has_policy_content:
             statements.append({'speaker_name': speaker_name, 'text': content})
 
-    logger.info(
-        f"✅ Extracted {len(statements)} statements using improved regex (session: {session_id})"
-    )
-
-    if debug:
-        logger.info("🐛 DEBUG: Sample extracted statements:")
-        for i, stmt in enumerate(statements[:5], 1):
-            logger.info(
-                f"🐛 DEBUG Statement {i}: {stmt['speaker_name']} - {stmt['text'][:100]}..."
-            )
-
+    logger.info(f"✅ Regex fallback completed: {len(statements)} statements (session: {session_id})")
     return statements
 
 
@@ -1423,7 +1526,7 @@ def analyze_single_statement(statement_data, session_id, debug=False):
             response_text = response_text[7:].strip()
         elif response_text.startswith('```'):
             response_text = response_text[3:].strip()
-        if response_text.endswith('```'):
+        if response_text.endswith('```
             response_text = response_text[:-3].strip()
 
         # Parse JSON
@@ -1454,10 +1557,23 @@ def analyze_single_statement(statement_data, session_id, debug=False):
         return statement_data
 
 
-def parse_and_analyze_statements_from_text(text, session_id, debug=False):
+def get_bills_context(session_id):
+    """Fetch bill context for a session to provide LLM."""
+    try:
+        session = Session.objects.get(conf_id=session_id)
+        bills = Bill.objects.filter(session=session)
+
+        bill_names = [bill.bill_nm for bill in bills]
+        return ", ".join(bill_names)
+    except Exception as e:
+        logger.error(f"❌ Error fetching bills context: {e}")
+        return ""
+
+
+def parse_and_analyze_statements_from_text(text, session_id, bills_context, debug=False):
     """Parse statements from PDF text using regex, then analyze each individually."""
     # Step 1: Extract statements using regex
-    statements = extract_statements_with_regex(text, session_id, debug)
+    statements = extract_statements_with_llm_validation(text, session_id, bills_context, debug)
 
     if not statements:
         logger.warning(
