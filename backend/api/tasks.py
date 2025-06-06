@@ -94,6 +94,10 @@ from .llm_analyzer import LLMPolicyAnalyzer
 
 logger = logging.getLogger(__name__)
 
+def format_conf_id(conf_id):
+    """Format CONF_ID to be zero-filled to 6 digits."""
+    return str(conf_id).zfill(6)
+
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_latest_sessions(self=None, force=False, debug=False):
@@ -602,7 +606,7 @@ def fetch_session_details(self=None,
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
             "Type": "json",
-            "CONF_ID": '0' + str(session_id)
+            "CONF_ID": format_conf_id(session_id)
         }
 
         logger.info(f"🔍 Fetching details for session: {session_id}")
@@ -694,7 +698,7 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
             "Type": "json",
-            "CONF_ID": '0'+str(session_id)
+            "CONF_ID": format_conf_id(session_id)
         }
 
         logger.info(f"🔍 Fetching bills for session: {session_id}")

@@ -41,6 +41,13 @@ def api_action_wrapper(default_error_message="오류가 발생했습니다.", lo
     return decorator
 
 
+def format_conf_id(session_id):
+    """Format session ID to the required 6-digit zero-filled format for API calls"""
+    if session_id is None:
+        return None
+    return str(session_id).strip().zfill(6)
+
+
 class DataCollector:
     """Utility class for collecting data from National Assembly API"""
     
@@ -76,11 +83,21 @@ class DataCollector:
             logger.error(f"Error fetching sessions: {e}")
             return []
     
-    def fetch_bills(self, num_records=100):
+    def fetch_bills(self, num_records=100, session_id=None):
         """Fetch bill data from API"""
         try:
-            url = f"{self.BASE_URL}/ppzbyfwhwaoanttzje"
+            url = f"{self.BASE_URL}/VCONFBILLLIST"
             params = {
+                'KEY': self.api_key,
+                'Type': 'json',
+                'pIndex': 1,
+                'pSize': num_records
+            }
+            
+            if session_id:
+                params['CONF_ID'] = str(session_id).zfill(6)
+                
+            response = requests.get(url, params=params, timeout=30) = {
                 'Key': self.api_key,
                 'Type': 'json',
                 'pIndex': 1,
