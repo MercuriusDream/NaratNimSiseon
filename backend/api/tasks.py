@@ -94,6 +94,7 @@ from .llm_analyzer import LLMPolicyAnalyzer
 
 logger = logging.getLogger(__name__)
 
+
 def format_conf_id(conf_id):
     """Format CONF_ID to be zero-filled to 6 digits."""
     return str(conf_id).zfill(6)
@@ -457,11 +458,15 @@ def process_sessions_data(sessions_data, force=False, debug=False):
     # Always show the first few sessions to understand the data structure
     print("🔍 RAW API SESSION DATA STRUCTURE:")
     print("=" * 80)
-    for i, row in enumerate(sessions_data[:5], 1):  # Show first 5 sessions always
+    '''
+    for i, row in enumerate(sessions_data[:5],
+                            1):  # Show first 5 sessions always
         print(f"📋 SESSION {i} RAW DATA:")
         print(f"   Type: {type(row)}")
-        print(f"   Keys: {list(row.keys()) if isinstance(row, dict) else 'Not a dict'}")
-        
+        print(
+            f"   Keys: {list(row.keys()) if isinstance(row, dict) else 'Not a dict'}"
+        )
+
         # Show all key-value pairs
         if isinstance(row, dict):
             for key, value in row.items():
@@ -470,6 +475,7 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             print(f"   Full value: {row}")
         print("   " + "-" * 60)
     print("=" * 80)
+    '''
 
     # Group sessions by CONFER_NUM since multiple agenda items can belong to the same session
     sessions_by_id = {}
@@ -479,9 +485,13 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             if session_id not in sessions_by_id:
                 sessions_by_id[session_id] = []
             sessions_by_id[session_id].append(row)
-    
-    print(f"🔍 GROUPED SESSIONS: Found {len(sessions_by_id)} unique sessions from {len(sessions_data)} agenda items")
-    logger.info(f"🔍 GROUPED SESSIONS: Found {len(sessions_by_id)} unique sessions from {len(sessions_data)} agenda items")
+
+    print(
+        f"🔍 GROUPED SESSIONS: Found {len(sessions_by_id)} unique sessions from {len(sessions_data)} agenda items"
+    )
+    logger.info(
+        f"🔍 GROUPED SESSIONS: Found {len(sessions_by_id)} unique sessions from {len(sessions_data)} agenda items"
+    )
 
     if debug:
         print(
@@ -490,9 +500,11 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         logger.info(
             f"🐛 DEBUG MODE: Processing {len(sessions_by_id)} unique sessions (preview only - no database writes)"
         )
-        
-        for i, (session_id, agenda_items) in enumerate(sessions_by_id.items(), 1):
-            first_item = agenda_items[0]  # Use first agenda item for main session info
+
+        for i, (session_id, agenda_items) in enumerate(sessions_by_id.items(),
+                                                       1):
+            first_item = agenda_items[
+                0]  # Use first agenda item for main session info
             title = first_item.get('TITLE', 'Unknown')
             date = first_item.get('CONF_DATE', 'Unknown')
             pdf_url = first_item.get('PDF_LINK_URL', 'No PDF')
@@ -503,7 +515,8 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             print(f"   PDF: {pdf_url}")
             print(f"   Agenda items: {len(agenda_items)}")
             for j, item in enumerate(agenda_items, 1):
-                print(f"     {j}. {item.get('SUB_NAME', 'No agenda item name')}")
+                print(
+                    f"     {j}. {item.get('SUB_NAME', 'No agenda item name')}")
             print("   ---")
 
             logger.info(f"🐛 DEBUG Session {i}: ID={session_id}")
@@ -722,7 +735,7 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
             "Type": "json",
-            "CONF_ID": "N"+format_conf_id(session_id)
+            "CONF_ID": format_conf_id(session_id)
         }
 
         logger.info(f"🔍 Fetching bills for session: {session_id}")
@@ -893,23 +906,22 @@ def process_statements(self=None,
                 {statement}
 
                 Please provide:
-                1. The speaker's name and party
+                1. The speaker's name
                 2. A sentiment score from -1 (very negative) to 1 (very positive)
-                3. A brief explanation for the sentiment score
+                3. A brief explanation for the sentiment score in Korean
 
-                Format the response as JSON:
+                Format the response as JSON, but do NOT format using ```json. print out as is:
                 {{
                     "speaker": {{
-                        "name": "name",
-                        "party": "party"
+                        "name": "name"
                     }},
                     "sentiment_score": score,
                     "reason": "explanation"
                 }}
                 """
-
                 response = model.generate_content(prompt)
                 result = response.text
+                print(result)
 
                 # Parse the result and create Statement object
                 data = json.loads(result)
