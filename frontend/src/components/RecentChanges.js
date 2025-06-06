@@ -79,4 +79,4 @@ const RecentChanges = () => {
   );
 };
 
-export default RecentChanges; 
+export default RecentChanges;

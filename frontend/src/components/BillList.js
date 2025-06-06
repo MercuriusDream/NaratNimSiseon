@@ -40,6 +40,11 @@ const BillList = ({ filter = 'all' }) => {
   //   return true;
   // });
   const filteredBills = bills; // Display all fetched bills for now
+  const safeBills = Array.isArray(bills) ? bills : [];
+  const filteredBills2 = safeBills.filter(bill => {
+    if (filter === 'all') return true;
+    return bill.status === filter;
+  });
 
   if (loading) {
     return (
@@ -72,23 +77,23 @@ const BillList = ({ filter = 'all' }) => {
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-4xl font-bold text-gray-900 mb-6">대표 의안 목록</h2>
-          <p className="text-xl text-gray-600 mb-12">각 의안에 대한 기본 정보와 입장 변화를 확인할 수 있습니다.</p>
-          {/* Use bills directly as filteredBills is now an alias */}
-          {bills.length === 0 ? (
+          <p className="text-xl text-gray-600 mb-12">
+            각 의안에 대한 기본 정보와 입장 변화를 확인할 수 있습니다.
+          </p>
+
+          {safeBills.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-600">표시할 의안이 없습니다.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {bills.map((bill) => (
+              {filteredBills2.map(bill => (
                 <BillCard
-                  key={bill.bill_id} // Use bill_id for key
-                  // status prop removed
-                  id={bill.bill_id} // Pass bill_id as id for navigation
+                  key={bill.bill_id}
+                  id={bill.bill_id}
                   number={bill.bill_id} // Use bill_id for number
                   title={bill.bill_nm}
                   description={''} // Pass empty string for description, was bill.summary
-                  // partyOpinions prop removed
                 />
               ))}
             </div>
@@ -99,4 +104,4 @@ const BillList = ({ filter = 'all' }) => {
   );
 };
 
-export default BillList; 
+export default BillList;

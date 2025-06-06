@@ -65,4 +65,4 @@ const SentimentChart = ({ data }) => {
   );
 };
 
-export default SentimentChart; 
+export default SentimentChart;

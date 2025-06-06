@@ -22,7 +22,9 @@ function BillDetail() {
         ]);
         
         setBill(billRes.data);
-        setStatements(statementsRes.data);
+        // Ensure statements is always an array
+        const statementsData = statementsRes.data;
+        setStatements(Array.isArray(statementsData) ? statementsData : statementsData.results || []);
       } catch (err) {
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
         console.error('Error fetching bill data:', err);
@@ -116,32 +118,38 @@ function BillDetail() {
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-2xl font-bold mb-4">관련 발언</h2>
         <div className="space-y-6">
-          {statements.map(statement => (
-            <div key={statement.id} className="border-b pb-6 last:border-b-0">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h3 className="text-lg font-semibold">
-                    {statement.speaker.naas_nm}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {statement.speaker.plpt_nm}
-                  </p>
+          {Array.isArray(statements) && statements.length > 0 ? (
+            statements.map(statement => (
+              <div key={statement.id} className="border-b pb-6 last:border-b-0">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      {statement.speaker?.naas_nm || '알 수 없는 발언자'}
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {statement.speaker?.plpt_nm || ''}
+                    </p>
+                  </div>
+                  <div className="text-sm">
+                    <span className={`px-2 py-1 rounded ${
+                      statement.sentiment_score > 0.3 ? 'bg-green-100 text-green-800' :
+                      statement.sentiment_score < -0.3 ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      감성 점수: {statement.sentiment_score?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-sm">
-                  <span className={`px-2 py-1 rounded ${
-                    statement.sentiment_score > 0.3 ? 'bg-green-100 text-green-800' :
-                    statement.sentiment_score < -0.3 ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    감성 점수: {statement.sentiment_score.toFixed(2)}
-                  </span>
-                </div>
+                <p className="text-gray-700 whitespace-pre-wrap">
+                  {statement.content}
+                </p>
               </div>
-              <p className="text-gray-700 whitespace-pre-wrap">
-                {statement.content}
-              </p>
+            ))
+          ) : (
+            <div className="text-center text-gray-500 py-8">
+              관련 발언이 없습니다.
             </div>
-          ))}
+          )}
         </div>
       </div>
         </div>
