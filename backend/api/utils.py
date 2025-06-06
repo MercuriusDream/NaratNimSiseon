@@ -97,13 +97,6 @@ class DataCollector:
             if session_id:
                 params['CONF_ID'] = str(session_id).zfill(6)
                 
-            response = requests.get(url, params=params, timeout=30) = {
-                'Key': self.api_key,
-                'Type': 'json',
-                'pIndex': 1,
-                'pSize': num_records
-            }
-            
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
             
