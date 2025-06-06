@@ -1353,7 +1353,7 @@ JSON 형식으로 응답해주세요:
             if speech_content:
                 logger.info(f"   - content preview: '{speech_content[:100]}...'")
 
-            if not speech_content or len(speech_content) < 100:
+            if not speech_content or len(speech_content) < 10:
                 logger.info(f"⚠️ Skipping {speaker_name} - insufficient content (length: {len(speech_content) if speech_content else 0})")
                 continue
 
