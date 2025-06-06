@@ -1526,7 +1526,7 @@ def analyze_single_statement(statement_data, session_id, debug=False):
             response_text = response_text[7:].strip()
         elif response_text.startswith('```'):
             response_text = response_text[3:].strip()
-        if response_text.endswith('```
+        if response_text.endswith('```'):
             response_text = response_text[:-3].strip()
 
         # Parse JSON
