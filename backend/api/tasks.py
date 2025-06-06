@@ -989,7 +989,6 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
         logger.info(f"📥 Downloaded PDF for session {session_id}")
 
         # Extract text from PDF
-        statements_data = []
         try:
             with pdfplumber.open(temp_pdf_path) as pdf:
                 full_text = ""
@@ -997,14 +996,37 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                     page_text = page.extract_text()
                     if page_text:
                         full_text += page_text + "\n"
+
+                logger.info(
+                    f"📄 Extracted {len(full_text)} characters from PDF")
+
+                # Process the extracted text using the helper function
+                process_pdf_statements(full_text, session_id, session, debug)
+
         except Exception as e:
             logger.error(
-                f"❌ Error extracting text from PDF for session {session_id}, {e}"
-            )
+                f"❌ Error extracting text from PDF for session {session_id}: {e}")
             return
+        finally:
+            # Clean up temporary file
+            if temp_pdf_path.exists():
+                temp_pdf_path.unlink()
+
     except Exception as e:
-        logger.error(f"❌ Error processing PDF for session {session_id}, {e}")
-        return
+        if isinstance(e, RequestException):
+            if self:
+                try:
+                    self.retry(exc=e)
+                except MaxRetriesExceededError:
+                    logger.error(
+                        f"Max retries exceeded for PDF processing {session_id}"
+                    )
+                    raise
+            else:
+                logger.error("Sync execution failed, no retry available")
+                raise
+        logger.error(f"❌ Error processing PDF for session {session_id}: {e}")
+        raise
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
