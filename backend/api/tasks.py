@@ -750,3 +750,46 @@ def fetch_session_details(self=None,
                 fetch_session_bills(session_id=session_id,
                                     force=force,
                                     debug=debug)
+            return
+
+        # Update session with detailed info if available
+        session = Session.objects.get(conf_id=session_id)
+        
+        # Update session fields with detailed information
+        if session_details.get('CONF_TIME'):
+            try:
+                # Parse time if available
+                time_str = session_details.get('CONF_TIME', '09:00')
+                session.bg_ptm = datetime.strptime(time_str, '%H:%M').time()
+            except ValueError:
+                session.bg_ptm = dt_time(9, 0)  # Default time
+        
+        if session_details.get('ED_TIME'):
+            try:
+                time_str = session_details.get('ED_TIME', '18:00')
+                session.ed_ptm = datetime.strptime(time_str, '%H:%M').time()
+            except ValueError:
+                session.ed_ptm = dt_time(18, 0)  # Default time
+        
+        session.save()
+        logger.info(f"✅ Updated session details for: {session_id}")
+
+        # Queue bills fetch
+        if is_celery_available():
+            fetch_session_bills.delay(session_id, force=force, debug=debug)
+        else:
+            fetch_session_bills(session_id=session_id, force=force, debug=debug)
+
+    except Exception as e:
+        if isinstance(e, RequestException):
+            if self:
+                try:
+                    self.retry(exc=e)
+                except MaxRetriesExceededError:
+                    logger.error(f"Max retries exceeded for session {session_id}")
+                    raise
+            else:
+                logger.error("Sync execution failed, no retry available")
+                raise
+        logger.error(f"❌ Error fetching session details for {session_id}: {e}")
+        raise
