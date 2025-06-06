@@ -25,8 +25,8 @@ import os
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
-    # Serve React app for all other routes
-    re_path(r'^.*$', TemplateView.as_view(template_name='index.html')),
+    # Serve React app for all other routes (excluding API routes)
+    re_path(r'^(?!api/).*$', TemplateView.as_view(template_name='index.html')),
 ]
 
 # Serve static files
