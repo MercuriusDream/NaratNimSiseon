@@ -997,6 +997,14 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                     page_text = page.extract_text()
                     if page_text:
                         full_text += page_text + "\n"
+        except Exception as e:
+            logger.error(
+                f"❌ Error extracting text from PDF for session {session_id}, {e}"
+            )
+            return
+    except Exception as e:
+        logger.error(f"❌ Error processing PDF for session {session_id}, {e}")
+        return
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -1041,7 +1049,8 @@ def analyze_statement_categories(self=None, statement_id=None):
         response = model.generate_content(prompt)
 
         if not response.text:
-            logger.warning(f"❌ No response from LLM for statement {statement_id}")
+            logger.warning(
+                f"❌ No response from LLM for statement {statement_id}")
             return
 
         # Clean the response text
@@ -1060,9 +1069,13 @@ def analyze_statement_categories(self=None, statement_id=None):
 
         # Update statement with analysis results
         statement.sentiment_score = analysis_data.get('sentiment_score', 0.0)
-        statement.sentiment_reason = analysis_data.get('sentiment_reason', 'LLM 분석 완료')
-        statement.policy_keywords = ', '.join(analysis_data.get('policy_keywords', []))
-        statement.category_analysis = json.dumps(analysis_data.get('policy_categories', []), ensure_ascii=False)
+        statement.sentiment_reason = analysis_data.get('sentiment_reason',
+                                                       'LLM 분석 완료')
+        statement.policy_keywords = ', '.join(
+            analysis_data.get('policy_keywords', []))
+        statement.category_analysis = json.dumps(analysis_data.get(
+            'policy_categories', []),
+                                                 ensure_ascii=False)
         statement.save()
 
         # Create category associations
@@ -1075,14 +1088,18 @@ def analyze_statement_categories(self=None, statement_id=None):
         )
 
     except json.JSONDecodeError as e:
-        logger.error(f"❌ Failed to parse LLM JSON response for statement {statement_id}: {e}")
+        logger.error(
+            f"❌ Failed to parse LLM JSON response for statement {statement_id}: {e}"
+        )
     except Exception as e:
         logger.error(f"❌ Error analyzing statement {statement_id}: {e}")
         if self:
             try:
                 self.retry(exc=e)
             except MaxRetriesExceededError:
-                logger.error(f"Max retries exceeded for statement analysis {statement_id}")
+                logger.error(
+                    f"Max retries exceeded for statement analysis {statement_id}"
+                )
                 raise
 
     except Exception as e:
@@ -1091,7 +1108,9 @@ def analyze_statement_categories(self=None, statement_id=None):
             try:
                 self.retry(exc=e)
             except MaxRetriesExceededError:
-                logger.error(f"Max retries exceeded for statement analysis {statement_id}")
+                logger.error(
+                    f"Max retries exceeded for statement analysis {statement_id}"
+                )
                 raise
 
 
@@ -1115,7 +1134,8 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
                 speaker_name = statement_data.get('speaker_name', '').strip()
                 statement_text = statement_data.get('text', '').strip()
                 sentiment_score = statement_data.get('sentiment_score', 0.0)
-                sentiment_reason = statement_data.get('sentiment_reason', 'LLM 분석 완료')
+                sentiment_reason = statement_data.get('sentiment_reason',
+                                                      'LLM 분석 완료')
                 policy_categories = statement_data.get('policy_categories', [])
                 policy_keywords = statement_data.get('policy_keywords', [])
 
@@ -1155,8 +1175,11 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
                             text=statement_text,
                             sentiment_score=sentiment_score,
                             sentiment_reason=sentiment_reason,
-                            policy_keywords=', '.join(policy_keywords) if policy_keywords else '',
-                            category_analysis=json.dumps(policy_categories, ensure_ascii=False) if policy_categories else '')
+                            policy_keywords=', '.join(policy_keywords)
+                            if policy_keywords else '',
+                            category_analysis=json.dumps(policy_categories,
+                                                         ensure_ascii=False)
+                            if policy_categories else '')
 
                         created_count += 1
                         logger.info(
@@ -1165,13 +1188,16 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
 
                         # Create category associations if available
                         if policy_categories and not debug:
-                            create_statement_categories(statement, policy_categories)
+                            create_statement_categories(
+                                statement, policy_categories)
 
                         break
 
                     except Exception as db_error:
                         if attempt < max_retries - 1:
-                            logger.warning(f"⚠️ Database error on attempt {attempt + 1}, retrying: {db_error}")
+                            logger.warning(
+                                f"⚠️ Database error on attempt {attempt + 1}, retrying: {db_error}"
+                            )
                             # Close and reconnect database connection
                             connection.close()
                             time.sleep(1)  # Brief delay before retry
@@ -1189,14 +1215,16 @@ def process_pdf_statements(full_text, session_id, session, debug=False):
         )
 
     except Exception as e:
-        logger.error(f"❌ Error processing PDF statements for session {session_id}: {e}")
+        logger.error(
+            f"❌ Error processing PDF statements for session {session_id}: {e}")
         raise
 
 
 def parse_and_analyze_statements_from_text(text, session_id, debug=False):
     """Parse statements from PDF text and analyze them comprehensively using LLM."""
     if not model:
-        logger.warning("❌ LLM model not available for statement parsing and analysis")
+        logger.warning(
+            "❌ LLM model not available for statement parsing and analysis")
         return []
 
     # Truncate text if it's too long (keep first 50000 characters)
@@ -1276,7 +1304,9 @@ def parse_and_analyze_statements_from_text(text, session_id, debug=False):
         )
 
         if debug:
-            logger.info(f"🐛 DEBUG: LLM extracted and analyzed {len(statements)} statements")
+            logger.info(
+                f"🐛 DEBUG: LLM extracted and analyzed {len(statements)} statements"
+            )
             for i, stmt in enumerate(statements[:3], 1):  # Show first 3
                 logger.info(
                     f"🐛 DEBUG Statement {i}: {stmt.get('speaker_name', 'Unknown')[:20]}... - Sentiment: {stmt.get('sentiment_score', 0)} - Categories: {len(stmt.get('policy_categories', []))}"
@@ -1313,8 +1343,7 @@ def create_statement_categories(statement, policy_categories):
             # Get or create main category
             category, created = Category.objects.get_or_create(
                 name=main_category,
-                defaults={'description': f'{main_category} 관련 정책'}
-            )
+                defaults={'description': f'{main_category} 관련 정책'})
 
             # Get or create subcategory if provided
             subcategory = None
@@ -1322,18 +1351,18 @@ def create_statement_categories(statement, policy_categories):
                 subcategory, created = Subcategory.objects.get_or_create(
                     name=sub_category,
                     category=category,
-                    defaults={'description': f'{sub_category} 관련 세부 정책'}
-                )
+                    defaults={'description': f'{sub_category} 관련 세부 정책'})
 
             # Create statement category association
             StatementCategory.objects.get_or_create(
                 statement=statement,
                 category=category,
                 subcategory=subcategory,
-                defaults={'confidence_score': confidence}
-            )
+                defaults={'confidence_score': confidence})
 
-        logger.info(f"✅ Created {len(policy_categories)} category associations for statement {statement.id}")
+        logger.info(
+            f"✅ Created {len(policy_categories)} category associations for statement {statement.id}"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error creating statement categories: {e}")
@@ -1356,7 +1385,8 @@ def get_or_create_speaker(speaker_name, debug=False):
         connection.ensure_connection()
 
         # Try to find existing speaker
-        speaker = Speaker.objects.filter(naas_nm__icontains=speaker_name).first()
+        speaker = Speaker.objects.filter(
+            naas_nm__icontains=speaker_name).first()
 
         if not speaker:
             # Create temporary speaker record with retry logic
@@ -1369,7 +1399,9 @@ def get_or_create_speaker(speaker_name, debug=False):
                         plpt_nm="정당정보없음")
 
                     if debug:
-                        logger.info(f"🐛 DEBUG: Created temporary speaker: {speaker_name}")
+                        logger.info(
+                            f"🐛 DEBUG: Created temporary speaker: {speaker_name}"
+                        )
 
                     # Queue detailed speaker fetch
                     if not debug:
@@ -1378,12 +1410,16 @@ def get_or_create_speaker(speaker_name, debug=False):
 
                 except Exception as db_error:
                     if attempt < max_retries - 1:
-                        logger.warning(f"⚠️ Database error creating speaker on attempt {attempt + 1}: {db_error}")
+                        logger.warning(
+                            f"⚠️ Database error creating speaker on attempt {attempt + 1}: {db_error}"
+                        )
                         connection.close()
                         time.sleep(1)
                         continue
                     else:
-                        logger.error(f"❌ Failed to create speaker after {max_retries} attempts: {db_error}")
+                        logger.error(
+                            f"❌ Failed to create speaker after {max_retries} attempts: {db_error}"
+                        )
                         return None
 
         return speaker
