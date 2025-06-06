@@ -1,0 +1,38 @@
+📋 SESSION 1 RAW DATA:
+   Type: <class 'dict'>
+   Keys: ['CONFER_NUM', 'TITLE', 'CLASS_NAME', 'DAE_NUM', 'CONF_DATE', 'SUB_NAME', 'VOD_LINK_URL', 'CONF_LINK_URL', 'PDF_LINK_URL']
+   CONFER_NUM: 54609
+   TITLE: 제22대 제424회 제7차 국회본회의 (2025년 05월 01일)
+   CLASS_NAME: 국회본회의
+   DAE_NUM: 22
+   CONF_DATE: 2025-05-01
+   SUB_NAME: o 검찰총장(심우정) 탄핵소추안의 법제사법위원회로의 회부 동의의 건(김용민 의원 외 169인 서면동의)
+   VOD_LINK_URL: http://w3.assembly.go.kr/main/player.do?menu=1&mc=10&ct1=22&ct2=424&ct3=07&wv=1
+   CONF_LINK_URL: https://record.assembly.go.kr/assembly/viewer/minutes/xml.do?id=54609&type=summary
+   PDF_LINK_URL: https://record.assembly.go.kr/assembly/viewer/minutes/download/pdf.do?id=54609
+   ------------------------------------------------------------
+📋 SESSION 2 RAW DATA:
+   Type: <class 'dict'>
+   Keys: ['CONFER_NUM', 'TITLE', 'CLASS_NAME', 'DAE_NUM', 'CONF_DATE', 'SUB_NAME', 'VOD_LINK_URL', 'CONF_LINK_URL', 'PDF_LINK_URL']
+   CONFER_NUM: 54609
+   TITLE: 제22대 제424회 제7차 국회본회의 (2025년 05월 01일)
+   CLASS_NAME: 국회본회의
+   DAE_NUM: 22
+   CONF_DATE: 2025-05-01
+   SUB_NAME: 1. 여성과학기술인 육성 및 지원에 관한 법률 일부개정법률안(황정아 의원 대표발의)(의안번호 2203900)
+   VOD_LINK_URL: http://w3.assembly.go.kr/main/player.do?menu=1&mc=10&ct1=22&ct2=424&ct3=07&wv=1
+   CONF_LINK_URL: https://record.assembly.go.kr/assembly/viewer/minutes/xml.do?id=54609&type=summary
+   PDF_LINK_URL: https://record.assembly.go.kr/assembly/viewer/minutes/download/pdf.do?id=54609
+   ------------------------------------------------------------
+📋 SESSION 3 RAW DATA:
+   Type: <class 'dict'>
+   Keys: ['CONFER_NUM', 'TITLE', 'CLASS_NAME', 'DAE_NUM', 'CONF_DATE', 'SUB_NAME', 'VOD_LINK_URL', 'CONF_LINK_URL', 'PDF_LINK_URL']
+   CONFER_NUM: 54609
+   TITLE: 제22대 제424회 제7차 국회본회의 (2025년 05월 01일)
+   CLASS_NAME: 국회본회의
+   DAE_NUM: 22
+   CONF_DATE: 2025-05-01
+   SUB_NAME: 2. 우주개발 진흥법 일부개정법률안(대안)(과학기술정보방송통신위원장 제출)(의안번호 2210287)
+   VOD_LINK_URL: http://w3.assembly.go.kr/main/player.do?menu=1&mc=10&ct1=22&ct2=424&ct3=07&wv=1
+   CONF_LINK_URL: https://record.assembly.go.kr/assembly/viewer/minutes/xml.do?id=54609&type=summary
+   PDF_LINK_URL: https://record.assembly.go.kr/assembly/viewer/minutes/download/pdf.do?id=5460
