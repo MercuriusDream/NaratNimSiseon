@@ -109,18 +109,20 @@ def fetch_speaker_details(speaker_name):
             "NAAS_NM": speaker_name,
             "Type": "json"
         }
-        
+
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
-        
+
+        logger.info(f"🐛 DEBUG: ALLNAMEMBER API response for {speaker_name}: {json.dumps(data, indent=2, ensure_ascii=False)}")
+
         # Extract member data
         member_data = None
         if 'ALLNAMEMBER' in data and len(data['ALLNAMEMBER']) > 1:
             rows = data['ALLNAMEMBER'][1].get('row', [])
             if rows and len(rows) > 0:
                 member_data = rows[0]  # Get first match
-        
+
         if member_data:
             # Create or update speaker with detailed information
             speaker, created = Speaker.objects.get_or_create(
@@ -139,7 +141,7 @@ def fetch_speaker_details(speaker_name):
                     'naas_pic': member_data.get('NAAS_PIC', '')
                 }
             )
-            
+
             if not created:
                 # Update existing speaker with new information
                 speaker.naas_nm = member_data.get('NAAS_NM', speaker.naas_nm)
@@ -154,13 +156,13 @@ def fetch_speaker_details(speaker_name):
                 speaker.ntr_div = member_data.get('NTR_DIV', speaker.ntr_div)
                 speaker.naas_pic = member_data.get('NAAS_PIC', speaker.naas_pic)
                 speaker.save()
-            
+
             logger.info(f"✅ Fetched/updated speaker details for: {speaker_name}")
             return speaker
         else:
             logger.warning(f"⚠️ No member data found for: {speaker_name}")
             return None
-            
+
     except Exception as e:
         logger.error(f"❌ Error fetching speaker details for {speaker_name}: {e}")
         return None
@@ -747,394 +749,8 @@ def fetch_session_details(self=None,
             else:
                 fetch_session_bills(session_id=session_id,
                                     force=force,
-                                    debug=debug)
-            return
-
-        logger.info(f"✅ Found session details for: {session_id}")
-        session = Session.objects.get(conf_id=session_id)
-
-        # Update session details if available
-        if session_details.get('DOWN_URL'):
-            session.down_url = session_details['DOWN_URL']
-            session.save()
-            logger.info(f"📄 Updated PDF URL for session: {session_id}")
-
-        # Fetch bills for this session (with fallback)
-        if is_celery_available():
-            fetch_session_bills.delay(session_id, force=force, debug=debug)
-        else:
-            fetch_session_bills(session_id=session_id,
-                                force=force,
-                                debug=debug)
-
-        # Process PDF if URL is available (with fallback)
-        if session.down_url:
-            if is_celery_available():
-                process_session_pdf.delay(session_id, force=force, debug=debug)
-            else:
-                process_session_pdf(session_id=session_id,
-                                    force=force,
-                                    debug=debug)
-
-    except (RequestException, Session.DoesNotExist) as e:
-        logger.error(f"Error fetching session details: {e}")
-        if self:
-            try:
-                self.retry(exc=e)
-            except MaxRetriesExceededError:
-                logger.error(
-                    f"Max retries exceeded for fetch_session_details: {session_id}"
-                )
-                raise
-
-
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
-    """Fetch bills discussed in a specific session."""
-    try:
-        if debug:
-            logger.info(
-                f"🐛 DEBUG: Fetching bills for session {session_id} in debug mode"
-            )
-            # Continue with actual API call in debug mode
-        url = "https://open.assembly.go.kr/portal/openapi/VCONFBILLLIST"
-        params = {
-            "KEY": settings.ASSEMBLY_API_KEY,
-            "Type": "json",
-            "CONF_ID": format_conf_id(session_id)
-        }
-
-        logger.info(f"🔍 Fetching bills for session: {session_id}")
-        response = requests.get(url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        # Check for API error responses
-        if 'RESULT' in data and data['RESULT'].get('CODE') == 'INFO-200':
-            logger.info(
-                f"ℹ️  No bills found for session {session_id} (this is normal for some sessions)"
-            )
-            return
-
-        session = Session.objects.get(conf_id=session_id)
-        bills_created = 0
-        bills_updated = 0
-
-        for row in data.get('row', []):
-            bill, created = Bill.objects.get_or_create(bill_id=row['BILL_ID'],
-                                                       session=session,
-                                                       defaults={
-                                                           'bill_nm':
-                                                           row['BILL_NM'],
-                                                           'link_url':
-                                                           row['LINK_URL']
-                                                       })
-
-            if created:
-                bills_created += 1
-                logger.info(f"✨ Created new bill: {row['BILL_ID']}")
-            elif force:
-                # If bill exists and force is True, update the bill
-                bill.bill_nm = row['BILL_NM']
-                bill.link_url = row['LINK_URL']
-                bill.save()
-                bills_updated += 1
-                logger.info(f"🔄 Updated existing bill: {row['BILL_ID']}")
-
-        if bills_created > 0 or bills_updated > 0:
-            logger.info(
-                f"🎉 Bills processed for session {session_id}: {bills_created} created, {bills_updated} updated"
-            )
-
-    except (RequestException, Session.DoesNotExist) as e:
-        logger.error(f"❌ Error fetching session bills for {session_id}: {e}")
-        if self:
-            try:
-                self.retry(exc=e)
-            except MaxRetriesExceededError:
-                logger.error(
-                    f"Max retries exceeded for fetch_session_bills: {session_id}"
-                )
-                raise
-
-
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_session_pdf(self=None, session_id=None, force=False, debug=False):
-    """Download and process PDF for a session."""
-    try:
-        if debug:
-            logger.info(
-                f"🐛 DEBUG: Skipping PDF processing for session {session_id} in debug mode (too resource intensive)"
-            )
-            return
-        session = Session.objects.get(conf_id=session_id)
-
-        # Skip if PDF already processed and not forcing
-        if not force and session.statements.exists():
-            logger.info(f"Session {session_id} already processed, skipping")
-            return
-
-        # Create temp directory if it doesn't exist
-        temp_dir = Path("temp")
-        temp_dir.mkdir(exist_ok=True)
-        pdf_path = temp_dir / f"temp_{session_id}.pdf"
-
-        # Download PDF
-        response = requests.get(session.down_url, timeout=30)
-        response.raise_for_status()
-
-        with open(pdf_path, 'wb') as f:
-            f.write(response.content)
-
-        # Extract text from PDF
-        with pdfplumber.open(pdf_path) as pdf:
-            text = ""
-            for page in pdf.pages:
-                text += page.extract_text() or ""
-
-        # Process text and extract statements (with fallback)
-        if is_celery_available():
-            process_statements.delay(session_id,
-                                     text,
-                                     force=force,
-                                     debug=debug)
-        else:
-            process_statements(session_id=session_id,
-                               text=text,
-                               force=force,
-                               debug=debug)
-
-        # Clean up
-        os.remove(pdf_path)
-
-    except (RequestException, Session.DoesNotExist, Exception) as e:
-        logger.error(f"Error processing session PDF: {e}")
-        if self:
-            try:
-                self.retry(exc=e)
-            except MaxRetriesExceededError:
-                logger.error(
-                    f"Max retries exceeded for process_session_pdf: {session_id}"
-                )
-                raise
-
-
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_statements(self=None,
-                       session_id=None,
-                       text=None,
-                       force=False,
-                       debug=False):
-    """Process extracted text and analyze sentiments."""
-    try:
-        if debug:
-            logger.info(
-                f"🐛 DEBUG: Skipping statement processing for session {session_id} in debug mode (too resource intensive)"
-            )
-            if text:
-                logger.info(f"🐛 DEBUG: Text preview: {text[:200]}...")
-            return
-        session = Session.objects.get(conf_id=session_id)
-
-        # Skip if statements already processed and not forcing
-        if not force and session.statements.exists():
-            logger.info(
-                f"Statements for session {session_id} already processed, skipping"
-            )
-            return
-
-        # Split text into statements (this is a simplified version)
-        statements = text.split('\n\n')
-
-        # Rate limiting: 30 requests per 60 seconds = 1 request every 2 seconds
-
-        request_delay = 2.1  # Slightly more than 2 seconds to be safe
-
-        for i, statement in enumerate(statements):
-            if not statement.strip():
-                continue
-
-            try:
-                # Add rate limiting delay
-                if i > 0:  # Don't delay the first request
-                    time.sleep(request_delay)
-
-                # Use Gemini to analyze the statement
-                if not model:
-                    logger.warning(
-                        "Gemini model not available, skipping sentiment analysis"
-                    )
-                    continue
-
-                prompt = f"""
-                Analyze the following statement from a National Assembly meeting:
-
-                {statement}
-
-                Please provide:
-                1. The speaker's name
-                2. A sentiment score from -1 (very negative) to 1 (very positive)
-                3. A brief explanation for the sentiment score in Korean
-
-                Format the response as JSON only:
-                {{
-                    "speaker_name": "name",
-                    "sentiment_score": score,
-                    "reason": "explanation"
-                }}
-                """
-                response = model.generate_content(prompt)
-                result = response.text
-                
-                # Handle ```json formatting in response
+                                    json formatting in response
                 if result.startswith('```json'):
                     result = result.replace('```json', '').replace('```', '').strip()
                 elif result.startswith('```'):
-                    result = result.replace('```', '').strip()
-                
-                print(f"Cleaned result: {result}")
-
-                # Parse the result and create Statement object
-                data = json.loads(result)
-                
-                # Try to get or create speaker, fetch details if needed
-                speaker = None
-                speaker_name = data['speaker_name']
-                
-                # First try to find existing speaker
-                existing_speakers = Speaker.objects.filter(naas_nm__icontains=speaker_name)
-                if existing_speakers.exists():
-                    speaker = existing_speakers.first()
-                else:
-                    # Fetch speaker details from ALLNAMEMBER API
-                    speaker = fetch_speaker_details(speaker_name)
-                
-                if not speaker:
-                    # Fallback: create basic speaker record
-                    speaker, _ = Speaker.objects.get_or_create(
-                        naas_cd=f"TEMP_{speaker_name}",
-                        defaults={
-                            'naas_nm': speaker_name,
-                            'plpt_nm': '정당정보없음',
-                            'elecd_nm': '',
-                            'elecd_div_nm': '',
-                            'rlct_div_nm': '',
-                            'gtelt_eraco': '',
-                            'ntr_div': ''
-                        }
-                    )
-
-                Statement.objects.create(
-                    session=session,
-                    speaker=speaker,
-                    text=statement,
-                    sentiment_score=data['sentiment_score'],
-                    sentiment_reason=data['reason'])
-
-                logger.info(
-                    f"Processed statement {i+1}/{len(statements)} for session {session_id}"
-                )
-
-            except Exception as e:
-                logger.error(f"Error processing individual statement: {e}")
-                continue
-
-    except (Session.DoesNotExist, Exception) as e:
-        logger.error(f"Error processing statements: {e}")
-        if self:
-            try:
-                self.retry(exc=e)
-            except MaxRetriesExceededError:
-                logger.error(
-                    f"Max retries exceeded for process_statements: {session_id}"
-                )
-                raise
-
-
-# Scheduled task to run daily at midnight
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_party_membership_data(self=None, debug=False):
-    """Fetch party membership data from the Assembly API."""
-    try:
-        logger.info(f"🔍 Starting party membership data fetch (debug={debug})")
-        
-        url = "https://open.assembly.go.kr/portal/openapi/nepjpxkkabqiqpbvk"
-        params = {
-            "KEY": settings.ASSEMBLY_API_KEY,
-            "Type": "json"
-        }
-        
-        response = requests.get(url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        if debug:
-            logger.info(f"🐛 DEBUG: Party membership API response: {json.dumps(data, indent=2, ensure_ascii=False)}")
-        
-        # Extract party data
-        party_data = []
-        if 'nepjpxkkabqiqpbvk' in data and len(data['nepjpxkkabqiqpbvk']) > 1:
-            party_data = data['nepjpxkkabqiqpbvk'][1].get('row', [])
-        
-        logger.info(f"✅ Found {len(party_data)} parties in API response")
-        
-        if not debug:
-            # Process and store party data
-            from .models import Party
-            
-            updated_count = 0
-            created_count = 0
-            
-            for party_info in party_data:
-                # Skip the summary row
-                if party_info.get('POLY_NM') == '합계':
-                    continue
-                
-                party_name = party_info.get('POLY_NM')
-                if not party_name:
-                    continue
-                
-                party, created = Party.objects.get_or_create(
-                    name=party_name,
-                    defaults={
-                        'description': f"지역구: {party_info.get('N1', 0)}석, 비례대표: {party_info.get('N2', 0)}석, 총 {party_info.get('N3', 0)}석 ({party_info.get('N4', 0)}%)"
-                    }
-                )
-                
-                if created:
-                    created_count += 1
-                    logger.info(f"✨ Created new party: {party_name}")
-                else:
-                    # Update description with current data
-                    party.description = f"지역구: {party_info.get('N1', 0)}석, 비례대표: {party_info.get('N2', 0)}석, 총 {party_info.get('N3', 0)}석 ({party_info.get('N4', 0)}%)"
-                    party.save()
-                    updated_count += 1
-                    logger.info(f"🔄 Updated party: {party_name}")
-            
-            logger.info(f"🎉 Party data processed: {created_count} created, {updated_count} updated")
-        else:
-            logger.info("🐛 DEBUG MODE: Not storing to database")
-            for party_info in party_data:
-                logger.info(f"🐛 DEBUG Party: {party_info.get('POLY_NM')} - {party_info.get('N3', 0)} seats")
-        
-    except Exception as e:
-        logger.error(f"❌ Error fetching party membership data: {e}")
-        if self:
-            try:
-                self.retry(exc=e)
-            except MaxRetriesExceededError:
-                logger.error("Max retries exceeded for fetch_party_membership_data")
-                raise
-
-
-@shared_task
-def scheduled_data_collection(debug=False):
-    """Scheduled task to collect data daily."""
-    logger.info(f"Starting scheduled data collection (debug={debug})")
-    if is_celery_available():
-        fetch_latest_sessions.delay(force=False, debug=debug)
-        fetch_party_membership_data.delay(debug=debug)
-    else:
-        fetch_latest_sessions(force=False, debug=debug)
-        fetch_party_membership_data(debug=debug)
-    logger.info("Scheduled data collection completed")
+                    result = result.replace('```', '')
