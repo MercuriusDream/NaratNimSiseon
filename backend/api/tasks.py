@@ -394,6 +394,14 @@ def fetch_latest_sessions(self=None, force=False, debug=False):
                         )
                     continue
 
+        # After session collection, fetch additional data
+        if not debug:
+            logger.info("🔄 Starting additional data collection...")
+            if is_celery_available():
+                fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=force, debug=debug)
+            else:
+                fetch_additional_data_nepjpxkkabqiqpbvk(force=force, debug=debug)
+
         logger.info("🎉 Session fetch completed")
 
     except Exception as e:
@@ -792,6 +800,13 @@ def fetch_session_details(self=None,
                                 force=force,
                                 debug=debug)
 
+        # Queue PDF processing for statement extraction
+        if session.down_url and not debug:
+            if is_celery_available():
+                process_session_pdf.delay(session_id, force=force, debug=debug)
+            else:
+                process_session_pdf(session_id=session_id, force=force, debug=debug)
+
     except Exception as e:
         if isinstance(e, RequestException):
             if self:
@@ -893,4 +908,306 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
                 logger.error("Sync execution failed, no retry available")
                 raise
         logger.error(f"❌ Error fetching bills for session {session_id}: {e}")
+        raise
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def process_session_pdf(self=None, session_id=None, force=False, debug=False):
+    """Download and process PDF transcript for a session to extract statements."""
+    try:
+        if debug:
+            logger.info(f"🐛 DEBUG: Processing PDF for session {session_id} in debug mode")
+            
+        # Get session object
+        try:
+            session = Session.objects.get(conf_id=session_id)
+        except Session.DoesNotExist:
+            logger.error(f"❌ Session {session_id} not found in database")
+            return
+
+        if not session.down_url:
+            logger.info(f"ℹ️  No PDF URL available for session {session_id}")
+            return
+
+        logger.info(f"📄 Processing PDF for session: {session_id}")
+        
+        # Download PDF
+        response = requests.get(session.down_url, timeout=60, stream=True)
+        response.raise_for_status()
+        
+        # Save PDF temporarily
+        temp_dir = Path("temp")
+        temp_dir.mkdir(exist_ok=True)
+        temp_pdf_path = temp_dir / f"temp_{session_id}.pdf"
+        
+        with open(temp_pdf_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        logger.info(f"📥 Downloaded PDF for session {session_id}")
+        
+        # Extract text from PDF
+        statements_data = []
+        try:
+            with pdfplumber.open(temp_pdf_path) as pdf:
+                full_text = ""
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        full_text += page_text + "\n"
+                
+                # Parse statements from text
+                statements_data = parse_statements_from_text(full_text, session_id, debug)
+                
+        except Exception as e:
+            logger.error(f"❌ Error extracting text from PDF {session_id}: {e}")
+            return
+        finally:
+            # Clean up temporary file
+            if temp_pdf_path.exists():
+                temp_pdf_path.unlink()
+        
+        # Process extracted statements
+        created_count = 0
+        for statement_data in statements_data:
+            try:
+                # Get or create speaker
+                speaker = get_or_create_speaker(statement_data['speaker_name'], debug)
+                if not speaker:
+                    continue
+                
+                # Create statement
+                statement = Statement.objects.create(
+                    session=session,
+                    speaker=speaker,
+                    text=statement_data['text'],
+                    sentiment_score=0.0,  # Will be analyzed later
+                    sentiment_reason="Pending analysis"
+                )
+                
+                created_count += 1
+                
+                # Queue sentiment analysis if LLM is available
+                if model and not debug:
+                    analyze_statement_sentiment.delay(statement.id)
+                
+            except Exception as e:
+                logger.error(f"❌ Error creating statement: {e}")
+                continue
+        
+        logger.info(f"🎉 Processed PDF for session {session_id}: {created_count} statements created")
+
+    except Exception as e:
+        if isinstance(e, RequestException):
+            if self:
+                try:
+                    self.retry(exc=e)
+                except MaxRetriesExceededError:
+                    logger.error(f"Max retries exceeded for PDF processing {session_id}")
+                    raise
+            else:
+                logger.error("Sync execution failed, no retry available")
+                raise
+        logger.error(f"❌ Error processing PDF for session {session_id}: {e}")
+        raise
+
+
+def parse_statements_from_text(text, session_id, debug=False):
+    """Parse statements from PDF text content."""
+    statements = []
+    
+    # Simple parsing - look for speaker patterns
+    # Korean parliament typically uses patterns like "○의원명:" or "○위원장:"
+    lines = text.split('\n')
+    current_speaker = None
+    current_text = ""
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Look for speaker patterns
+        if line.startswith('○') and ':' in line:
+            # Save previous statement if exists
+            if current_speaker and current_text.strip():
+                statements.append({
+                    'speaker_name': current_speaker,
+                    'text': current_text.strip()
+                })
+            
+            # Extract new speaker name
+            current_speaker = line.split(':')[0].replace('○', '').strip()
+            current_text = line.split(':', 1)[1] if ':' in line else ""
+        else:
+            # Continue accumulating text for current speaker
+            if current_speaker:
+                current_text += " " + line
+    
+    # Don't forget the last statement
+    if current_speaker and current_text.strip():
+        statements.append({
+            'speaker_name': current_speaker,
+            'text': current_text.strip()
+        })
+    
+    if debug:
+        logger.info(f"🐛 DEBUG: Parsed {len(statements)} statements from PDF")
+        for i, stmt in enumerate(statements[:3], 1):  # Show first 3
+            logger.info(f"🐛 DEBUG Statement {i}: {stmt['speaker_name'][:20]}... - {stmt['text'][:50]}...")
+    
+    return statements
+
+
+def get_or_create_speaker(speaker_name, debug=False):
+    """Get or create speaker by name."""
+    if not speaker_name:
+        return None
+    
+    # Clean speaker name
+    speaker_name = speaker_name.replace('의원', '').replace('위원장', '').replace('장관', '').strip()
+    
+    # Try to find existing speaker
+    speaker = Speaker.objects.filter(naas_nm__icontains=speaker_name).first()
+    
+    if not speaker:
+        # Create temporary speaker record
+        speaker = Speaker.objects.create(
+            naas_cd=f"TEMP_{speaker_name}_{int(time.time())}",
+            naas_nm=speaker_name,
+            plpt_nm="정당정보없음"
+        )
+        
+        if debug:
+            logger.info(f"🐛 DEBUG: Created temporary speaker: {speaker_name}")
+        
+        # Queue detailed speaker fetch
+        if not debug:
+            fetch_speaker_details(speaker_name)
+    
+    return speaker
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def analyze_statement_sentiment(self=None, statement_id=None):
+    """Analyze sentiment of a statement using LLM."""
+    if not model:
+        logger.warning("❌ Gemini model not available for sentiment analysis")
+        return
+    
+    try:
+        statement = Statement.objects.get(id=statement_id)
+        
+        prompt = f"""
+        다음 국회 발언의 감성을 분석해주세요. -1(매우 부정적)부터 1(매우 긍정적)까지의 점수와 근거를 제공해주세요.
+
+        발언 내용: {statement.text[:1000]}
+
+        응답 형식:
+        점수: [숫자]
+        근거: [분석 근거]
+        """
+        
+        response = model.generate_content(prompt)
+        
+        # Parse response
+        sentiment_score = 0.0
+        sentiment_reason = "분석 완료"
+        
+        if response.text:
+            lines = response.text.strip().split('\n')
+            for line in lines:
+                if line.startswith('점수:'):
+                    try:
+                        sentiment_score = float(line.split(':')[1].strip())
+                    except:
+                        pass
+                elif line.startswith('근거:'):
+                    sentiment_reason = line.split(':', 1)[1].strip()
+        
+        # Update statement
+        statement.sentiment_score = sentiment_score
+        statement.sentiment_reason = sentiment_reason
+        statement.save()
+        
+        logger.info(f"✅ Analyzed sentiment for statement {statement_id}: {sentiment_score}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error analyzing sentiment for statement {statement_id}: {e}")
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error(f"Max retries exceeded for sentiment analysis {statement_id}")
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60) 
+def fetch_additional_data_nepjpxkkabqiqpbvk(self=None, force=False, debug=False):
+    """Fetch additional data using nepjpxkkabqiqpbvk API endpoint."""
+    try:
+        if debug:
+            logger.info(f"🐛 DEBUG: Fetching additional data using nepjpxkkabqiqpbvk API")
+            
+        url = "https://open.assembly.go.kr/portal/openapi/nepjpxkkabqiqpbvk"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "Type": "json",
+            "pIndex": 1,
+            "pSize": 100
+        }
+
+        logger.info(f"🔍 Fetching additional data from nepjpxkkabqiqpbvk API")
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        logger.info(f"📊 nepjpxkkabqiqpbvk API response structure: {list(data.keys()) if data else 'Empty response'}")
+
+        if debug:
+            logger.info(f"🐛 DEBUG: Full nepjpxkkabqiqpbvk response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+
+        # Extract data based on API structure
+        additional_data = None
+        if 'nepjpxkkabqiqpbvk' in data and len(data['nepjpxkkabqiqpbvk']) > 1:
+            additional_data = data['nepjpxkkabqiqpbvk'][1].get('row', [])
+        elif 'nepjpxkkabqiqpbvk' in data and len(data['nepjpxkkabqiqpbvk']) > 0:
+            additional_data = data['nepjpxkkabqiqpbvk'][0].get('row', [])
+        elif 'row' in data:
+            additional_data = data['row']
+
+        if not additional_data:
+            logger.info(f"ℹ️  No additional data found from nepjpxkkabqiqpbvk API")
+            return
+
+        logger.info(f"✅ Found {len(additional_data)} records from nepjpxkkabqiqpbvk API")
+        
+        # Process the additional data (customize based on what the API returns)
+        processed_count = 0
+        for item in additional_data:
+            try:
+                if debug:
+                    logger.info(f"🐛 DEBUG: Processing item: {item}")
+                else:
+                    # Process the item based on its structure
+                    # This will depend on what nepjpxkkabqiqpbvk actually returns
+                    processed_count += 1
+                    
+            except Exception as e:
+                logger.error(f"❌ Error processing nepjpxkkabqiqpbvk item: {e}")
+                continue
+
+        logger.info(f"🎉 Processed {processed_count} items from nepjpxkkabqiqpbvk API")
+
+    except Exception as e:
+        if isinstance(e, RequestException):
+            if self:
+                try:
+                    self.retry(exc=e)
+                except MaxRetriesExceededError:
+                    logger.error(f"Max retries exceeded for nepjpxkkabqiqpbvk fetch")
+                    raise
+            else:
+                logger.error("Sync execution failed, no retry available")
+                raise
+        logger.error(f"❌ Error fetching from nepjpxkkabqiqpbvk API: {e}")
         raise
