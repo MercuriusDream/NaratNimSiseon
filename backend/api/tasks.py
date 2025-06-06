@@ -454,6 +454,23 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         logger.warning("❌ No sessions data to process")
         return
 
+    # Always show the first few sessions to understand the data structure
+    print("🔍 RAW API SESSION DATA STRUCTURE:")
+    print("=" * 80)
+    for i, row in enumerate(sessions_data[:5], 1):  # Show first 5 sessions always
+        print(f"📋 SESSION {i} RAW DATA:")
+        print(f"   Type: {type(row)}")
+        print(f"   Keys: {list(row.keys()) if isinstance(row, dict) else 'Not a dict'}")
+        
+        # Show all key-value pairs
+        if isinstance(row, dict):
+            for key, value in row.items():
+                print(f"   {key}: {value}")
+        else:
+            print(f"   Full value: {row}")
+        print("   " + "-" * 60)
+    print("=" * 80)
+
     if debug:
         print(
             f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)"
@@ -461,9 +478,12 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         logger.info(
             f"🐛 DEBUG MODE: Processing {len(sessions_data)} sessions (preview only - no database writes)"
         )
-        for i, row in enumerate(sessions_data[:10],
-                                1):  # Show first 10 sessions
-            session_id = row.get('CONFER_NUM')
+        # Additional debug for all sessions in debug mode
+        for i, row in enumerate(sessions_data, 1):
+            session_id = (row.get('CONFER_NUM') or 
+                         row.get('CONF_ID') or 
+                         row.get('SESS_ID') or 
+                         row.get('ID'))
             title = row.get('TITLE', 'Unknown')
             date = row.get('CONF_DATE', 'Unknown')
             pdf_url = row.get('PDF_LINK_URL', 'No PDF')
@@ -473,7 +493,6 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             print(f"   Date: {date}")
             print(f"   PDF: {pdf_url}")
             print(f"   All available keys: {list(row.keys())}")
-            print(f"   Full data: {row}")
             print("   ---")
 
             logger.info(f"🐛 DEBUG Session {i}: ID={session_id}")
@@ -481,13 +500,8 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             logger.info(f"   Date: {date}")
             logger.info(f"   PDF: {pdf_url}")
             logger.info(f"   All available keys: {list(row.keys())}")
-            logger.info(f"   Full data: {row}")
             logger.info("   ---")
 
-        if len(sessions_data) > 10:
-            print(f"🐛 DEBUG: ... and {len(sessions_data) - 10} more sessions")
-            logger.info(
-                f"🐛 DEBUG: ... and {len(sessions_data) - 10} more sessions")
         print("🐛 DEBUG MODE: Data preview completed - not storing to database")
         logger.info(
             "🐛 DEBUG MODE: Data preview completed - not storing to database")
