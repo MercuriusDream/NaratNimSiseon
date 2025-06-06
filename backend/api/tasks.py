@@ -508,12 +508,15 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             conf_date = None
             if row.get('CONF_DATE'):
                 try:
-                    conf_date = datetime.strptime(row.get('CONF_DATE'), '%Y년 %m월 %d일').date()
+                    conf_date = datetime.strptime(row.get('CONF_DATE'),
+                                                  '%Y년 %m월 %d일').date()
                 except ValueError:
                     try:
-                        conf_date = datetime.strptime(row.get('CONF_DATE'), '%Y-%m-%d').date()
+                        conf_date = datetime.strptime(row.get('CONF_DATE'),
+                                                      '%Y-%m-%d').date()
                     except ValueError:
-                        logger.warning(f"Could not parse date: {row.get('CONF_DATE')}")
+                        logger.warning(
+                            f"Could not parse date: {row.get('CONF_DATE')}")
                         conf_date = None
 
             session, created = Session.objects.get_or_create(
@@ -599,11 +602,12 @@ def fetch_session_details(self=None,
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
             "Type": "json",
-            "CONF_ID": session_id
+            "CONF_ID": '0' + str(session_id)
         }
 
         logger.info(f"🔍 Fetching details for session: {session_id}")
         response = requests.get(url, params=params, timeout=30)
+
         response.raise_for_status()
         data = response.json()
 
@@ -624,7 +628,9 @@ def fetch_session_details(self=None,
                 session_details = None
 
         if not session_details:
-            logger.info(f"ℹ️  No detailed info available for session {session_id} (this is normal for some sessions)")
+            logger.info(
+                f"ℹ️  No detailed info available for session {session_id} (this is normal for some sessions)"
+            )
             if debug:
                 logger.info(f"📋 Full API response: {data}")
 
@@ -688,7 +694,7 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
             "Type": "json",
-            "CONF_ID": session_id
+            "CONF_ID": '0'+str(session_id)
         }
 
         logger.info(f"🔍 Fetching bills for session: {session_id}")
@@ -698,7 +704,9 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
 
         # Check for API error responses
         if 'RESULT' in data and data['RESULT'].get('CODE') == 'INFO-200':
-            logger.info(f"ℹ️  No bills found for session {session_id} (this is normal for some sessions)")
+            logger.info(
+                f"ℹ️  No bills found for session {session_id} (this is normal for some sessions)"
+            )
             return
 
         session = Session.objects.get(conf_id=session_id)
@@ -727,7 +735,9 @@ def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
                 logger.info(f"🔄 Updated existing bill: {row['BILL_ID']}")
 
         if bills_created > 0 or bills_updated > 0:
-            logger.info(f"🎉 Bills processed for session {session_id}: {bills_created} created, {bills_updated} updated")
+            logger.info(
+                f"🎉 Bills processed for session {session_id}: {bills_created} created, {bills_updated} updated"
+            )
 
     except (RequestException, Session.DoesNotExist) as e:
         logger.error(f"❌ Error fetching session bills for {session_id}: {e}")
