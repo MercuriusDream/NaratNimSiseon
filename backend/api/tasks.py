@@ -179,6 +179,120 @@ def fetch_speaker_details(speaker_name):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def fetch_continuous_sessions(self=None, force=False, debug=False, start_date=None):
+    """Fetch sessions starting from a specific date or continue from last session."""
+    try:
+        logger.info(f"🔍 Starting continuous session fetch (force={force}, debug={debug}, start_date={start_date})")
+
+        # Check if we have the required settings
+        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error("❌ ASSEMBLY_API_KEY not configured")
+            raise ValueError("ASSEMBLY_API_KEY not configured")
+
+        url = "https://open.assembly.go.kr/portal/openapi/nzbyfwhwaoanttzje"
+
+        # Determine starting point
+        if start_date:
+            from datetime import datetime
+            start_datetime = datetime.fromisoformat(start_date)
+            logger.info(f"📅 Continuing from date: {start_datetime.strftime('%Y-%m')}")
+        else:
+            start_datetime = datetime.now()
+            logger.info(f"📅 Starting from current date: {start_datetime.strftime('%Y-%m')}")
+
+        # Fetch sessions month by month going backwards from start date
+        current_date = start_datetime
+        sessions_found = False
+
+        for months_back in range(0, 36):  # Go back up to 36 months
+            # Calculate target month
+            year = current_date.year
+            month = current_date.month - months_back
+
+            # Handle year rollover
+            while month <= 0:
+                month += 12
+                year -= 1
+
+            conf_date = f"{year:04d}-{month:02d}"
+            
+            params = {
+                "KEY": settings.ASSEMBLY_API_KEY,
+                "Type": "json",
+                "DAE_NUM": "22",  # 22nd Assembly
+                "CONF_DATE": conf_date
+            }
+
+            logger.info(f"📅 Fetching sessions for: {conf_date}")
+
+            if debug:
+                logger.info(f"🐛 DEBUG: API URL: {url}")
+                logger.info(f"🐛 DEBUG: API Params for {conf_date}: {params}")
+
+            try:
+                response = requests.get(url, params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+
+                if debug:
+                    logger.info(f"🐛 DEBUG: API Response status for {conf_date}: {response.status_code}")
+
+                sessions_data = extract_sessions_from_response(data, debug=debug)
+                
+                if sessions_data:
+                    sessions_found = True
+                    logger.info(f"✅ Found {len(sessions_data)} sessions for {conf_date}")
+                    
+                    # Process sessions for this month
+                    process_sessions_data(sessions_data, force=force, debug=debug)
+                    
+                    # Small delay between requests to be respectful
+                    if not debug:
+                        time.sleep(1)
+                else:
+                    logger.info(f"❌ No sessions found for {conf_date}")
+                    
+                    # If we haven't found any sessions in the last 6 months, stop
+                    if months_back > 6 and not sessions_found:
+                        logger.info("🛑 No sessions found in recent months, stopping search")
+                        break
+
+            except Exception as e:
+                logger.warning(f"⚠️ Error fetching {conf_date}: {e}")
+                if debug:
+                    logger.info(f"🐛 DEBUG: Full error for {conf_date}: {type(e).__name__}: {e}")
+                continue
+
+        # After session collection, fetch additional data
+        if not debug and sessions_found:
+            logger.info("🔄 Starting additional data collection...")
+            if is_celery_available():
+                fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=force, debug=debug)
+            else:
+                fetch_additional_data_nepjpxkkabqiqpbvk(force=force, debug=debug)
+
+        if sessions_found:
+            logger.info("🎉 Continuous session fetch completed")
+        else:
+            logger.info("ℹ️ No new sessions found during continuous fetch")
+
+    except Exception as e:
+        if isinstance(e, RequestException):
+            if self:
+                try:
+                    self.retry(exc=e)
+                except MaxRetriesExceededError:
+                    logger.error("Max retries exceeded for fetch_continuous_sessions")
+                    raise
+            else:
+                logger.error("Sync execution failed, no retry available")
+                raise
+        logger.error(f"❌ Critical error in fetch_continuous_sessions: {e}")
+        logger.error(f"📊 Session count in DB: {Session.objects.count()}")
+        raise
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_latest_sessions(self=None, force=False, debug=False):
     """Fetch latest assembly sessions from the API."""
     # Add immediate debug output
