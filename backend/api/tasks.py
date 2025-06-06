@@ -957,12 +957,89 @@ def process_statements(self=None,
 
 
 # Scheduled task to run daily at midnight
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def fetch_party_membership_data(self=None, debug=False):
+    """Fetch party membership data from the Assembly API."""
+    try:
+        logger.info(f"🔍 Starting party membership data fetch (debug={debug})")
+        
+        url = "https://open.assembly.go.kr/portal/openapi/nepjpxkkabqiqpbvk"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "Type": "json"
+        }
+        
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        if debug:
+            logger.info(f"🐛 DEBUG: Party membership API response: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        
+        # Extract party data
+        party_data = []
+        if 'nepjpxkkabqiqpbvk' in data and len(data['nepjpxkkabqiqpbvk']) > 1:
+            party_data = data['nepjpxkkabqiqpbvk'][1].get('row', [])
+        
+        logger.info(f"✅ Found {len(party_data)} parties in API response")
+        
+        if not debug:
+            # Process and store party data
+            from .models import Party
+            
+            updated_count = 0
+            created_count = 0
+            
+            for party_info in party_data:
+                # Skip the summary row
+                if party_info.get('POLY_NM') == '합계':
+                    continue
+                
+                party_name = party_info.get('POLY_NM')
+                if not party_name:
+                    continue
+                
+                party, created = Party.objects.get_or_create(
+                    name=party_name,
+                    defaults={
+                        'description': f"지역구: {party_info.get('N1', 0)}석, 비례대표: {party_info.get('N2', 0)}석, 총 {party_info.get('N3', 0)}석 ({party_info.get('N4', 0)}%)"
+                    }
+                )
+                
+                if created:
+                    created_count += 1
+                    logger.info(f"✨ Created new party: {party_name}")
+                else:
+                    # Update description with current data
+                    party.description = f"지역구: {party_info.get('N1', 0)}석, 비례대표: {party_info.get('N2', 0)}석, 총 {party_info.get('N3', 0)}석 ({party_info.get('N4', 0)}%)"
+                    party.save()
+                    updated_count += 1
+                    logger.info(f"🔄 Updated party: {party_name}")
+            
+            logger.info(f"🎉 Party data processed: {created_count} created, {updated_count} updated")
+        else:
+            logger.info("🐛 DEBUG MODE: Not storing to database")
+            for party_info in party_data:
+                logger.info(f"🐛 DEBUG Party: {party_info.get('POLY_NM')} - {party_info.get('N3', 0)} seats")
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching party membership data: {e}")
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error("Max retries exceeded for fetch_party_membership_data")
+                raise
+
+
 @shared_task
 def scheduled_data_collection(debug=False):
     """Scheduled task to collect data daily."""
     logger.info(f"Starting scheduled data collection (debug={debug})")
     if is_celery_available():
         fetch_latest_sessions.delay(force=False, debug=debug)
+        fetch_party_membership_data.delay(debug=debug)
     else:
         fetch_latest_sessions(force=False, debug=debug)
+        fetch_party_membership_data(debug=debug)
     logger.info("Scheduled data collection completed")

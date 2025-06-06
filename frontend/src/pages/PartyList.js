@@ -31,7 +31,7 @@ function PartyList() {
       
       const response = await api.get(`/parties/?${params.toString()}`);
       
-      // Handle different response structures
+      // Handle different response structures and ensure we always have an array
       let partiesData = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -43,10 +43,17 @@ function PartyList() {
         }
       }
       
+      // Ensure partiesData is always an array
+      if (!Array.isArray(partiesData)) {
+        console.warn('Parties data is not an array:', partiesData);
+        partiesData = [];
+      }
+      
       setParties(partiesData);
     } catch (err) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
       console.error('Error fetching parties:', err);
+      setParties([]); // Ensure parties is set to empty array on error
     } finally {
       setLoading(false);
     }
@@ -212,12 +219,12 @@ function PartyList() {
                   <h3 className="text-sm font-medium text-gray-700 mb-2">주요 의원</h3>
                   <div className="space-y-2">
                     {party.top_members.map(member => (
-                      <div key={member.id} className="flex items-center justify-between text-sm">
+                      <div key={member.id || member.naas_nm} className="flex items-center justify-between text-sm">
                         <Link
-                          to={`/speakers/${member.id}`}
+                          to={`/speakers/${member.id || member.naas_cd}`}
                           className="text-gray-600 hover:text-blue-600"
                         >
-                          {member.naas_nm}
+                          {member.naas_nm || 'Unknown'}
                         </Link>
                         <span className={`${
                           (member.avg_sentiment || 0) > 0.3 ? 'text-green-600' :
