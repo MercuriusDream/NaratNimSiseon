@@ -1222,6 +1222,73 @@ def extract_text_segment(text, start_marker, end_marker=None):
         return ""
 
 
+# Global cache for assembly members (in production, you might want to use Redis)
+_assembly_members_cache = None
+_cache_timestamp = None
+
+def get_all_assembly_members():
+    """Fetch and cache all assembly member names from ALLNAMEMBER API."""
+    global _assembly_members_cache, _cache_timestamp
+    
+    # Use cache if it's less than 1 hour old
+    if (_assembly_members_cache is not None and _cache_timestamp is not None and 
+        time.time() - _cache_timestamp < 3600):
+        logger.info(f"Using cached assembly members ({len(_assembly_members_cache)} members)")
+        return _assembly_members_cache
+    
+    if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+        logger.error("ASSEMBLY_API_KEY not configured for get_all_assembly_members.")
+        return set()
+
+    try:
+        logger.info("Fetching assembly member names from ALLNAMEMBER API...")
+        url = "https://open.assembly.go.kr/portal/openapi/ALLNAMEMBER"
+        all_members = set()
+        page = 1
+        page_size = 100
+        
+        while True:
+            params = {
+                "KEY": settings.ASSEMBLY_API_KEY,
+                "Type": "json",
+                "pIndex": page,
+                "pSize": page_size
+            }
+            
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            members_data = []
+            if 'ALLNAMEMBER' in data and len(data['ALLNAMEMBER']) > 1:
+                members_data = data['ALLNAMEMBER'][1].get('row', [])
+            
+            if not members_data:
+                break
+                
+            # Extract member names
+            for member in members_data:
+                member_name = member.get('NAAS_NM', '').strip()
+                if member_name:
+                    all_members.add(member_name)
+            
+            if len(members_data) < page_size:
+                break
+                
+            page += 1
+        
+        # Cache the results
+        _assembly_members_cache = all_members
+        _cache_timestamp = time.time()
+        
+        logger.info(f"✅ Fetched and cached {len(all_members)} assembly member names from ALLNAMEMBER API")
+        return all_members
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching assembly members: {e}")
+        return set()
+
+
 def extract_statements_for_bill_segment(bill_text_segment,
                                         session_id,
                                         bill_name,
@@ -1239,6 +1306,9 @@ def extract_statements_for_bill_segment(bill_text_segment,
         )
         return []
 
+    # Get all assembly member names for validation
+    assembly_members = get_all_assembly_members()
+    
     # Filter to ignore non-의원 speakers - only 의원 can vote legally
     IGNORED_SPEAKERS = [
         '우원식',  # Current 국회의장
@@ -1478,19 +1548,28 @@ def process_single_segment_for_statements(bill_text_segment,
             is_real_person = speech_info.get('e', False)
             is_substantial = speech_info.get('f', False)
 
-            # Check if speaker should be ignored - only allow 의원
-            should_ignore = False
+            # Check if speaker should be ignored
+            should_ignore = any(ignored in clean_name for ignored in IGNORED_SPEAKERS) if clean_name else True
+            
+            # Check if this is a real assembly member
             is_member = False
-
-            if clean_name:
-                # Check if this is a 의원 (member of parliament who can vote)
-                is_member = '의원' in clean_name or any(keyword in clean_name
-                                                      for keyword in ['의원'])
-
+            if clean_name and assembly_members:
+                # Clean the name by removing common titles for matching
+                name_for_matching = clean_name
+                for title in ['의원', '위원장', '장관', '의장', '부의장']:
+                    name_for_matching = name_for_matching.replace(title, '').strip()
+                
+                # Check if the cleaned name is in our assembly member list
+                is_member = name_for_matching in assembly_members or clean_name in assembly_members
+                
+                # Fallback: if we couldn't fetch assembly members, use the old logic
+                if not assembly_members:
+                    is_member = '의원' in clean_name
+            
             if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial or should_ignore or not is_member:
-                skip_reason = "ignored speaker" if should_ignore else "not a 의원" if not is_member else "missing info or filters"
+                skip_reason = "ignored speaker" if should_ignore else "not an assembly member" if not is_member else "missing info or filters"
                 logger.info(
-                    f"Skipping speech segment for '{bill_name}' due to {skip_reason}: Name='{clean_name}', StartIdx={start_idx}, EndIdx={end_idx}, Person={is_real_person}, Substantial={is_substantial}, Member={is_member}"
+                    f"Skipping speech segment for '{bill_name}' due to {skip_reason}: Name='{clean_name}', StartIdx={start_idx}, EndIdx={end_idx}, Person={is_real_person}, Substantial={is_substantial}, Member={is_member}, AssemblyMembersCount={len(assembly_members)}"
                 )
                 continue
 
