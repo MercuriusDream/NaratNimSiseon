@@ -1,0 +1,705 @@
+2025-06-07 20:36:52,433 - api.tasks - ERROR - tasks - extract_statements_without_bill_separation - 1609 - JSON parsing error in full-text speaker detection (session 54532): Unterminated string starting at: line 705 column 7 (char 20581). Response: {
+  "detected_speeches": [
+    {
+      "speaker_name_raw": "◯부의장 이학영",
+      "speaker_name_clean": "이학영",
+      "speech_start_index": 63,
+      "speech_end_index": 163,
+      "is_real_person_guess": false,
+      "is_substantial_discussion_guess": false
+    },
+    {
+      "speaker_name_raw": "◯부의장 이학영",
+      "speaker_name_clean": "이학영",
+      "speech_start_index": 209,
+      "speech_end_index": 232,
+      "is_real_person_guess": false,
+      "is_substantial_discussion_guess": false
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 236,
+      "speech_end_index": 285,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 286,
+      "speech_end_index": 298,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 299,
+      "speech_end_index": 315,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 316,
+      "speech_end_index": 327,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 328,
+      "speech_end_index": 395,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 396,
+      "speech_end_index": 417,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 418,
+      "speech_end_index": 484,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 485,
+      "speech_end_index": 503,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 504,
+      "speech_end_index": 559,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 560,
+      "speech_end_index": 573,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 574,
+      "speech_end_index": 596,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 597,
+      "speech_end_index": 613,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 614,
+      "speech_end_index": 658,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 659,
+      "speech_end_index": 681,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 682,
+      "speech_end_index": 724,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 725,
+      "speech_end_index": 748,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 749,
+      "speech_end_index": 1103,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1104,
+      "speech_end_index": 1156,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1157,
+      "speech_end_index": 1185,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1186,
+      "speech_end_index": 1211,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1212,
+      "speech_end_index": 1240,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1241,
+      "speech_end_index": 1260,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1261,
+      "speech_end_index": 1346,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1347,
+      "speech_end_index": 1375,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1376,
+      "speech_end_index": 1431,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1432,
+      "speech_end_index": 1454,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1455,
+      "speech_end_index": 1503,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1504,
+      "speech_end_index": 1523,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1524,
+      "speech_end_index": 1560,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1561,
+      "speech_end_index": 1583,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1584,
+      "speech_end_index": 1608,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1609,
+      "speech_end_index": 1633,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1634,
+      "speech_end_index": 1669,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1670,
+      "speech_end_index": 1689,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1690,
+      "speech_end_index": 1740,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1741,
+      "speech_end_index": 1764,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1765,
+      "speech_end_index": 1788,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1789,
+      "speech_end_index": 1807,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1808,
+      "speech_end_index": 1856,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1857,
+      "speech_end_index": 1900,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1901,
+      "speech_end_index": 1911,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1912,
+      "speech_end_index": 1941,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1942,
+      "speech_end_index": 1957,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 1958,
+      "speech_end_index": 1976,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 1977,
+      "speech_end_index": 2054,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2055,
+      "speech_end_index": 2099,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2100,
+      "speech_end_index": 2164,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2165,
+      "speech_end_index": 2185,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2186,
+      "speech_end_index": 2228,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2229,
+      "speech_end_index": 2241,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2242,
+      "speech_end_index": 2255,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2256,
+      "speech_end_index": 2263,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2264,
+      "speech_end_index": 2290,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2291,
+      "speech_end_index": 2318,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2319,
+      "speech_end_index": 2361,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2362,
+      "speech_end_index": 2375,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2376,
+      "speech_end_index": 2385,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2386,
+      "speech_end_index": 2404,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2405,
+      "speech_end_index": 2457,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2458,
+      "speech_end_index": 2478,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2479,
+      "speech_end_index": 2502,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2503,
+      "speech_end_index": 2517,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2518,
+      "speech_end_index": 2536,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2537,
+      "speech_end_index": 2556,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2557,
+      "speech_end_index": 2596,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2597,
+      "speech_end_index": 2627,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2628,
+      "speech_end_index": 2646,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2647,
+      "speech_end_index": 2660,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2661,
+      "speech_end_index": 2692,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2693,
+      "speech_end_index": 2701,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2702,
+      "speech_end_index": 2719,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2720,
+      "speech_end_index": 2727,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2728,
+      "speech_end_index": 2783,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2784,
+      "speech_end_index": 2805,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2806,
+      "speech_end_index": 2854,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2855,
+      "speech_end_index": 2867,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2868,
+      "speech_end_index": 2897,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2898,
+      "speech_end_index": 2935,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2936,
+      "speech_end_index": 2948,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 2949,
+      "speech_end_index": 2964,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 2965,
+      "speech_end_index": 2999,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 3000,
+      "speech_end_index": 3007,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 3008,
+      "speech_end_index": 3027,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 3028,
+      "speech_end_index": 3043,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯백혜련 의원",
+      "speaker_name_clean": "백혜련",
+      "speech_start_index": 3044,
+      "speech_end_index": 3055,
+      "is_real_person_guess": true,
+      "is_substantial_discussion_guess": true
+    },
+    {
+      "speaker_name_raw": "◯법무부장관 박성재",
+      "speaker_name_clean": "박성재",
+      "speech_start_index": 3056,
+      "speech_end_index": 3068,
+      "is_real_person_guess": true,
+      "is_
