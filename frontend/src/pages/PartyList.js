@@ -45,21 +45,29 @@ function PartyList() {
           partiesData = response.data.results;
         } else if (response.data.data && Array.isArray(response.data.data)) {
           partiesData = response.data.data;
+        } else {
+          // If no recognizable array structure, default to empty array
+          console.warn('Unexpected parties data structure:', response.data);
+          partiesData = [];
         }
       }
 
-      // Ensure partiesData is always an array
+      // Double-check that partiesData is always an array
       if (!Array.isArray(partiesData)) {
-        console.warn('Parties data is not an array:', partiesData);
+        console.warn('Parties data is not an array after processing:', partiesData);
         partiesData = [];
       }
+      
       setParties(partiesData);
 
-      if (response.data.additional_data_fetched) {
+      if (response.data && response.data.additional_data_fetched) {
         console.log('Additional data fetch triggered');
       }
     } catch (err) {
-      setError('데이터를 불러오는 중 오류가 발생했습니다.');
+      const errorMessage = err.response?.status === 500 
+        ? '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+        : '데이터를 불러오는 중 오류가 발생했습니다.';
+      setError(errorMessage);
       console.error('Error fetching parties:', err);
       setParties([]); // Ensure parties is set to empty array on error
     } finally {

@@ -21,6 +21,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from django.db.models import Count, Avg
 from datetime import datetime, timedelta
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters
 
 logger = logging.getLogger(__name__)
 
@@ -235,68 +237,65 @@ class StatementViewSet(viewsets.ModelViewSet):
 class PartyViewSet(viewsets.ModelViewSet):
     queryset = Party.objects.all()
     serializer_class = PartySerializer
-    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['name']
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'id']
+    ordering = ['name']
+
+    def get_queryset(self):
+        try:
+            queryset = Party.objects.all()
+            time_range = self.request.query_params.get('time_range', 'all')
+            categories = self.request.query_params.get('categories')
+
+            # Add time-based filtering logic here if needed
+            # Add category filtering logic here if needed
+
+            return queryset
+        except Exception as e:
+            logger.error(f"Error in PartyViewSet get_queryset: {e}")
+            return Party.objects.none()
 
     def list(self, request, *args, **kwargs):
-        """Custom list method to return parties sorted by assembly era"""
         try:
-            parties = Party.objects.all().order_by('-assembly_era', 'name')
-            party_data = []
+            fetch_additional = request.query_params.get('fetch_additional', 'false').lower() == 'true'
 
-            for party in parties:
-                # Get speakers for this party
-                all_speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
-                member_count = all_speakers.count()
+            if fetch_additional:
+                # Trigger additional data fetch
+                try:
+                    if is_celery_available():
+                        fetch_additional_data_nepjpxkkabqiqpbvk.delay()
+                    else:
+                        fetch_additional_data_nepjpxkkabqiqpbvk()
+                except Exception as e:
+                    logger.error(f"Error triggering additional data fetch: {e}")
 
-                # Skip if no members found
-                if member_count == 0:
-                    continue
+            # Get the queryset and serialize it
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
 
-                # Get statements and sentiment analysis
-                statements = Statement.objects.filter(speaker__plpt_nm__icontains=party.name)
-                avg_sentiment = statements.aggregate(
-                    Avg('sentiment_score'))['sentiment_score__avg']
-                total_statements = statements.count()
+            # Ensure we always return a list, even if empty
+            data = serializer.data if serializer.data is not None else []
 
-                # Get bills related to this party's speakers
-                bills = Bill.objects.filter(
-                    statements__speaker__plpt_nm__icontains=party.name).distinct()
-                total_bills = bills.count()
+            response_data = {
+                'results': data,
+                'count': len(data)
+            }
 
-                party_info = {
-                    'id': party.id,
-                    'name': party.name,
-                    'logo_url': None,  # Don't send logo URLs to reduce requests
-                    'slogan': party.slogan,
-                    'description': party.description,
-                    'member_count': member_count,
-                    'avg_sentiment': avg_sentiment,
-                    'total_statements': total_statements,
-                    'total_bills': total_bills,
-                    'created_at': party.created_at,
-                    'updated_at': party.updated_at,
-                    'assembly_era': party.assembly_era
-                }
-                party_data.append(party_info)
+            if fetch_additional:
+                response_data['additional_data_fetched'] = True
 
-            # Apply pagination manually
-            page = self.paginate_queryset(party_data)
-            if page is not None:
-                return self.get_paginated_response(page)
-
-            # Return non-paginated response in the expected format
-            return Response({
-                'count': len(party_data),
-                'next': None,
-                'previous': None,
-                'results': party_data
-            })
+            return Response(response_data)
 
         except Exception as e:
-            return Response(
-                {'error': f'정당 목록을 불러오는 중 오류가 발생했습니다: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"Error in PartyViewSet list: {e}")
+            # Return empty array on error to prevent frontend crashes
+            return Response({
+                'results': [],
+                'count': 0,
+                'error': 'Failed to fetch party data'
+            })
 
 
 class StatementListView(generics.ListAPIView):
