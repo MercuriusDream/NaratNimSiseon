@@ -1379,66 +1379,60 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
                                                         session_id,
                                                         bill_name,
                                                         debug=False):
-    """Process a single text segment by splitting it into eight sections by speaker markers to avoid JSON parsing errors."""
+    """Process a single text segment by splitting at ◯ markers and processing each speech individually."""
     if not bill_text_segment:
         return []
 
     logger.info(
-        f"🔍 Stage 1 (Speaker Detect with Eight-Section Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
+        f"🔍 Stage 1 (Speaker Detect with ◯ Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
     )
 
-    # Find speaker markers (◯) to determine split points
+    # Find all ◯ markers to determine individual speeches
     speaker_markers = []
     for i, char in enumerate(bill_text_segment):
         if char == '◯':
             speaker_markers.append(i)
     
-    if len(speaker_markers) < 8:
-        # If less than 8 speakers, process as single segment
+    if len(speaker_markers) < 2:
+        # If less than 2 speakers, process as single segment
         logger.info(f"Only {len(speaker_markers)} speaker markers found, processing as single segment")
         return process_single_segment_for_statements(bill_text_segment, session_id, bill_name, debug)
     
-    # Find split points at 1/8, 2/8, 3/8, 4/8, 5/8, 6/8, and 7/8 positions
-    split_indices = []
-    for i in range(1, 8):  # positions 1/8 through 7/8
-        split_idx = (len(speaker_markers) * i) // 8
-        split_indices.append(split_idx)
+    # Split at each ◯ marker to create individual speech segments
+    speech_segments = []
     
-    split_positions = [speaker_markers[idx] for idx in split_indices]
-    
-    # Create eight segments
-    segments = []
-    # First segment: from start to first split
-    segments.append(bill_text_segment[:split_positions[0]].strip())
-    
-    # Middle segments: from each split to the next
-    for i in range(len(split_positions) - 1):
-        segments.append(bill_text_segment[split_positions[i]:split_positions[i + 1]].strip())
-    
-    # Last segment: from last split to end
-    segments.append(bill_text_segment[split_positions[-1]:].strip())
+    # Create segments between each ◯ marker
+    for i in range(len(speaker_markers)):
+        start_pos = speaker_markers[i]
+        if i + 1 < len(speaker_markers):
+            end_pos = speaker_markers[i + 1]
+        else:
+            end_pos = len(bill_text_segment)
+        
+        segment = bill_text_segment[start_pos:end_pos].strip()
+        if segment:
+            speech_segments.append(segment)
     
     logger.info(
-        f"Splitting text into 8 sections at speaker markers {[idx + 1 for idx in split_indices]} "
-        f"out of {len(speaker_markers)} total markers. Segment sizes: "
-        f"{[len(seg) for seg in segments]} chars"
+        f"Split text into {len(speech_segments)} individual speech segments based on ◯ markers. "
+        f"Segment sizes: {[len(seg) for seg in speech_segments]} chars"
     )
     
     all_statements = []
     
-    # Process each segment
-    for i, segment in enumerate(segments):
+    # Process each speech segment individually
+    for i, segment in enumerate(speech_segments):
         if segment:
-            logger.info(f"Processing segment {i + 1}/8 for bill '{bill_name}' ({len(segment)} chars)")
+            logger.info(f"Processing speech segment {i + 1}/{len(speech_segments)} for bill '{bill_name}' ({len(segment)} chars)")
             segment_statements = process_single_segment_for_statements(segment, session_id, bill_name, debug)
             all_statements.extend(segment_statements)
             
             if not debug:
-                time.sleep(0.5)  # Brief pause between segments
+                time.sleep(0.3)  # Brief pause between segments
     
     logger.info(
-        f"✅ Combined processing for '{bill_name}' resulted in {len(all_statements)} statements "
-        f"from 8 segments with sizes: {[len(seg) for seg in segments]} chars"
+        f"✅ ◯-based processing for '{bill_name}' resulted in {len(all_statements)} statements "
+        f"from {len(speech_segments)} speech segments"
     )
     
     return all_statements
