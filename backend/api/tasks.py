@@ -1661,12 +1661,12 @@ def process_session_pdf(self,
         full_text = ""
         try:
             with pdfplumber.open(temp_pdf_path) as pdf:
-                # Check for encryption - pdfplumber handles some, but good to know
-                if pdf.is_encrypted:
+                # PDF not being encrypted is ensured
+                '''if pdf.is_encrypted:
                     logger.warning(
                         f"PDF {temp_pdf_path} is encrypted. Trying to extract text..."
                     )
-                    # pdfplumber might need password if it's owner-password encrypted against text extraction
+                    # pdfplumber might need password if it's owner-password encrypted against text extraction'''
 
                 pages = pdf.pages
                 logger.info(
