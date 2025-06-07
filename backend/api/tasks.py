@@ -179,13 +179,19 @@ def fetch_speaker_details(speaker_name):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_continuous_sessions(self=None, force=False, debug=False, start_date=None):
+def fetch_continuous_sessions(self=None,
+                              force=False,
+                              debug=False,
+                              start_date=None):
     """Fetch sessions starting from a specific date or continue from last session."""
     try:
-        logger.info(f"🔍 Starting continuous session fetch (force={force}, debug={debug}, start_date={start_date})")
+        logger.info(
+            f"🔍 Starting continuous session fetch (force={force}, debug={debug}, start_date={start_date})"
+        )
 
         # Check if we have the required settings
-        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+        if not hasattr(settings,
+                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
             logger.error("❌ ASSEMBLY_API_KEY not configured")
             raise ValueError("ASSEMBLY_API_KEY not configured")
 
@@ -195,10 +201,13 @@ def fetch_continuous_sessions(self=None, force=False, debug=False, start_date=No
         if start_date:
             from datetime import datetime
             start_datetime = datetime.fromisoformat(start_date)
-            logger.info(f"📅 Continuing from date: {start_datetime.strftime('%Y-%m')}")
+            logger.info(
+                f"📅 Continuing from date: {start_datetime.strftime('%Y-%m')}")
         else:
             start_datetime = datetime.now()
-            logger.info(f"📅 Starting from current date: {start_datetime.strftime('%Y-%m')}")
+            logger.info(
+                f"📅 Starting from current date: {start_datetime.strftime('%Y-%m')}"
+            )
 
         # Fetch sessions month by month going backwards from start date
         current_date = start_datetime
@@ -215,7 +224,7 @@ def fetch_continuous_sessions(self=None, force=False, debug=False, start_date=No
                 year -= 1
 
             conf_date = f"{year:04d}-{month:02d}"
-            
+
             params = {
                 "KEY": settings.ASSEMBLY_API_KEY,
                 "Type": "json",
@@ -235,41 +244,54 @@ def fetch_continuous_sessions(self=None, force=False, debug=False, start_date=No
                 data = response.json()
 
                 if debug:
-                    logger.info(f"🐛 DEBUG: API Response status for {conf_date}: {response.status_code}")
+                    logger.info(
+                        f"🐛 DEBUG: API Response status for {conf_date}: {response.status_code}"
+                    )
 
-                sessions_data = extract_sessions_from_response(data, debug=debug)
-                
+                sessions_data = extract_sessions_from_response(data,
+                                                               debug=debug)
+
                 if sessions_data:
                     sessions_found = True
-                    logger.info(f"✅ Found {len(sessions_data)} sessions for {conf_date}")
-                    
+                    logger.info(
+                        f"✅ Found {len(sessions_data)} sessions for {conf_date}"
+                    )
+
                     # Process sessions for this month
-                    process_sessions_data(sessions_data, force=force, debug=debug)
-                    
+                    process_sessions_data(sessions_data,
+                                          force=force,
+                                          debug=debug)
+
                     # Small delay between requests to be respectful
                     if not debug:
                         time.sleep(1)
                 else:
                     logger.info(f"❌ No sessions found for {conf_date}")
-                    
+
                     # If we haven't found any sessions in the last 6 months, stop
                     if months_back > 6 and not sessions_found:
-                        logger.info("🛑 No sessions found in recent months, stopping search")
+                        logger.info(
+                            "🛑 No sessions found in recent months, stopping search"
+                        )
                         break
 
             except Exception as e:
                 logger.warning(f"⚠️ Error fetching {conf_date}: {e}")
                 if debug:
-                    logger.info(f"🐛 DEBUG: Full error for {conf_date}: {type(e).__name__}: {e}")
+                    logger.info(
+                        f"🐛 DEBUG: Full error for {conf_date}: {type(e).__name__}: {e}"
+                    )
                 continue
 
         # After session collection, fetch additional data
         if not debug and sessions_found:
             logger.info("🔄 Starting additional data collection...")
             if is_celery_available():
-                fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=force, debug=debug)
+                fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=force,
+                                                              debug=debug)
             else:
-                fetch_additional_data_nepjpxkkabqiqpbvk(force=force, debug=debug)
+                fetch_additional_data_nepjpxkkabqiqpbvk(force=force,
+                                                        debug=debug)
 
         if sessions_found:
             logger.info("🎉 Continuous session fetch completed")
@@ -282,7 +304,8 @@ def fetch_continuous_sessions(self=None, force=False, debug=False, start_date=No
                 try:
                     self.retry(exc=e)
                 except MaxRetriesExceededError:
-                    logger.error("Max retries exceeded for fetch_continuous_sessions")
+                    logger.error(
+                        "Max retries exceeded for fetch_continuous_sessions")
                     raise
             else:
                 logger.error("Sync execution failed, no retry available")
@@ -1118,7 +1141,8 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
                 bills_context = get_bills_context(session_id)
 
                 # Process the extracted text using the helper function
-                process_pdf_statements(full_text, session_id, session, bills_context, debug)
+                process_pdf_statements(full_text, session_id, session,
+                                       bills_context, debug)
 
         except Exception as e:
             logger.error(
@@ -1255,7 +1279,11 @@ def analyze_statement_categories(self=None, statement_id=None):
                 raise
 
 
-def process_pdf_statements(full_text, session_id, session, bills_context, debug=False):
+def process_pdf_statements(full_text,
+                           session_id,
+                           session,
+                           bills_context,
+                           debug=False):
     """Helper function to process PDF statements."""
     try:
         # Skip processing if no LLM available
@@ -1361,30 +1389,38 @@ def process_pdf_statements(full_text, session_id, session, bills_context, debug=
         raise
 
 
-def extract_statements_with_llm_validation(text, session_id, bills_context, debug=False):
+def extract_statements_with_llm_validation(text,
+                                           session_id,
+                                           bills_context,
+                                           debug=False):
     """Extract statements using two-stage LLM approach: speaker detection + content analysis."""
 
     if not model:
-        logger.warning("❌ LLM model not available, falling back to regex extraction")
+        logger.warning(
+            "❌ LLM model not available, falling back to regex extraction")
         return extract_statements_with_regex_fallback(text, session_id, debug)
 
-    logger.info(f"🤖 Starting two-stage LLM extraction for session: {session_id}")
+    logger.info(
+        f"🤖 Starting two-stage LLM extraction for session: {session_id}")
 
     try:
         # Configure lighter model for speaker detection
-        speaker_detection_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        speaker_detection_model = genai.GenerativeModel(
+            'gemini-2.0-flash-lite')
 
         # Stage 1: Speaker Detection and Boundary Identification
-        logger.info(f"🔍 Stage 1: Detecting speakers and speech boundaries (session: {session_id})")
+        logger.info(
+            f"🔍 Stage 1: Detecting speakers and speech boundaries (session: {session_id})"
+        )
 
         speaker_detection_prompt = f"""
-다음은 국회 회의록 텍스트입니다. 이 텍스트에서 실제 국회의원들의 발언 구간을 정확히 식별해주세요.
+당신은 기록가입니다. 당신의 기록은 미래에 사람들을 살릴 것이므로, 발언 구간을 하나도 빠뜨리면 안 됩니다. 다음은 국회 회의록 텍스트입니다. 이 텍스트에서 실제 국회의원들의 발언 구간을 정확히 식별해주세요.
 
 회의 관련 의안:
 {bills_context}
 
 회의록 텍스트:
-{text[:8000]}  # Limit text length for efficiency
+{text}
 
 다음 기준으로 발언을 식별해주세요:
 1. ◯ 기호로 시작하는 발언만 추출
@@ -1406,16 +1442,19 @@ JSON 형식으로 응답해주세요:
 }}
 """
 
-        stage1_response = speaker_detection_model.generate_content(speaker_detection_prompt)
+        stage1_response = speaker_detection_model.generate_content(
+            speaker_detection_prompt)
 
         if not stage1_response.text:
-            logger.warning("❌ No response from Stage 1 LLM, falling back to regex")
-            return extract_statements_with_regex_fallback(text, session_id, debug)
+            logger.warning(
+                "❌ No response from Stage 1 LLM, falling back to regex")
+            return extract_statements_with_regex_fallback(
+                text, session_id, debug)
 
         # Parse Stage 1 response
         stage1_text = stage1_response.text.strip()
         logger.info(f"🔍 Raw Stage 1 response: {stage1_text[:500]}...")
-        
+
         if stage1_text.startswith('```json'):
             stage1_text = stage1_text[7:-3].strip()
         elif stage1_text.startswith('```'):
@@ -1426,16 +1465,20 @@ JSON 형식으로 응답해주세요:
         import json as json_module
         stage1_data = json_module.loads(stage1_text)
         speakers_detected = stage1_data.get('speakers_detected', [])
-        
+
         logger.info(f"🔍 Parsed speakers_detected: {speakers_detected}")
-        
+
         for i, speaker in enumerate(speakers_detected):
             logger.info(f"🔍 Speaker {i+1} details: {speaker}")
 
-        logger.info(f"✅ Stage 1 completed: Found {len(speakers_detected)} potential speakers")
+        logger.info(
+            f"✅ Stage 1 completed: Found {len(speakers_detected)} potential speakers"
+        )
 
         # Stage 2: Extract and analyze substantial policy discussions
-        logger.info(f"🔍 Stage 2: Extracting and analyzing policy content (session: {session_id})")
+        logger.info(
+            f"🔍 Stage 2: Extracting and analyzing policy content (session: {session_id})"
+        )
 
         analyzed_statements = []
 
@@ -1443,13 +1486,15 @@ JSON 형식으로 응답해주세요:
             speaker_name = speaker_info.get('speaker_name', 'Unknown')
             is_substantial = speaker_info.get('is_substantial', False)
             speech_type = speaker_info.get('speech_type', 'unknown')
-            
+
             logger.info(f"🔍 Processing speaker {i}: {speaker_name}")
             logger.info(f"   - is_substantial: {is_substantial}")
             logger.info(f"   - speech_type: {speech_type}")
-            
+
             if not is_substantial or speech_type != 'policy_discussion':
-                logger.info(f"⚠️ Skipping speaker {speaker_name} - substantial: {is_substantial}, type: {speech_type}")
+                logger.info(
+                    f"⚠️ Skipping speaker {speaker_name} - substantial: {is_substantial}, type: {speech_type}"
+                )
                 continue
 
             # Extract the actual speech content using markers
@@ -1461,23 +1506,32 @@ JSON 형식으로 응답해주세요:
             logger.info(f"   - end_marker: '{end_marker[:50]}...'")
 
             # Find speech content between markers
-            speech_content = extract_speech_between_markers(text, start_marker, end_marker, speaker_name)
-            
-            logger.info(f"   - extracted length: {len(speech_content) if speech_content else 0}")
+            speech_content = extract_speech_between_markers(
+                text, start_marker, end_marker, speaker_name)
+
+            logger.info(
+                f"   - extracted length: {len(speech_content) if speech_content else 0}"
+            )
             if speech_content:
-                logger.info(f"   - content preview: '{speech_content[:100]}...'")
+                logger.info(
+                    f"   - content preview: '{speech_content[:100]}...'")
 
             if not speech_content or len(speech_content) < 10:
-                logger.info(f"⚠️ Skipping {speaker_name} - insufficient content (length: {len(speech_content) if speech_content else 0})")
+                logger.info(
+                    f"⚠️ Skipping {speaker_name} - insufficient content (length: {len(speech_content) if speech_content else 0})"
+                )
                 continue
 
-            logger.info(f"🤖 Analyzing statement {i}/{len(speakers_detected)} from {speaker_name} (session: {session_id})")
+            logger.info(
+                f"🤖 Analyzing statement {i}/{len(speakers_detected)} from {speaker_name} (session: {session_id})"
+            )
 
             # Stage 2: Analyze the extracted speech
-            analysis_result = analyze_single_statement({
-                'speaker_name': speaker_name,
-                'text': speech_content
-            }, session_id, debug)
+            analysis_result = analyze_single_statement(
+                {
+                    'speaker_name': speaker_name,
+                    'text': speech_content
+                }, session_id, debug)
 
             analyzed_statements.append(analysis_result)
 
@@ -1485,7 +1539,9 @@ JSON 형식으로 응답해주세요:
             if not debug:
                 time.sleep(0.5)
 
-        logger.info(f"✅ Two-stage LLM extraction completed: {len(analyzed_statements)} statements (session: {session_id})")
+        logger.info(
+            f"✅ Two-stage LLM extraction completed: {len(analyzed_statements)} statements (session: {session_id})"
+        )
         return analyzed_statements
 
     except Exception as e:
@@ -1494,7 +1550,8 @@ JSON 형식으로 응답해주세요:
         return extract_statements_with_regex_fallback(text, session_id, debug)
 
 
-def extract_speech_between_markers(text, start_marker, end_marker, speaker_name):
+def extract_speech_between_markers(text, start_marker, end_marker,
+                                   speaker_name):
     """Extract speech content between start and end markers."""
     try:
         # Find the start position
@@ -1540,7 +1597,9 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
     """Fallback regex extraction method (existing implementation)."""
     import re
 
-    logger.info(f"📄 Extracting statements using regex fallback (session: {session_id})")
+    logger.info(
+        f"📄 Extracting statements using regex fallback (session: {session_id})"
+    )
 
     # Clean up the text first
     text = re.sub(r'\n+', '\n', text)
@@ -1552,33 +1611,37 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
 
     for speaker_raw, content_raw in matches:
         speaker_name = speaker_raw.strip()
-        speaker_name = re.sub(r'\s*(의원|위원장|장관|국장|의장|부의장|차관|실장|국무총리|대통령|부총리)\s*', '', speaker_name).strip()
+        speaker_name = re.sub(
+            r'\s*(의원|위원장|장관|국장|의장|부의장|차관|실장|국무총리|대통령|부총리)\s*', '',
+            speaker_name).strip()
 
         if not speaker_name or not content_raw.strip():
             continue
 
         # Enhanced filtering for non-person entities
         role_patterns = [
-            r'.*대리$', r'^의사$', r'^위원장$', r'.*위원회.*', r'.*부.*장관.*', 
-            r'.*청장.*', r'.*실장.*', r'^사회자$', r'^진행자$', r'.*개정법률안.*', 
-            r'.*특별법.*', r'.*진흥법.*', r'.*관리법.*', r'.*촉진법.*', r'.*보호법.*', 
-            r'.*법률.*', r'.*법$', r'.*육성.*', r'.*지원.*', r'^재난$', r'^인구감소지역$', 
-            r'^우주개발$', r'^여성과학기술인$', r'.*기획재정부.*', r'.*총장\([^)]+\).*', 
-            r'^탄소소재$', r'^전기공사업법$', r'^특허법$', r'.*소재$', r'.*업법$', r'겸.*부$'
+            r'.*대리$', r'^의사$', r'^위원장$', r'.*위원회.*', r'.*부.*장관.*', r'.*청장.*',
+            r'.*실장.*', r'^사회자$', r'^진행자$', r'.*개정법률안.*', r'.*특별법.*',
+            r'.*진흥법.*', r'.*관리법.*', r'.*촉진법.*', r'.*보호법.*', r'.*법률.*', r'.*법$',
+            r'.*육성.*', r'.*지원.*', r'^재난$', r'^인구감소지역$', r'^우주개발$',
+            r'^여성과학기술인$', r'.*기획재정부.*', r'.*총장\([^)]+\).*', r'^탄소소재$',
+            r'^전기공사업법$', r'^특허법$', r'.*소재$', r'.*업법$', r'겸.*부$'
         ]
 
         korean_surname_pattern = r'^[김이박최정강조윤장임한오서신권황안송류전고문양손배백허남심노정하곽성차주우구신임나전민유진지엄채원천방공강현함변염양변홍]'
 
-        is_role = any(re.match(pattern, speaker_name) for pattern in role_patterns)
+        is_role = any(
+            re.match(pattern, speaker_name) for pattern in role_patterns)
         is_likely_person = (
-            re.match(korean_surname_pattern, speaker_name) and 
-            2 <= len(speaker_name) <= 4 and
-            not any(char in speaker_name for char in ['(', ')', '법', '부', '청', '원회', '관', '장'])
-        )
+            re.match(korean_surname_pattern, speaker_name)
+            and 2 <= len(speaker_name) <= 4
+            and not any(char in speaker_name
+                        for char in ['(', ')', '법', '부', '청', '원회', '관', '장']))
 
         if is_role or not is_likely_person:
             if debug:
-                logger.info(f"🐛 DEBUG: Skipping non-person speaker: {speaker_name}")
+                logger.info(
+                    f"🐛 DEBUG: Skipping non-person speaker: {speaker_name}")
             continue
 
         content = content_raw.strip()
@@ -1590,9 +1653,9 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
 
         # Check for procedural content
         procedural_phrases = [
-            '투표해 주시기 바랍니다', '투표를 마치겠습니다', '가결되었음을 선포합니다', 
-            '수고하셨습니다', '상정합니다', '의결하도록 하겠습니다', '원안가결되었음을 선포합니다',
-            '폐회를 선포합니다', '개회를 선포합니다', '회의를 시작하겠습니다'
+            '투표해 주시기 바랍니다', '투표를 마치겠습니다', '가결되었음을 선포합니다', '수고하셨습니다', '상정합니다',
+            '의결하도록 하겠습니다', '원안가결되었음을 선포합니다', '폐회를 선포합니다', '개회를 선포합니다',
+            '회의를 시작하겠습니다'
         ]
 
         is_procedural = any(phrase in content for phrase in procedural_phrases)
@@ -1600,16 +1663,19 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
             continue
 
         policy_indicators = [
-            '법률안', '개정', '제안', '필요', '문제', '개선', '정책', '방안', 
-            '대책', '예산', '추진', '계획', '검토', '의견', '생각', '판단',
-            '국민', '시민', '사회', '경제', '정치', '교육', '복지', '환경'
+            '법률안', '개정', '제안', '필요', '문제', '개선', '정책', '방안', '대책', '예산', '추진',
+            '계획', '검토', '의견', '생각', '판단', '국민', '시민', '사회', '경제', '정치', '교육',
+            '복지', '환경'
         ]
 
-        has_policy_content = any(indicator in content for indicator in policy_indicators)
+        has_policy_content = any(indicator in content
+                                 for indicator in policy_indicators)
         if len(content) > 200 or has_policy_content:
             statements.append({'speaker_name': speaker_name, 'text': content})
 
-    logger.info(f"✅ Regex fallback completed: {len(statements)} statements (session: {session_id})")
+    logger.info(
+        f"✅ Regex fallback completed: {len(statements)} statements (session: {session_id})"
+    )
     return statements
 
 
@@ -1708,10 +1774,14 @@ def get_bills_context(session_id):
         return ""
 
 
-def parse_and_analyze_statements_from_text(text, session_id, bills_context, debug=False):
+def parse_and_analyze_statements_from_text(text,
+                                           session_id,
+                                           bills_context,
+                                           debug=False):
     """Parse statements from PDF text using regex, then analyze each individually."""
     # Step 1: Extract statements using regex
-    statements = extract_statements_with_llm_validation(text, session_id, bills_context, debug)
+    statements = extract_statements_with_llm_validation(
+        text, session_id, bills_context, debug)
 
     if not statements:
         logger.warning(
