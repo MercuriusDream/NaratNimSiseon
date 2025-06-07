@@ -1424,19 +1424,30 @@ def extract_statements_with_llm_validation(text,
 
 다음 기준으로 발언을 식별해주세요:
 1. ◯ 기호로 시작하는 발언만 추출
-2. 실제 사람 이름(국회의원)만 포함, 법률명이나 기관명 제외
-3. 절차적 발언(투표, 개회, 폐회 등)은 제외
-4. 최소 50자 이상의 의미있는 정책 토론 내용만 포함
+2. 발언자가 실제 사람 이름인지 판단 (한국 성씨로 시작하는 2-4글자 이름)
+3. 법률명, 기관명, 직책명만 있는 경우는 제외 (예: "탄소소재법", "기획재정부", "위원장" 등)
+4. 절차적 발언과 정책 토론을 구분하여 분류
+5. 발언 내용의 실질성 판단 (단순 절차 vs 의미있는 정책 논의)
+
+발언자 이름 정리 규칙:
+- "김철수의원" → "김철수"
+- "이영희위원장" → "이영희" 
+- "박민수장관" → "박민수"
+- 괄호 안 정보는 제거
+- 직책명은 제거하되 실제 인명은 보존
 
 JSON 형식으로 응답해주세요:
 {{
     "speakers_detected": [
         {{
-            "speaker_name": "발언자 실명",
+            "speaker_name": "정리된 발언자 실명",
+            "original_speaker_text": "원본 발언자 텍스트",
             "start_marker": "발언 시작 부분 텍스트 (20자)",
             "end_marker": "발언 종료 부분 텍스트 (20자)",
             "is_substantial": true/false,
-            "speech_type": "policy_discussion/procedural/other"
+            "is_real_person": true/false,
+            "speech_type": "policy_discussion/procedural/other",
+            "filtering_reason": "판단 근거"
         }}
     ]
 }}
@@ -1485,11 +1496,22 @@ JSON 형식으로 응답해주세요:
         for i, speaker_info in enumerate(speakers_detected, 1):
             speaker_name = speaker_info.get('speaker_name', 'Unknown')
             is_substantial = speaker_info.get('is_substantial', False)
+            is_real_person = speaker_info.get('is_real_person', False)
             speech_type = speaker_info.get('speech_type', 'unknown')
+            filtering_reason = speaker_info.get('filtering_reason', '')
 
             logger.info(f"🔍 Processing speaker {i}: {speaker_name}")
             logger.info(f"   - is_substantial: {is_substantial}")
+            logger.info(f"   - is_real_person: {is_real_person}")
             logger.info(f"   - speech_type: {speech_type}")
+            logger.info(f"   - filtering_reason: {filtering_reason}")
+
+            # Trust LLM's judgment on person validation and content substance
+            if not is_real_person:
+                logger.info(
+                    f"⚠️ Skipping non-person speaker {speaker_name} - {filtering_reason}"
+                )
+                continue
 
             if not is_substantial or speech_type != 'policy_discussion':
                 logger.info(
@@ -1594,11 +1616,11 @@ def extract_speech_between_markers(text, start_marker, end_marker,
 
 
 def extract_statements_with_regex_fallback(text, session_id, debug=False):
-    """Fallback regex extraction method (existing implementation)."""
+    """Simple fallback extraction method without regex filtering."""
     import re
 
     logger.info(
-        f"📄 Extracting statements using regex fallback (session: {session_id})"
+        f"📄 Extracting statements using simple fallback (session: {session_id})"
     )
 
     # Clean up the text first
@@ -1611,70 +1633,24 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
 
     for speaker_raw, content_raw in matches:
         speaker_name = speaker_raw.strip()
-        speaker_name = re.sub(
-            r'\s*(의원|위원장|장관|국장|의장|부의장|차관|실장|국무총리|대통령|부총리)\s*', '',
-            speaker_name).strip()
+        # Only basic cleanup, let LLM handle name validation
+        speaker_name = re.sub(r'\s*(의원|위원장|장관)\s*', '', speaker_name).strip()
 
         if not speaker_name or not content_raw.strip():
-            continue
-
-        # Enhanced filtering for non-person entities
-        role_patterns = [
-            r'.*대리$', r'^의사$', r'^위원장$', r'.*위원회.*', r'.*부.*장관.*', r'.*청장.*',
-            r'.*실장.*', r'^사회자$', r'^진행자$', r'.*개정법률안.*', r'.*특별법.*',
-            r'.*진흥법.*', r'.*관리법.*', r'.*촉진법.*', r'.*보호법.*', r'.*법률.*', r'.*법$',
-            r'.*육성.*', r'.*지원.*', r'^재난$', r'^인구감소지역$', r'^우주개발$',
-            r'^여성과학기술인$', r'.*기획재정부.*', r'.*총장\([^)]+\).*', r'^탄소소재$',
-            r'^전기공사업법$', r'^특허법$', r'.*소재$', r'.*업법$', r'겸.*부$'
-        ]
-
-        korean_surname_pattern = r'^[김이박최정강조윤장임한오서신권황안송류전고문양손배백허남심노정하곽성차주우구신임나전민유진지엄채원천방공강현함변염양변홍]'
-
-        is_role = any(
-            re.match(pattern, speaker_name) for pattern in role_patterns)
-        is_likely_person = (
-            re.match(korean_surname_pattern, speaker_name)
-            and 2 <= len(speaker_name) <= 4
-            and not any(char in speaker_name
-                        for char in ['(', ')', '법', '부', '청', '원회', '관', '장']))
-
-        if is_role or not is_likely_person:
-            if debug:
-                logger.info(
-                    f"🐛 DEBUG: Skipping non-person speaker: {speaker_name}")
             continue
 
         content = content_raw.strip()
         content = re.sub(r'\([^)]*\)', '', content)
         content = re.sub(r'\s+', ' ', content).strip()
 
-        if len(content) < 100:
+        # Only basic length filter, let LLM handle content validation
+        if len(content) < 50:
             continue
 
-        # Check for procedural content
-        procedural_phrases = [
-            '투표해 주시기 바랍니다', '투표를 마치겠습니다', '가결되었음을 선포합니다', '수고하셨습니다', '상정합니다',
-            '의결하도록 하겠습니다', '원안가결되었음을 선포합니다', '폐회를 선포합니다', '개회를 선포합니다',
-            '회의를 시작하겠습니다'
-        ]
-
-        is_procedural = any(phrase in content for phrase in procedural_phrases)
-        if is_procedural:
-            continue
-
-        policy_indicators = [
-            '법률안', '개정', '제안', '필요', '문제', '개선', '정책', '방안', '대책', '예산', '추진',
-            '계획', '검토', '의견', '생각', '판단', '국민', '시민', '사회', '경제', '정치', '교육',
-            '복지', '환경'
-        ]
-
-        has_policy_content = any(indicator in content
-                                 for indicator in policy_indicators)
-        if len(content) > 200 or has_policy_content:
-            statements.append({'speaker_name': speaker_name, 'text': content})
+        statements.append({'speaker_name': speaker_name, 'text': content})
 
     logger.info(
-        f"✅ Regex fallback completed: {len(statements)} statements (session: {session_id})"
+        f"✅ Simple fallback completed: {len(statements)} statements (session: {session_id})"
     )
     return statements
 
@@ -1852,15 +1828,12 @@ def create_statement_categories(statement, policy_categories):
 
 
 def get_or_create_speaker(speaker_name, debug=False):
-    """Get or create speaker by name."""
+    """Get or create speaker by name - trusts LLM-processed names."""
     if not speaker_name:
         return None
 
-    # Clean speaker name
-    speaker_name = speaker_name.replace('의원',
-                                        '').replace('위원장',
-                                                    '').replace('장관',
-                                                                '').strip()
+    # Trust the LLM-processed name as-is, only basic whitespace cleanup
+    speaker_name = speaker_name.strip()
 
     try:
         # Ensure database connection
