@@ -44,7 +44,11 @@ class Speaker(models.Model):
     naas_cd = models.CharField(max_length=20, primary_key=True, verbose_name=_("국회의원 코드"))
     naas_nm = models.CharField(max_length=100, help_text=_("국회의원명"), verbose_name=_("국회의원명"))
     naas_ch_nm = models.CharField(max_length=100, blank=True, help_text=_("국회의원한자명"), verbose_name=_("국회의원 한자명"))
-    plpt_nm = models.CharField(max_length=100, help_text=_("정당명"), verbose_name=_("정당명"))
+    plpt_nm = models.CharField(max_length=500, help_text=_("정당명 (전체 이력)"), verbose_name=_("정당명"))
+    current_party = models.ForeignKey('Party', on_delete=models.SET_NULL, null=True, blank=True, 
+                                    related_name='current_members', verbose_name=_("현재 정당"))
+    party_history = models.ManyToManyField('Party', through='SpeakerPartyHistory', 
+                                         related_name='historical_members', verbose_name=_("정당 이력"))
     elecd_nm = models.CharField(max_length=200, blank=True, null=True, help_text=_("선거구명"), verbose_name=_("선거구명"))
     elecd_div_nm = models.CharField(max_length=100, blank=True, null=True, help_text=_("선거구구분명"), verbose_name=_("선거구 구분명"))
     cmit_nm = models.TextField(blank=True, null=True, help_text=_("대표위원회명"), verbose_name=_("대표위원회명"))
@@ -62,7 +66,19 @@ class Speaker(models.Model):
         verbose_name_plural = _("국회의원")
 
     def __str__(self):
-        return f"{self.naas_nm} ({self.plpt_nm})"
+        current_party_name = self.current_party.name if self.current_party else "정당정보없음"
+        return f"{self.naas_nm} ({current_party_name})"
+    
+    def get_party_list(self):
+        """Returns a list of parties from the plpt_nm field"""
+        if not self.plpt_nm:
+            return []
+        return [party.strip() for party in self.plpt_nm.split('/') if party.strip()]
+    
+    def get_current_party_name(self):
+        """Returns the most recent (last) party from the party history"""
+        parties = self.get_party_list()
+        return parties[-1] if parties else "정당정보없음"
 
 class Statement(models.Model):
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='statements', verbose_name=_("관련 회의"))
@@ -80,6 +96,25 @@ class Statement(models.Model):
         ordering = ['-created_at']
         verbose_name = _("발언")
         verbose_name_plural = _("발언")
+
+
+
+class SpeakerPartyHistory(models.Model):
+    speaker = models.ForeignKey(Speaker, on_delete=models.CASCADE, verbose_name=_("국회의원"))
+    party = models.ForeignKey(Party, on_delete=models.CASCADE, verbose_name=_("정당"))
+    order = models.PositiveIntegerField(help_text=_("정당 이력 순서 (0부터 시작)"), verbose_name=_("순서"))
+    is_current = models.BooleanField(default=False, help_text=_("현재 소속 정당 여부"), verbose_name=_("현재 정당"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
+
+    class Meta:
+        ordering = ['speaker', 'order']
+        unique_together = ['speaker', 'party', 'order']
+        verbose_name = _("국회의원 정당 이력")
+        verbose_name_plural = _("국회의원 정당 이력")
+
+    def __str__(self):
+        return f"{self.speaker.naas_nm} - {self.party.name} ({self.order})"
+
 
     def __str__(self):
         return f"{self.speaker.naas_nm}의 발언 ({self.created_at})"

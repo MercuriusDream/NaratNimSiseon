@@ -143,8 +143,11 @@ class Command(BaseCommand):
                         continue
                     
                     party_name = member_data.get('PLPT_NM', '정당정보없음').strip()
+                    
+                    # Extract all parties from party history
                     if party_name and party_name != '정당정보없음':
-                        unique_parties.add(party_name)
+                        party_list = [p.strip() for p in party_name.split('/') if p.strip()]
+                        unique_parties.update(party_list)
                     
                     speaker, created = Speaker.objects.update_or_create(
                         naas_cd=naas_cd,
@@ -185,13 +188,23 @@ class Command(BaseCommand):
             self.style.SUCCESS(f'✅ Members processed: {created_count} created, {updated_count} updated')
         )
         
-        # Create Party objects from clean API data
+        # Create Party objects from clean API data and existing speaker data
         self.fetch_and_create_parties(force=force, debug=debug)
+        
+        # Process speaker party histories
+        self.process_speaker_party_histories()
 
     def create_parties_from_speakers(self):
-        """Create Party objects from clean API data instead of messy speaker data"""
+        """Create Party objects from clean API data and process speaker histories"""
         self.stdout.write('📝 Creating Party objects from Assembly API data...')
         self.fetch_and_create_parties(force=False, debug=False)
+        
+        # Also create parties from existing speaker data
+        self.stdout.write('📝 Creating Party objects from existing Speaker data...')
+        self.create_parties_from_existing_speakers()
+        
+        # Process speaker party histories
+        self.process_speaker_party_histories()
 
     def fetch_and_create_parties(self, force=False, debug=False):
         """Fetch clean party data from Assembly APIs and create Party objects"""
@@ -241,6 +254,113 @@ class Command(BaseCommand):
         # Create Party objects
         party_created_count = 0
         party_updated_count = 0
+
+
+    def process_speaker_party_histories(self):
+        """Process all speakers and create party history records"""
+        from api.models import Party, SpeakerPartyHistory
+        
+        self.stdout.write('🔄 Processing speaker party histories...')
+        
+        speakers = Speaker.objects.all()
+        processed_count = 0
+        
+        for speaker in speakers:
+            try:
+                party_list = speaker.get_party_list()
+                if not party_list:
+                    continue
+                
+                # Clear existing history for this speaker
+                SpeakerPartyHistory.objects.filter(speaker=speaker).delete()
+                
+                # Create party history records
+                for order, party_name in enumerate(party_list):
+                    try:
+                        party, created = Party.objects.get_or_create(
+                            name=party_name,
+                            defaults={'description': f'{party_name} - 자동 생성됨'}
+                        )
+                        
+                        is_current = (order == len(party_list) - 1)  # Last party is current
+                        
+                        SpeakerPartyHistory.objects.create(
+                            speaker=speaker,
+                            party=party,
+                            order=order,
+                            is_current=is_current
+                        )
+                        
+                        # Set current party
+                        if is_current:
+                            speaker.current_party = party
+                            speaker.save(update_fields=['current_party'])
+                        
+                    except Exception as e:
+
+
+    def create_parties_from_existing_speakers(self):
+        """Create Party objects from existing Speaker data party histories"""
+        from api.models import Party
+        
+        unique_parties = set()
+        
+        # Get all unique parties from speaker data
+        speakers = Speaker.objects.all()
+        for speaker in speakers:
+            party_list = speaker.get_party_list()
+            unique_parties.update(party_list)
+        
+        self.stdout.write(f'📝 Creating Party objects for {len(unique_parties)} unique parties...')
+        
+        party_created_count = 0
+        
+        for party_name in unique_parties:
+            if not party_name or party_name == '정당정보없음':
+                continue
+                
+            try:
+                party, created = Party.objects.get_or_create(
+                    name=party_name,
+                    defaults={
+                        'description': f'{party_name} - 국회의원 데이터에서 추출',
+                        'slogan': '',
+                        'logo_url': ''
+                    }
+                )
+                
+                if created:
+                    party_created_count += 1
+                    self.stdout.write(f'✨ Created party: {party_name}')
+                    
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f'❌ Error creating party {party_name}: {e}')
+                )
+                continue
+        
+        self.stdout.write(
+            self.style.SUCCESS(f'✅ Created {party_created_count} new parties from speaker data')
+        )
+
+
+                        self.stdout.write(f'⚠️  Warning: Could not process party "{party_name}" for {speaker.naas_nm}: {e}')
+                        continue
+                
+                processed_count += 1
+                
+                if processed_count % 50 == 0:
+                    self.stdout.write(f'🔄 Processed {processed_count} speakers...')
+                    
+            except Exception as e:
+                self.stdout.write(f'❌ Error processing speaker {speaker.naas_nm}: {e}')
+                continue
+        
+        self.stdout.write(
+            self.style.SUCCESS(f'✅ Speaker party histories processed: {processed_count} speakers')
+        )
+
+
         
         self.stdout.write(f'📝 Creating/updating {len(all_parties)} parties from API data...')
         
