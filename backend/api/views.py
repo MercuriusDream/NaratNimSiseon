@@ -271,7 +271,7 @@ class PartyViewSet(viewsets.ModelViewSet):
                 # Skip if no members found
                 if member_count == 0:
                     continue
-                
+
                 # Debug logging for era detection
                 if party.name in ['더불어민주당', '국민의힘', '조국혁신당']:
                     logger.info(f"Party {party.name}: highest_era={highest_era}, member_count={member_count}")
@@ -322,7 +322,7 @@ class PartyViewSet(viewsets.ModelViewSet):
             page = self.paginate_queryset(party_data)
             if page is not None:
                 return self.get_paginated_response(page)
-            
+
             # Return non-paginated response in the expected format
             return Response({
                 'count': len(party_data),
@@ -926,32 +926,47 @@ def parties_list(request):
             highest_era = 0
             member_count = 0
 
-            for speaker in all_speakers:
-                # Extract assembly era from gtelt_eraco field (e.g., "제22대" -> 22)
-                era_text = speaker.gtelt_eraco or ""
-                
-                # Try different methods to extract era number
-                import re
-                era_match = re.search(r'(\d+)대', era_text)
-                if era_match:
-                    era = int(era_match.group(1))
-                    if era > highest_era:
-                        highest_era = era
-                else:
-                    # Fallback: look for any numbers in the text
-                    era_numbers = re.findall(r'\d+', era_text)
-                    for num_str in era_numbers:
-                        num = int(num_str)
-                        if 15 <= num <= 25:  # Reasonable range for assembly eras
-                            if num > highest_era:
-                                highest_era = num
-
-            # Count members (prioritize current era if available)
-            current_speakers = Speaker.objects.filter(
-                plpt_nm__icontains=party.name, 
-                gtelt_eraco__icontains='22'
+            # Check if this is a current party (from nepjpxkkabqiqpbvk API)
+            current_era_speakers = all_speakers.filter(
+                Q(gtelt_eraco__icontains='22') | Q(gtelt_eraco__icontains='제22대')
             )
-            member_count = current_speakers.count() if current_speakers.exists() else all_speakers.count()
+
+            if current_era_speakers.exists():
+                highest_era = 22
+            else:
+                # For historical parties, extract era from gtelt_eraco field
+                for speaker in all_speakers:
+                    era_text = speaker.gtelt_eraco or ""
+
+                    import re
+                    era_match = re.search(r'(\d+)대', era_text)
+                    if era_match:
+                        era = int(era_match.group(1))
+                        if era > highest_era:
+                            highest_era = era
+                    else:
+                        era_numbers = re.findall(r'\d+', era_text)
+                        for num_str in era_numbers:
+                            num = int(num_str)
+                            if 15 <= num <= 25:
+                                if num > highest_era:
+                                    highest_era = num
+
+                # If still no era detected but party has many members, likely current
+                if highest_era == 0 and all_speakers.count() > 10:
+                    major_current_parties = ['더불어민주당', '국민의힘', '조국혁신당', '개혁신당', '진보당', '기본소득당']
+                    if any(current_party in party.name for current_party in major_current_parties):
+                        highest_era = 22
+
+            # Count members based on era
+            if highest_era == 22:
+                member_count = all_speakers.count()
+            else:
+                era_specific_speakers = all_speakers.filter(
+                    Q(gtelt_eraco__icontains=f'{highest_era}') | 
+                    Q(gtelt_eraco__icontains=f'제{highest_era}대')
+                )
+                member_count = era_specific_speakers.count() if era_specific_speakers.exists() else all_speakers.count()
 
             # Skip if no members found
             if member_count == 0:
