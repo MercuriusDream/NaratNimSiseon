@@ -8,7 +8,7 @@ from .views import (
     CategoryListView,
     category_analytics, category_trend_analysis, trigger_statement_analysis,
     bill_sentiment_analysis, overall_sentiment_stats, statement_list, bill_list,
-    refresh_all_data, data_status
+    refresh_all_data, data_status, parties_list
 )
 from .models import Session, Bill, Speaker, Statement
 
@@ -48,16 +48,17 @@ urlpatterns = [
     path('analytics/categories/', category_analytics, name='category-analytics'),
     path('analytics/categories/<int:category_id>/trends/', category_trend_analysis, name='category-trends'),
     path('analysis/trigger/', trigger_statement_analysis, name='trigger-analysis'),
-    
+
     # Sentiment analysis endpoints
     path('bills/<str:bill_id>/sentiment/', bill_sentiment_analysis, name='bill-sentiment'),
     path('analytics/sentiment/', overall_sentiment_stats, name='overall-sentiment'),
-    
+
     # List endpoints with filtering
     path('statements/', statement_list, name='statement-list'),
     path('bills/', bill_list, name='bill-list'),
-    
+
     # Data management endpoints
     path('data/refresh/', refresh_all_data, name='refresh-data'),
     path('data/status/', data_status, name='data-status'),
+    path('parties/', parties_list, name='party-list'),
 ]

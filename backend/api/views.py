@@ -237,6 +237,88 @@ class PartyViewSet(viewsets.ModelViewSet):
     serializer_class = PartySerializer
     pagination_class = StandardResultsSetPagination
 
+    def list(self, request, *args, **kwargs):
+        """Custom list method to return parties sorted by assembly era"""
+        try:
+            # Get basic party statistics organized by assembly era
+            party_data_by_era = {}
+            parties = Party.objects.all()
+
+            for party in parties:
+                # Get all speakers for this party with their assembly info
+                all_speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
+
+                # Determine the highest assembly era for this party
+                highest_era = 0
+                member_count = 0
+
+                for speaker in all_speakers:
+                    # Extract assembly era from gtelt_eraco field (e.g., "제22대" -> 22)
+                    era_text = speaker.gtelt_eraco or ""
+                    era_numbers = [int(s) for s in era_text.split() if s.isdigit()]
+                    if era_numbers:
+                        era = max(era_numbers)
+                        if era > highest_era:
+                            highest_era = era
+
+                # Count members (prioritize current era if available)
+                current_speakers = Speaker.objects.filter(
+                    plpt_nm__icontains=party.name, 
+                    gtelt_eraco__icontains='22'
+                )
+                member_count = current_speakers.count() if current_speakers.exists() else all_speakers.count()
+
+                # Skip if no members found
+                if member_count == 0:
+                    continue
+
+                # Get statements and sentiment analysis
+                statements = Statement.objects.filter(speaker__plpt_nm__icontains=party.name)
+                avg_sentiment = statements.aggregate(
+                    Avg('sentiment_score'))['sentiment_score__avg']
+                total_statements = statements.count()
+
+                # Get bills related to this party's speakers
+                bills = Bill.objects.filter(
+                    statements__speaker__plpt_nm__icontains=party.name).distinct()
+                total_bills = bills.count()
+
+                party_info = {
+                    'id': party.id,
+                    'name': party.name,
+                    'logo_url': None,  # Don't send logo URLs to reduce requests
+                    'slogan': party.slogan,
+                    'description': party.description,
+                    'member_count': member_count,
+                    'avg_sentiment': avg_sentiment,
+                    'total_statements': total_statements,
+                    'total_bills': total_bills,
+                    'created_at': party.created_at,
+                    'updated_at': party.updated_at,
+                    'assembly_era': highest_era
+                }
+
+                # Group by assembly era
+                if highest_era not in party_data_by_era:
+                    party_data_by_era[highest_era] = []
+                party_data_by_era[highest_era].append(party_info)
+
+            # Sort parties: first by assembly era (descending: 22, 21, 20...), then by name within each era
+            party_data = []
+            for era in sorted(party_data_by_era.keys(), reverse=True):
+                era_parties = party_data_by_era[era]
+                # Sort by member count (descending) within each era
+                era_parties.sort(key=lambda x: (-x['member_count'], x['name']))
+                party_data.extend(era_parties)
+
+            return Response(party_data)
+
+        except Exception as e:
+            return Response(
+                {'error': f'정당 목록을 불러오는 중 오류가 발생했습니다: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 class StatementListView(generics.ListAPIView):
     serializer_class = StatementSerializer
@@ -817,15 +899,15 @@ def parties_list(request):
 
         # Get basic party statistics organized by assembly era
         party_data_by_era = {}
-        
+
         for party in parties:
             # Get all speakers for this party with their assembly info
             all_speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
-            
+
             # Determine the highest assembly era for this party
             highest_era = 0
             member_count = 0
-            
+
             for speaker in all_speakers:
                 # Extract assembly era from gtelt_eraco field (e.g., "제22대" -> 22)
                 era_text = speaker.gtelt_eraco or ""
@@ -834,14 +916,14 @@ def parties_list(request):
                     era = max(era_numbers)
                     if era > highest_era:
                         highest_era = era
-            
+
             # Count members (prioritize current era if available)
             current_speakers = Speaker.objects.filter(
                 plpt_nm__icontains=party.name, 
                 gtelt_eraco__icontains='22'
             )
             member_count = current_speakers.count() if current_speakers.exists() else all_speakers.count()
-            
+
             # Skip if no members found
             if member_count == 0:
                 continue
@@ -871,7 +953,7 @@ def parties_list(request):
                 'updated_at': party.updated_at,
                 'assembly_era': highest_era
             }
-            
+
             # Group by assembly era
             if highest_era not in party_data_by_era:
                 party_data_by_era[highest_era] = []
