@@ -1461,6 +1461,9 @@ def process_single_segment_for_statements(bill_text_segment,
             "❌ Gemini API not configured. Cannot perform speaker detection for bill segment."
         )
         return []
+    
+    # Get all assembly member names for validation
+    assembly_members = get_all_assembly_members()
     try:
         # Use a lighter/cheaper model for speaker detection stage if appropriate
         speaker_detection_model_name = 'gemini-2.0-flash-lite'  # Or 'gemini-2.0-flash-lite' if still available & preferred
