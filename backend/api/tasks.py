@@ -1193,7 +1193,8 @@ def extract_statements_for_bill_segment(bill_text_segment,
 {{
   "speaker_name_raw": "회의록에 기록된 발언자 이름 원본 (예: 김철수의원)",
   "speaker_name_clean": "정리된 발언자 실명 (예: 김철수)",
-  "speech_start_cue": "해당 발언이 시작되는 고유한 짧은 텍스트 조각 (회의록 원문에서 약 15-20자, 예: '◯김철수의원 уважаемые...')",
+  "speech_start_index": 발언이 시작되는 텍스트 내 문자 위치 (숫자),
+  "speech_end_index": 발언이 끝나는 텍스트 내 문자 위치 (숫자),
   "is_real_person_guess": true/false (실제 국회의원 이름으로 판단되는지 여부),
   "is_substantial_discussion_guess": true/false (단순 절차 안내가 아닌, 실질적인 정책/의안 논의인지 여부)
 }}
@@ -1204,6 +1205,9 @@ def extract_statements_for_bill_segment(bill_text_segment,
 3. 법률명, 기관명, 직책명만 있는 경우는 발언자로 보지 않습니다.
 4. "존경하는", "감사합니다" 등 단순 인사나 절차적 발언(예: "이의 없으십니까?")은 is_substantial_discussion_guess: false 입니다.
 5. speaker_name_clean은 '의원', '장관', '위원장' 등 직함을 제외하고 이름만 추출합니다 (예: "김XX 의원" -> "김XX").
+6. speech_start_index는 발언자 표시(◯이름) 부분을 포함한 시작 위치입니다.
+7. speech_end_index는 다음 발언자가 시작되기 직전 또는 텍스트 끝까지입니다.
+8. 인덱스는 주어진 텍스트 내에서의 정확한 문자 위치를 나타내야 합니다.
 
 응답은 다음 JSON 구조를 따라야 합니다:
 {{
@@ -1211,7 +1215,8 @@ def extract_statements_for_bill_segment(bill_text_segment,
     {{
       "speaker_name_raw": "...",
       "speaker_name_clean": "...",
-      "speech_start_cue": "...",
+      "speech_start_index": 123,
+      "speech_end_index": 456,
       "is_real_person_guess": true,
       "is_substantial_discussion_guess": true
     }}
@@ -1250,42 +1255,26 @@ def extract_statements_for_bill_segment(bill_text_segment,
         # Iterate through detected speeches to extract and analyze full content
         for i, speech_info in enumerate(detected_speeches_info):
             clean_name = speech_info.get('speaker_name_clean')
-            start_cue = speech_info.get('speech_start_cue')
+            start_idx = speech_info.get('speech_start_index')
+            end_idx = speech_info.get('speech_end_index')
             is_real_person = speech_info.get('is_real_person_guess', False)
             is_substantial = speech_info.get('is_substantial_discussion_guess',
                                              False)
 
-            if not clean_name or not start_cue or not is_real_person or not is_substantial:
+            if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial:
                 logger.info(
-                    f"Skipping speech segment for '{bill_name}' due to missing info or filters: Name='{clean_name}', Cue='{start_cue}', Person={is_real_person}, Substantial={is_substantial}"
+                    f"Skipping speech segment for '{bill_name}' due to missing info or filters: Name='{clean_name}', StartIdx={start_idx}, EndIdx={end_idx}, Person={is_real_person}, Substantial={is_substantial}"
                 )
                 continue
 
-            # Find this speech's content using start_cue and look for next speech_start_cue or end of segment
-            # The LLM gives us a CUE. We need to find this cue in the *original full bill_text_segment*
-            current_speech_content = ""
-            start_idx = bill_text_segment.find(start_cue)
-            if start_idx == -1:
+            # Validate indices are within text bounds
+            if start_idx < 0 or end_idx > len(bill_text_segment) or start_idx >= end_idx:
                 logger.warning(
-                    f"Could not find start_cue '{start_cue}' for speaker '{clean_name}' in bill_text_segment for '{bill_name}'. Skipping."
+                    f"Invalid indices for speaker '{clean_name}' in bill '{bill_name}': start={start_idx}, end={end_idx}, text_length={len(bill_text_segment)}. Skipping."
                 )
                 continue
 
-            # Determine end of current speech:
-            # Look for the start_cue of the *next* detected substantial speaker, or end of bill_text_segment.
-            end_idx = len(bill_text_segment)  # Default to end of segment
-            if i + 1 < len(detected_speeches_info):
-                next_speech_info = detected_speeches_info[i + 1]
-                next_start_cue = next_speech_info.get('speech_start_cue')
-                if next_start_cue:
-                    found_next_cue_at = bill_text_segment.find(
-                        next_start_cue,
-                        start_idx + 1)  # Search after current cue
-                    if found_next_cue_at != -1:
-                        end_idx = found_next_cue_at
-
-            current_speech_content = bill_text_segment[
-                start_idx:end_idx].strip()
+            current_speech_content = bill_text_segment[start_idx:end_idx].strip()
             # Clean the extracted content
             current_speech_content = clean_pdf_text(current_speech_content)
 
@@ -1504,11 +1493,18 @@ def extract_statements_without_bill_separation(full_text,
 {{
   "speaker_name_raw": "회의록 기록된 발언자 이름 원본 (예: 김철수의원)",
   "speaker_name_clean": "정리된 발언자 실명 (예: 김철수)",
-  "speech_start_cue": "해당 발언이 시작되는 고유한 짧은 텍스트 조각 (회의록 원문에서 약 15-20자)",
+  "speech_start_index": 발언이 시작되는 텍스트 내 문자 위치 (숫자),
+  "speech_end_index": 발언이 끝나는 텍스트 내 문자 위치 (숫자),
   "is_real_person_guess": true/false,
   "is_substantial_discussion_guess": true/false
 }}
-(가이드라인은 extract_statements_for_bill_segment 와 동일하게 적용)
+
+기준:
+1. '◯' (동그라미) 기호로 시작하고 사람 이름으로 보이는 부분만 발언으로 간주합니다.
+2. '의장', '위원장' 등이 사회를 보는 발언은 is_substantial_discussion_guess: false로 처리합니다.
+3. speech_start_index는 발언자 표시(◯이름) 부분을 포함한 시작 위치입니다.
+4. speech_end_index는 다음 발언자가 시작되기 직전 또는 텍스트 끝까지입니다.
+5. 인덱스는 주어진 텍스트 내에서의 정확한 문자 위치를 나타내야 합니다.
 
 응답 JSON 구조:
 {{
@@ -1538,25 +1534,19 @@ def extract_statements_without_bill_separation(full_text,
         for i, speech_info in enumerate(detected_speeches_info):
             # Similar extraction and analysis logic as in extract_statements_for_bill_segment
             clean_name = speech_info.get('speaker_name_clean')
-            start_cue = speech_info.get('speech_start_cue')
+            start_idx = speech_info.get('speech_start_index')
+            end_idx = speech_info.get('speech_end_index')
             is_real_person = speech_info.get('is_real_person_guess', False)
             is_substantial = speech_info.get('is_substantial_discussion_guess',
                                              False)
 
-            if not clean_name or not start_cue or not is_real_person or not is_substantial:
+            if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial:
                 continue  # Skip if basic filters fail
 
-            start_idx = full_text.find(start_cue)
-            if start_idx == -1: continue
-
-            end_idx = len(full_text)
-            if i + 1 < len(detected_speeches_info):
-                next_start_cue = detected_speeches_info[i + 1].get(
-                    'speech_start_cue')
-                if next_start_cue:
-                    found_next_cue_at = full_text.find(next_start_cue,
-                                                       start_idx + 1)
-                    if found_next_cue_at != -1: end_idx = found_next_cue_at
+            # Validate indices are within text bounds
+            if start_idx < 0 or end_idx > len(full_text) or start_idx >= end_idx:
+                logger.warning(f"Invalid indices for speaker '{clean_name}': start={start_idx}, end={end_idx}, text_length={len(full_text)}")
+                continue
 
             current_speech_content = full_text[start_idx:end_idx].strip()
             # Clean the extracted content
