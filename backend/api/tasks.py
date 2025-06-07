@@ -15,6 +15,31 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+def with_db_retry(func, max_retries=3):
+    """Wrapper to retry database operations with connection management"""
+    def wrapper(*args, **kwargs):
+        from django.db import connection
+        from django.db.utils import OperationalError, InterfaceError
+        
+        for attempt in range(max_retries):
+            try:
+                # Ensure fresh connection
+                connection.ensure_connection()
+                return func(*args, **kwargs)
+            except (OperationalError, InterfaceError) as e:
+                if 'connection already closed' in str(e) or 'server closed the connection' in str(e):
+                    logger.warning(f"Database connection issue on attempt {attempt + 1}: {e}")
+                    if attempt < max_retries - 1:
+                        connection.close()
+                        time.sleep(1)  # Brief pause before retry
+                        continue
+                raise e
+            except Exception as e:
+                # For non-connection errors, don't retry
+                raise e
+        return None
+    return wrapper
+
 # Configure logger to actually show output if not already configured by Django
 if not logger.handlers or not any(
         isinstance(h, logging.StreamHandler) for h in logger.handlers):
@@ -559,6 +584,10 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         logger.info("No sessions data provided to process.")
         return
 
+    # Ensure database connection is alive
+    from django.db import connection
+    connection.ensure_connection()
+
     # Group by CONFER_NUM (session_id) as multiple agenda items can be part of the same physical session meeting
     sessions_by_confer_num = {}
     for item_data in sessions_data:
@@ -579,6 +608,9 @@ def process_sessions_data(sessions_data, force=False, debug=False):
     updated_count = 0
 
     for confer_num, items_for_session in sessions_by_confer_num.items():
+        # Ensure connection is still alive for each session
+        connection.ensure_connection()
+        
         # Use the first item for primary session details, assuming they are consistent for the same CONFER_NUM
         main_item = items_for_session[0]
         try:
@@ -649,6 +681,9 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                 )
                 continue  # Skip database operations in debug mode for this part
 
+            # Ensure database connection before creating/updating
+            connection.ensure_connection()
+            
             session_obj, created = Session.objects.update_or_create(
                 conf_id=confer_num, defaults=session_defaults)
 
@@ -1168,7 +1203,13 @@ def extract_statements_for_bill_segment(bill_text_segment,
         )
         return []
 
-    
+    # Limit text length to prevent prompt length issues
+    MAX_SEGMENT_LENGTH = 50000  # Approximately 50k characters
+    if len(bill_text_segment) > MAX_SEGMENT_LENGTH:
+        logger.warning(
+            f"Bill text segment too long ({len(bill_text_segment)} chars), truncating to {MAX_SEGMENT_LENGTH}"
+        )
+        bill_text_segment = bill_text_segment[:MAX_SEGMENT_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
 
     speaker_detection_prompt = f"""
 다음은 국회 회의록의 일부이며, "{bill_name}" 의안과 관련된 부분으로 추정됩니다.
@@ -1345,7 +1386,14 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
         )
         return statement_data_dict
 
+    # Limit statement text length for analysis
+    MAX_STATEMENT_LENGTH = 8000  # 8k characters for individual statement analysis
     text_for_prompt = text_to_analyze
+    if len(text_to_analyze) > MAX_STATEMENT_LENGTH:
+        logger.info(
+            f"Statement text too long ({len(text_to_analyze)} chars), truncating to {MAX_STATEMENT_LENGTH}"
+        )
+        text_for_prompt = text_to_analyze[:MAX_STATEMENT_LENGTH] + "... [발언이 길이 제한으로 잘렸습니다]"
 
     prompt = f"""
 국회 발언 분석 요청:
@@ -1452,6 +1500,13 @@ def extract_statements_without_bill_separation(full_text,
         )
         return []
     
+    # Limit full text length to prevent prompt overflow
+    MAX_FULL_TEXT_LENGTH = 80000  # Approximately 80k characters for full text
+    if len(full_text) > MAX_FULL_TEXT_LENGTH:
+        logger.warning(
+            f"Full text too long ({len(full_text)} chars), truncating to {MAX_FULL_TEXT_LENGTH}"
+        )
+        full_text = full_text[:MAX_FULL_TEXT_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
 
     speaker_detection_prompt = f"""
 당신은 기록자입니다. 당신의 기록은 미래에 사람들을 살릴 것입니다. 당신은 따라서 모든 기록을 하나하나 다 놓치지 않고 전해야 합니다. 국회 전체 회의록 텍스트에서 국회의원들의 개별 발언을 식별해주세요.
@@ -1901,13 +1956,23 @@ def process_pdf_text_for_statements(full_text,
         logger.info(
             f"🔍 Stage 0 (Bill Segment): Attempting to segment transcript by bills for session {session_id}"
         )
+        
+        # Limit text for segmentation to prevent prompt overflow
+        MAX_SEGMENTATION_LENGTH = 100000  # 100k characters for segmentation
+        segmentation_text = full_text
+        if len(full_text) > MAX_SEGMENTATION_LENGTH:
+            logger.warning(
+                f"Text too long for segmentation ({len(full_text)} chars), truncating to {MAX_SEGMENTATION_LENGTH}"
+            )
+            segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
+        
         bill_segmentation_prompt = f"""
 국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
 다음은 이 회의에서 논의된 의안 목록입니다: {", ".join(bill_names_list)}
 
 회의록 텍스트:
 ---
-{full_text}
+{segmentation_text}
 ---
 
 각 의안에 대한 논의 시작 지점을 알려주세요. JSON 형식 응답:
@@ -2561,6 +2626,11 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
     try:
         from django.db import connection  # Ensure connection for long tasks
         connection.ensure_connection()
+        
+        # Close any stale connections before critical operations
+        if connection.connection and connection.connection.closed:
+            connection.close()
+            connection.ensure_connection()
 
         # Try to find by exact cleaned name first
         speaker_obj = Speaker.objects.filter(
