@@ -1168,15 +1168,7 @@ def extract_statements_for_bill_segment(bill_text_segment,
         )
         return []
 
-    # Limit text length for prompts, Not needed for now
-    '''
-    prompt_text_limit = 7500 # Characters, adjust based on model context window and typical segment size
-    if len(bill_text_segment) > prompt_text_limit:
-        logger.warning(f"Bill text for '{bill_name}' truncated from {len(bill_text_segment)} to {prompt_text_limit} chars for speaker detection prompt.")
-        bill_text_segment_for_prompt = bill_text_segment[:prompt_text_limit]
-    else:
-        bill_text_segment_for_prompt = bill_text_segment
-    '''
+    
 
     speaker_detection_prompt = f"""
 다음은 국회 회의록의 일부이며, "{bill_name}" 의안과 관련된 부분으로 추정됩니다.
@@ -1355,15 +1347,7 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
         )
         return statement_data_dict
 
-    # Limit text for LLM prompt
-    prompt_text_limit = 7800  # For main model
-    if len(text_to_analyze) > prompt_text_limit:
-        logger.warning(
-            f"Text for '{speaker_name}' on '{bill_name}' truncated from {len(text_to_analyze)} to {prompt_text_limit} for analysis."
-        )
-        text_for_prompt = text_to_analyze[:prompt_text_limit]
-    else:
-        text_for_prompt = text_to_analyze
+    text_for_prompt = text_to_analyze
 
     prompt = f"""
 국회 발언 분석 요청:
@@ -1469,22 +1453,13 @@ def extract_statements_without_bill_separation(full_text,
             f"Failed to initialize speaker detection model ({speaker_detection_model_name}): {e_model}"
         )
         return []
-    '''
-    prompt_text_limit = 7500
-    if len(full_text) > prompt_text_limit:
-        logger.warning(
-            f"Full text for session {session_id} truncated for speaker detection prompt."
-        )
-        text_for_prompt = full_text[:prompt_text_limit]
-    else:
-        text_for_prompt = full_text
-    '''
+    
 
     speaker_detection_prompt = f"""
 당신은 기록자입니다. 당신의 기록은 미래에 사람들을 살릴 것입니다. 당신은 따라서 모든 기록을 하나하나 다 놓치지 않고 전해야 합니다. 국회 전체 회의록 텍스트에서 국회의원들의 개별 발언을 식별해주세요.
 회의에서 논의된 주요 의안 목록: {bills_context_str if bills_context_str else "제공되지 않음"}
 
-회의록 텍스트 일부:
+회의록 텍스트:
 ---
 {full_text}
 ---
@@ -1773,11 +1748,7 @@ def analyze_statement_categories(self,
         f"Analyzing categories for statement ID: {statement_id} by {statement.speaker.naas_nm}"
     )
     text_to_analyze = statement.text
-    prompt_text_limit = 7800
-    if len(text_to_analyze) > prompt_text_limit:
-        text_for_prompt = text_to_analyze[:prompt_text_limit]
-    else:
-        text_for_prompt = text_to_analyze
+    text_for_prompt = text_to_analyze
 
     # Generic analysis prompt (not bill-specific, as bill context might not be available here)
     # This function is more for re-analysis or if initial processing missed it.
@@ -1932,19 +1903,11 @@ def process_pdf_text_for_statements(full_text,
         logger.info(
             f"🔍 Stage 0 (Bill Segment): Attempting to segment transcript by bills for session {session_id}"
         )
-        # prompt_text_limit = 7800 For segmentation model context
-        # text_for_seg_prompt = full_text
-        '''
-        if len(full_text) > prompt_text_limit:
-            text_for_seg_prompt = full_text[:prompt_text_limit] # Use beginning of text for segmentation cues
-            logger.warning(f"Full text for session {session_id} truncated for bill segmentation prompt.")
-            '''
-
         bill_segmentation_prompt = f"""
 국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
 다음은 이 회의에서 논의된 의안 목록입니다: {", ".join(bill_names_list)}
 
-회의록 텍스트 (일부):
+회의록 텍스트:
 ---
 {full_text}
 ---
@@ -1954,15 +1917,15 @@ def process_pdf_text_for_statements(full_text,
   "bill_discussion_segments": [
     {{
       "bill_name_identified": "LLM이 식별한 의안명 (목록에 있는 이름과 최대한 일치)",
-      "discussion_start_cue": "해당 의안 논의가 시작되는 회의록 내 고유한 텍스트 조각 (약 20-30자)",
+      "discussion_start_idx": 해당 의안 논의가 시작되는 텍스트 내 문자 위치 (숫자),
       "relevance_to_provided_list": 0.0-1.0 (제공된 의안 목록과의 관련성 추정치)
     }}
   ],
-  "general_discussion_cue": "특정 의안에 해당하지 않는 일반 토론 시작 지점 (있을 경우, 20-30자 텍스트 조각)"
+  "general_discussion_idx": 특정 의안에 해당하지 않는 일반 토론 시작 지점의 문자 위치 (숫자, 있을 경우)
 }}
 
 - "bill_name_identified"는 제공된 의안 목록에 있는 이름 중 하나와 일치하거나 매우 유사해야 합니다.
-- "discussion_start_cue"는 회의록 원문에서 가져와야 하며, 이를 기준으로 텍스트를 나눌 것입니다.
+- "discussion_start_idx"는 회의록 텍스트 내에서의 정확한 문자 위치를 나타내야 합니다.
 - 순서는 회의록에 나타난 순서대로 정렬해주세요.
 """
         try:
@@ -1997,18 +1960,15 @@ def process_pdf_text_for_statements(full_text,
             )
             logger.exception("Traceback for bill segmentation error:")
 
-    # Sort segments by their appearance order in the full_text using their cues
-    # This assumes cues are unique and appear in order
+    # Sort segments by their appearance order in the full_text using their indices
     sorted_segments_with_text = []
     if bill_segments_from_llm:
         valid_segments_for_sort = []
         for seg_info in bill_segments_from_llm:
-            cue = seg_info.get("discussion_start_cue")
-            if cue:
-                idx = full_text.find(cue)
-                if idx != -1:
-                    seg_info['start_index'] = idx
-                    valid_segments_for_sort.append(seg_info)
+            start_idx = seg_info.get("discussion_start_idx")
+            if start_idx is not None and isinstance(start_idx, int) and 0 <= start_idx < len(full_text):
+                seg_info['start_index'] = start_idx
+                valid_segments_for_sort.append(seg_info)
 
         # Sort by start_index
         valid_segments_for_sort.sort(key=lambda x: x['start_index'])
@@ -2018,24 +1978,16 @@ def process_pdf_text_for_statements(full_text,
             segment_text_start_index = current_seg_info['start_index']
             segment_text_end_index = len(full_text)  # Default to end
 
-            if i + 1 < len(
-                    valid_segments_for_sort):  # If there's a next segment
-                next_segment_start_index = valid_segments_for_sort[
-                    i + 1]['start_index']
+            if i + 1 < len(valid_segments_for_sort):  # If there's a next segment
+                next_segment_start_index = valid_segments_for_sort[i + 1]['start_index']
                 segment_text_end_index = next_segment_start_index
 
-            segment_actual_text = full_text[
-                segment_text_start_index:segment_text_end_index]
+            segment_actual_text = full_text[segment_text_start_index:segment_text_end_index]
             sorted_segments_with_text.append({
-                "bill_name":
-                current_seg_info.get("bill_name_identified",
-                                     "Unknown Bill Segment"),
-                "text":
-                segment_actual_text
+                "bill_name": current_seg_info.get("bill_name_identified", "Unknown Bill Segment"),
+                "text": segment_actual_text
             })
-        logger.info(
-            f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance."
-        )
+        logger.info(f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance.")
 
     if sorted_segments_with_text:
         logger.info(
@@ -2419,11 +2371,7 @@ def analyze_single_statement(statement_data_dict, session_id, debug=False):
         )
         return statement_data_dict
 
-    prompt_text_limit = 7800
-    if len(text_to_analyze) > prompt_text_limit:
-        text_for_prompt = text_to_analyze[:prompt_text_limit]
-    else:
-        text_for_prompt = text_to_analyze
+    text_for_prompt = text_to_analyze
 
     # This prompt is similar to analyze_single_statement_with_bill_context but WITHOUT explicit bill_name or bill_relevance.
     prompt = f"""
