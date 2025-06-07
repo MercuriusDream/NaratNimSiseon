@@ -1291,7 +1291,7 @@ def extract_statements_for_bill_segment(bill_text_segment,
             logger.info(
                 f"Processing batch {batch_idx + 1}/{len(batches)} for bill '{bill_name}'"
             )
-            batch_statements = process_single_segment_for_statements(
+            batch_statements = process_single_segment_for_statements_with_splitting(
                 batch_text, session_id, bill_name, debug)
             all_batch_statements.extend(batch_statements)
             if not debug:
@@ -1299,9 +1299,71 @@ def extract_statements_for_bill_segment(bill_text_segment,
 
         return all_batch_statements
 
-    # Process single segment if under limit
-    return process_single_segment_for_statements(bill_text_segment, session_id,
+    # Process single segment if under limit - use splitting strategy for better JSON parsing
+    return process_single_segment_for_statements_with_splitting(bill_text_segment, session_id,
                                                  bill_name, debug)
+
+
+def process_single_segment_for_statements_with_splitting(bill_text_segment,
+                                                        session_id,
+                                                        bill_name,
+                                                        debug=False):
+    """Process a single text segment by splitting it in half by speaker markers to avoid JSON parsing errors."""
+    if not bill_text_segment:
+        return []
+
+    logger.info(
+        f"🔍 Stage 1 (Speaker Detect with Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
+    )
+
+    # Find speaker markers (◯) to determine the middle point
+    speaker_markers = []
+    for i, char in enumerate(bill_text_segment):
+        if char == '◯':
+            speaker_markers.append(i)
+    
+    if len(speaker_markers) < 2:
+        # If less than 2 speakers, process as single segment
+        logger.info(f"Only {len(speaker_markers)} speaker markers found, processing as single segment")
+        return process_single_segment_for_statements(bill_text_segment, session_id, bill_name, debug)
+    
+    # Find the middle speaker marker (not middle character)
+    middle_marker_idx = len(speaker_markers) // 2
+    split_position = speaker_markers[middle_marker_idx]
+    
+    # Split the text at the middle speaker marker
+    first_half = bill_text_segment[:split_position].strip()
+    second_half = bill_text_segment[split_position:].strip()
+    
+    logger.info(
+        f"Splitting text at speaker marker {middle_marker_idx + 1}/{len(speaker_markers)}: "
+        f"First half: {len(first_half)} chars, Second half: {len(second_half)} chars"
+    )
+    
+    all_statements = []
+    
+    # Process first half
+    if first_half:
+        logger.info(f"Processing first half for bill '{bill_name}'")
+        first_half_statements = process_single_segment_for_statements(first_half, session_id, bill_name, debug)
+        all_statements.extend(first_half_statements)
+        
+        if not debug:
+            time.sleep(0.5)  # Brief pause between halves
+    
+    # Process second half
+    if second_half:
+        logger.info(f"Processing second half for bill '{bill_name}'")
+        second_half_statements = process_single_segment_for_statements(second_half, session_id, bill_name, debug)
+        all_statements.extend(second_half_statements)
+    
+    logger.info(
+        f"✅ Combined processing for '{bill_name}' resulted in {len(all_statements)} statements "
+        f"({len(first_half_statements) if first_half else 0} from first half, "
+        f"{len(second_half_statements) if second_half else 0} from second half)"
+    )
+    
+    return all_statements
 
 
 def process_single_segment_for_statements(bill_text_segment,
