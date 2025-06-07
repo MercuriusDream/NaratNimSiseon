@@ -815,21 +815,36 @@ def parties_list(request):
 
         parties = Party.objects.all()
 
-        # Get basic party statistics
-        party_data = []
-        current_parties = []  # For 22대 parties
-        other_parties = []    # For older parties
+        # Get basic party statistics organized by assembly era
+        party_data_by_era = {}
         
         for party in parties:
-            # Get speakers count for this party - prioritize current assembly (22대)
+            # Get all speakers for this party with their assembly info
+            all_speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
+            
+            # Determine the highest assembly era for this party
+            highest_era = 0
+            member_count = 0
+            
+            for speaker in all_speakers:
+                # Extract assembly era from gtelt_eraco field (e.g., "제22대" -> 22)
+                era_text = speaker.gtelt_eraco or ""
+                era_numbers = [int(s) for s in era_text.split() if s.isdigit()]
+                if era_numbers:
+                    era = max(era_numbers)
+                    if era > highest_era:
+                        highest_era = era
+            
+            # Count members (prioritize current era if available)
             current_speakers = Speaker.objects.filter(
                 plpt_nm__icontains=party.name, 
                 gtelt_eraco__icontains='22'
             )
-            all_speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
-            
-            # Use current assembly member count if available, otherwise all members
             member_count = current_speakers.count() if current_speakers.exists() else all_speakers.count()
+            
+            # Skip if no members found
+            if member_count == 0:
+                continue
 
             # Get statements and sentiment analysis
             statements = Statement.objects.filter(speaker__plpt_nm__icontains=party.name)
@@ -853,21 +868,22 @@ def parties_list(request):
                 'total_statements': total_statements,
                 'total_bills': total_bills,
                 'created_at': party.created_at,
-                'updated_at': party.updated_at
+                'updated_at': party.updated_at,
+                'assembly_era': highest_era
             }
             
-            # Check if this is a current (22대) party
-            if current_speakers.exists():
-                current_parties.append(party_info)
-            else:
-                other_parties.append(party_info)
+            # Group by assembly era
+            if highest_era not in party_data_by_era:
+                party_data_by_era[highest_era] = []
+            party_data_by_era[highest_era].append(party_info)
 
-        # Sort current parties by member count (descending), then other parties
-        current_parties.sort(key=lambda x: x['member_count'], reverse=True)
-        other_parties.sort(key=lambda x: x['member_count'], reverse=True)
-        
-        # Combine lists with current parties first
-        party_data = current_parties + other_parties
+        # Sort parties: first by assembly era (descending: 22, 21, 20...), then by name within each era
+        party_data = []
+        for era in sorted(party_data_by_era.keys(), reverse=True):
+            era_parties = party_data_by_era[era]
+            # Sort by member count (descending) within each era
+            era_parties.sort(key=lambda x: (-x['member_count'], x['name']))
+            party_data.extend(era_parties)
 
         return Response({
             'status': 'success',
