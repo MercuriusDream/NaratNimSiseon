@@ -1247,7 +1247,8 @@ def get_all_assembly_members():
         page = 1
         page_size = 300
         
-        while True:
+        max_pages = 50  # Safety limit: 50 pages * 300 = 15,000 max members
+        while page <= max_pages:
             params = {
                 "KEY": settings.ASSEMBLY_API_KEY,
                 "Type": "json",
