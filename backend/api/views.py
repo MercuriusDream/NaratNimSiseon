@@ -271,6 +271,13 @@ class PartyViewSet(viewsets.ModelViewSet):
                 # Skip if no members found
                 if member_count == 0:
                     continue
+                
+                # Debug logging for era detection
+                if party.name in ['더불어민주당', '국민의힘', '조국혁신당']:
+                    logger.info(f"Party {party.name}: highest_era={highest_era}, member_count={member_count}")
+                    sample_speakers = all_speakers[:3]
+                    for sp in sample_speakers:
+                        logger.info(f"  Speaker {sp.naas_nm}: gtelt_eraco='{sp.gtelt_eraco}'")
 
                 # Get statements and sentiment analysis
                 statements = Statement.objects.filter(speaker__plpt_nm__icontains=party.name)
@@ -311,7 +318,18 @@ class PartyViewSet(viewsets.ModelViewSet):
                 era_parties.sort(key=lambda x: (-x['member_count'], x['name']))
                 party_data.extend(era_parties)
 
-            return Response(party_data)
+            # Apply pagination manually
+            page = self.paginate_queryset(party_data)
+            if page is not None:
+                return self.get_paginated_response(page)
+            
+            # Return non-paginated response in the expected format
+            return Response({
+                'count': len(party_data),
+                'next': None,
+                'previous': None,
+                'results': party_data
+            })
 
         except Exception as e:
             return Response(
@@ -911,11 +929,22 @@ def parties_list(request):
             for speaker in all_speakers:
                 # Extract assembly era from gtelt_eraco field (e.g., "제22대" -> 22)
                 era_text = speaker.gtelt_eraco or ""
-                era_numbers = [int(s) for s in era_text.split() if s.isdigit()]
-                if era_numbers:
-                    era = max(era_numbers)
+                
+                # Try different methods to extract era number
+                import re
+                era_match = re.search(r'(\d+)대', era_text)
+                if era_match:
+                    era = int(era_match.group(1))
                     if era > highest_era:
                         highest_era = era
+                else:
+                    # Fallback: look for any numbers in the text
+                    era_numbers = re.findall(r'\d+', era_text)
+                    for num_str in era_numbers:
+                        num = int(num_str)
+                        if 15 <= num <= 25:  # Reasonable range for assembly eras
+                            if num > highest_era:
+                                highest_era = num
 
             # Count members (prioritize current era if available)
             current_speakers = Speaker.objects.filter(
