@@ -1,87 +1,147 @@
 
 from django.core.management.base import BaseCommand
-from api.tasks import fetch_party_membership_data, fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
-from api.models import Party, Speaker
+from api.tasks import fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
+from api.models import Speaker
 import requests
+import json
+from django.conf import settings
 import logging
 
 logger = logging.getLogger(__name__)
 
-
 class Command(BaseCommand):
-    help = 'Parse and fetch all party and member data comprehensively'
+    help = 'Parse and sync party and member data from the Assembly API'
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--debug',
-            action='store_true',
-            help='Run in debug mode (no database writes)',
-        )
-        parser.add_argument(
             '--force',
             action='store_true',
-            help='Force refetch of existing data',
+            help='Force refresh of existing data',
         )
         parser.add_argument(
-            '--parties-only',
-            action='store_true',
-            help='Only fetch party data',
-        )
-        parser.add_argument(
-            '--members-only',
-            action='store_true',
-            help='Only fetch member data',
+            '--debug',
+            action='store_true', 
+            help='Debug mode: print data instead of storing it',
         )
 
     def handle(self, *args, **options):
-        debug = options['debug']
-        force = options['force']
-        parties_only = options['parties_only']
-        members_only = options['members_only']
+        force = options.get('force', False)
+        debug = options.get('debug', False)
+        
+        self.stdout.write('🏛️ Starting party and member data parsing...')
+        
+        if debug:
+            self.stdout.write('🐛 DEBUG mode: Will print data instead of storing')
+        
+        # Fetch member data from ALLNAMEMBER API
+        self.fetch_and_parse_members(force=force, debug=debug)
+        
+        # Fetch additional party data 
+        self.stdout.write('📊 Fetching additional party data...')
+        if is_celery_available():
+            fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=force, debug=debug)
+        else:
+            fetch_additional_data_nepjpxkkabqiqpbvk(force=force, debug=debug)
         
         self.stdout.write(
-            self.style.SUCCESS('🚀 Starting comprehensive party and member parsing...')
+            self.style.SUCCESS('✅ Party and member data parsing completed!')
         )
+
+    def fetch_and_parse_members(self, force=False, debug=False):
+        """Fetch all assembly members from ALLNAMEMBER API"""
+        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            self.stdout.write(
+                self.style.ERROR('❌ ASSEMBLY_API_KEY not configured')
+            )
+            return
+
+        url = "https://open.assembly.go.kr/portal/openapi/ALLNAMEMBER"
         
-        if not members_only:
-            self.stdout.write('📊 Fetching party data...')
+        # Fetch data with pagination
+        all_members = []
+        page = 1
+        page_size = 100
+        
+        while True:
+            params = {
+                "KEY": settings.ASSEMBLY_API_KEY,
+                "Type": "json",
+                "pIndex": page,
+                "pSize": page_size
+            }
+            
             try:
-                if is_celery_available() and not debug:
-                    fetch_party_membership_data.delay(debug=debug)
-                    self.stdout.write('✅ Party data collection task started (async)')
-                else:
-                    fetch_party_membership_data(debug=debug)
-                    self.stdout.write('✅ Party data collection completed')
+                response = requests.get(url, params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                
+                members_data = []
+                if 'ALLNAMEMBER' in data and len(data['ALLNAMEMBER']) > 1:
+                    members_data = data['ALLNAMEMBER'][1].get('row', [])
+                
+                if not members_data:
+                    break
+                    
+                all_members.extend(members_data)
+                self.stdout.write(f'📥 Fetched page {page}: {len(members_data)} members')
+                
+                if len(members_data) < page_size:
+                    break
+                    
+                page += 1
+                
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f'❌ Error fetching party data: {e}')
+                    self.style.ERROR(f'❌ Error fetching page {page}: {e}')
                 )
+                break
         
-        if not parties_only:
-            self.stdout.write('👥 Fetching additional party and member data...')
+        self.stdout.write(f'📊 Total members fetched: {len(all_members)}')
+        
+        if debug:
+            self.stdout.write('🐛 DEBUG: Sample member data:')
+            if all_members:
+                self.stdout.write(json.dumps(all_members[0], indent=2, ensure_ascii=False))
+            return
+        
+        # Process and save members
+        created_count = 0
+        updated_count = 0
+        
+        for member_data in all_members:
             try:
-                if is_celery_available() and not debug:
-                    fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=force, debug=debug)
-                    self.stdout.write('✅ Additional data collection task started (async)')
+                naas_cd = member_data.get('NAAS_CD')
+                if not naas_cd:
+                    continue
+                
+                speaker, created = Speaker.objects.update_or_create(
+                    naas_cd=naas_cd,
+                    defaults={
+                        'naas_nm': member_data.get('NAAS_NM', ''),
+                        'naas_ch_nm': member_data.get('NAAS_CH_NM', ''),
+                        'plpt_nm': member_data.get('PLPT_NM', '정당정보없음'),
+                        'elecd_nm': member_data.get('ELECD_NM', ''),
+                        'elecd_div_nm': member_data.get('ELECD_DIV_NM', ''),
+                        'cmit_nm': member_data.get('CMIT_NM', ''),
+                        'blng_cmit_nm': member_data.get('BLNG_CMIT_NM', ''),
+                        'rlct_div_nm': member_data.get('RLCT_DIV_NM', ''),
+                        'gtelt_eraco': member_data.get('GTELT_ERACO', ''),
+                        'ntr_div': member_data.get('NTR_DIV', ''),
+                        'naas_pic': member_data.get('NAAS_PIC', '')
+                    }
+                )
+                
+                if created:
+                    created_count += 1
                 else:
-                    fetch_additional_data_nepjpxkkabqiqpbvk(force=force, debug=debug)
-                    self.stdout.write('✅ Additional data collection completed')
+                    updated_count += 1
+                    
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f'❌ Error fetching additional data: {e}')
+                    self.style.ERROR(f'❌ Error processing member {member_data.get("NAAS_NM", "Unknown")}: {e}')
                 )
-        
-        # Display current status
-        self.stdout.write('\n📈 Current Database Status:')
-        self.stdout.write(f'   Parties: {Party.objects.count()}')
-        self.stdout.write(f'   Members/Speakers: {Speaker.objects.count()}')
-        
-        if Party.objects.exists():
-            self.stdout.write('\n🏛️ Parties in Database:')
-            for party in Party.objects.all():
-                member_count = Speaker.objects.filter(plpt_nm=party.name).count()
-                self.stdout.write(f'   • {party.name}: {member_count} members')
+                continue
         
         self.stdout.write(
-            self.style.SUCCESS('\n✅ Party and member parsing completed!')
+            self.style.SUCCESS(f'✅ Members processed: {created_count} created, {updated_count} updated')
         )
