@@ -24,6 +24,17 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# Import celery availability check
+def is_celery_available():
+    """Check if Celery/Redis is available for async tasks"""
+    from kombu.exceptions import OperationalError
+    from celery import current_app
+    try:
+        current_app.control.inspect().active()
+        return True
+    except (ImportError, OperationalError, OSError, ConnectionError):
+        return False
+
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 10
@@ -230,6 +241,114 @@ class StatementListView(generics.ListAPIView):
     def get_queryset(self):
         bill_id = self.kwargs.get('bill_id')
         return Statement.objects.filter(bill_id=bill_id)
+
+
+@api_view(['GET'])
+def statement_list(request):
+    """List all statements with pagination and filtering"""
+    try:
+        statements_qs = Statement.objects.select_related('speaker', 'session', 'bill').all()
+        
+        # Apply filters
+        speaker_id = request.query_params.get('speaker_id')
+        session_id = request.query_params.get('session_id')
+        bill_id = request.query_params.get('bill_id')
+        sentiment_min = request.query_params.get('sentiment_min')
+        sentiment_max = request.query_params.get('sentiment_max')
+        
+        if speaker_id:
+            statements_qs = statements_qs.filter(speaker_id=speaker_id)
+        if session_id:
+            statements_qs = statements_qs.filter(session_id=session_id)
+        if bill_id:
+            statements_qs = statements_qs.filter(bill_id=bill_id)
+        if sentiment_min:
+            statements_qs = statements_qs.filter(sentiment_score__gte=float(sentiment_min))
+        if sentiment_max:
+            statements_qs = statements_qs.filter(sentiment_score__lte=float(sentiment_max))
+        
+        # Pagination
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(statements_qs.order_by('-created_at'), request)
+        serializer = StatementSerializer(page, many=True)
+        
+        return paginator.get_paginated_response(serializer.data)
+        
+    except Exception as e:
+        logger.error(f"Error in statement_list: {e}")
+        return Response(
+            {'error': 'Failed to fetch statements'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def bill_list(request):
+    """List all bills with pagination and filtering"""
+    try:
+        bills_qs = Bill.objects.select_related('session').all()
+        
+        # Apply filters
+        session_id = request.query_params.get('session_id')
+        bill_name = request.query_params.get('name')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        
+        if session_id:
+            bills_qs = bills_qs.filter(session_id=session_id)
+        if bill_name:
+            bills_qs = bills_qs.filter(bill_nm__icontains=bill_name)
+        if date_from:
+            bills_qs = bills_qs.filter(session__conf_dt__gte=date_from)
+        if date_to:
+            bills_qs = bills_qs.filter(session__conf_dt__lte=date_to)
+        
+        # Pagination
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(bills_qs.order_by('-created_at'), request)
+        serializer = BillSerializer(page, many=True)
+        
+        return paginator.get_paginated_response(serializer.data)
+        
+    except Exception as e:
+        logger.error(f"Error in bill_list: {e}")
+        return Response(
+            {'error': 'Failed to fetch bills'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+def refresh_all_data(request):
+    """Trigger complete data refresh from APIs"""
+    try:
+        from .tasks import fetch_continuous_sessions
+        
+        # Start data collection
+        force = request.data.get('force', False)
+        debug = request.data.get('debug', False)
+        
+        if is_celery_available():
+            task = fetch_continuous_sessions.delay(force=force, debug=debug)
+            return Response({
+                'message': 'Data refresh started',
+                'task_id': task.id,
+                'status': 'started'
+            })
+        else:
+            # Run synchronously if Celery not available
+            fetch_continuous_sessions(force=force, debug=debug)
+            return Response({
+                'message': 'Data refresh completed',
+                'status': 'completed'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error triggering data refresh: {e}")
+        return Response(
+            {'error': 'Failed to start data refresh'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(['GET'])
