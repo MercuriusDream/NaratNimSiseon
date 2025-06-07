@@ -134,6 +134,14 @@ class Statement(models.Model):
 
     def __str__(self):
         return f"{self.speaker.naas_nm}의 발언 ({self.created_at})"
+    
+    def calculate_hash(self):
+        """Calculate a hash for this statement based on text, speaker, and session"""
+        import hashlib
+        # Create a string combining the key identifying fields
+        identifier = f"{self.text}|{self.speaker.naas_cd}|{self.session.conf_id}"
+        # Return SHA256 hash
+        return hashlib.sha256(identifier.encode('utf-8')).hexdigest()
 
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True, help_text=_("카테고리명"), verbose_name=_("카테고리명"))
