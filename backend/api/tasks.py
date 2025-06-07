@@ -1199,6 +1199,16 @@ def extract_statements_for_bill_segment(bill_text_segment,
         )
         return []
 
+    # Filter to ignore procedural speakers (국회의장, 부의장, etc.)
+    IGNORED_SPEAKERS = [
+        '우원식',  # Current 국회의장
+        '이학영',  # 부의장
+        '정우택',  # 부의장  
+        '의장',
+        '부의장',
+        '위원장'
+    ]
+
     try:
         # Use a lighter/cheaper model for speaker detection stage if appropriate
         speaker_detection_model_name = 'gemini-2.0-flash-lite'  # Or 'gemini-2.0-flash-lite' if still available & preferred
@@ -1301,9 +1311,18 @@ def extract_statements_for_bill_segment(bill_text_segment,
             is_substantial = speech_info.get('is_substantial_discussion_guess',
                                              False)
 
-            if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial:
+            # Check if speaker should be ignored
+            should_ignore = False
+            if clean_name:
+                for ignored_speaker in IGNORED_SPEAKERS:
+                    if ignored_speaker in clean_name:
+                        should_ignore = True
+                        break
+
+            if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial or should_ignore:
+                skip_reason = "ignored speaker" if should_ignore else "missing info or filters"
                 logger.info(
-                    f"Skipping speech segment for '{bill_name}' due to missing info or filters: Name='{clean_name}', StartIdx={start_idx}, EndIdx={end_idx}, Person={is_real_person}, Substantial={is_substantial}"
+                    f"Skipping speech segment for '{bill_name}' due to {skip_reason}: Name='{clean_name}', StartIdx={start_idx}, EndIdx={end_idx}, Person={is_real_person}, Substantial={is_substantial}"
                 )
                 continue
 
