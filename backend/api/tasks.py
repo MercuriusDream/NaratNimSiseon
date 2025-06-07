@@ -1290,6 +1290,27 @@ def get_all_assembly_members():
         return set()
 
 
+# Filter to ignore non-의원 speakers - only 의원 can vote legally
+IGNORED_SPEAKERS = [
+    '우원식',  # Current 국회의장
+    '이학영',  # 부의장
+    '정우택',  # 부의장  
+    '의장',
+    '부의장',
+    '위원장',
+    '국무총리',
+    '장관',
+    '차관',
+    '실장',
+    '청장',
+    '원장',
+    '대변인',
+    '비서관',
+    '수석',
+    '정무위원',
+    '간사'
+]
+
 def extract_statements_for_bill_segment(bill_text_segment,
                                         session_id,
                                         bill_name,
@@ -1309,27 +1330,6 @@ def extract_statements_for_bill_segment(bill_text_segment,
 
     # Get all assembly member names for validation
     assembly_members = get_all_assembly_members()
-    
-    # Filter to ignore non-의원 speakers - only 의원 can vote legally
-    IGNORED_SPEAKERS = [
-        '우원식',  # Current 국회의장
-        '이학영',  # 부의장
-        '정우택',  # 부의장  
-        '의장',
-        '부의장',
-        '위원장',
-        '국무총리',
-        '장관',
-        '차관',
-        '실장',
-        '청장',
-        '원장',
-        '대변인',
-        '비서관',
-        '수석',
-        '정무위원',
-        '간사'
-    ]
 
     try:
         # Use a lighter/cheaper model for speaker detection stage if appropriate
