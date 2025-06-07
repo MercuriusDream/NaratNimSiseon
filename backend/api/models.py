@@ -11,6 +11,7 @@ class Session(models.Model):
     conf_knd = models.CharField(max_length=100, help_text=_("회의종류"), verbose_name=_("회의종류"))
     cmit_nm = models.CharField(max_length=100, help_text=_("위원회명"), verbose_name=_("위원회명"))
     conf_plc = models.CharField(max_length=200, blank=True, help_text=_("회의장소"), verbose_name=_("회의장소"))
+    title = models.CharField(max_length=500, blank=True, help_text=_("회의 제목"), verbose_name=_("회의 제목"))
     bg_ptm = models.TimeField(null=True, blank=True, help_text=_("시작시간"), verbose_name=_("시작시간"))
     ed_ptm = models.TimeField(null=True, blank=True, help_text=_("종료시간"), verbose_name=_("종료시간"))
     down_url = models.URLField(help_text=_("PDF 다운로드 URL"), verbose_name=_("PDF 다운로드 URL"))
