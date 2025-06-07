@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+
 # Import celery availability check
 def is_celery_available():
     """Check if Celery/Redis is available for async tasks"""
@@ -121,7 +122,9 @@ class BillViewSet(viewsets.ModelViewSet):
             bill = self.get_object()
             logger.info(f"Fetching statements for bill: {bill.bill_id}")
             statements = bill.statements.all()
-            logger.info(f"Found {statements.count()} statements for bill {bill.bill_id}")
+            logger.info(
+                f"Found {statements.count()} statements for bill {bill.bill_id}"
+            )
             serializer = StatementSerializer(statements, many=True)
             return Response({'status': 'success', 'data': serializer.data})
         except Exception as e:
@@ -247,7 +250,8 @@ class StatementListView(generics.ListAPIView):
 def statement_list(request):
     """List all statements with pagination and filtering"""
     try:
-        statements_qs = Statement.objects.select_related('speaker', 'session', 'bill').all()
+        statements_qs = Statement.objects.select_related(
+            'speaker', 'session', 'bill').all()
 
         # Apply filters
         speaker_id = request.query_params.get('speaker_id')
@@ -263,23 +267,24 @@ def statement_list(request):
         if bill_id:
             statements_qs = statements_qs.filter(bill_id=bill_id)
         if sentiment_min:
-            statements_qs = statements_qs.filter(sentiment_score__gte=float(sentiment_min))
+            statements_qs = statements_qs.filter(
+                sentiment_score__gte=float(sentiment_min))
         if sentiment_max:
-            statements_qs = statements_qs.filter(sentiment_score__lte=float(sentiment_max))
+            statements_qs = statements_qs.filter(
+                sentiment_score__lte=float(sentiment_max))
 
         # Pagination
         paginator = StandardResultsSetPagination()
-        page = paginator.paginate_queryset(statements_qs.order_by('-created_at'), request)
+        page = paginator.paginate_queryset(
+            statements_qs.order_by('-created_at'), request)
         serializer = StatementSerializer(page, many=True)
 
         return paginator.get_paginated_response(serializer.data)
 
     except Exception as e:
         logger.error(f"Error in statement_list: {e}")
-        return Response(
-            {'error': 'Failed to fetch statements'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({'error': 'Failed to fetch statements'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -305,17 +310,16 @@ def bill_list(request):
 
         # Pagination
         paginator = StandardResultsSetPagination()
-        page = paginator.paginate_queryset(bills_qs.order_by('-created_at'), request)
+        page = paginator.paginate_queryset(bills_qs.order_by('-created_at'),
+                                           request)
         serializer = BillSerializer(page, many=True)
 
         return paginator.get_paginated_response(serializer.data)
 
     except Exception as e:
         logger.error(f"Error in bill_list: {e}")
-        return Response(
-            {'error': 'Failed to fetch bills'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({'error': 'Failed to fetch bills'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -345,10 +349,8 @@ def refresh_all_data(request):
 
     except Exception as e:
         logger.error(f"Error triggering data refresh: {e}")
-        return Response(
-            {'error': 'Failed to start data refresh'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({'error': 'Failed to start data refresh'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -461,41 +463,38 @@ def category_analytics(request):
         now = timezone.now()
         if time_range == 'year':
             statements_qs = statements_qs.filter(
-                session__conf_dt__gte=now.date() - timedelta(days=365)
-            )
+                session__conf_dt__gte=now.date() - timedelta(days=365))
         elif time_range == 'month':
             statements_qs = statements_qs.filter(
-                session__conf_dt__gte=now.date() - timedelta(days=30)
-            )
+                session__conf_dt__gte=now.date() - timedelta(days=30))
 
         # Apply category filter if provided
         if categories_param:
-            category_ids = [int(id.strip()) for id in categories_param.split(',') if id.strip()]
+            category_ids = [
+                int(id.strip()) for id in categories_param.split(',')
+                if id.strip()
+            ]
             statements_qs = statements_qs.filter(
-                categories__category_id__in=category_ids
-            )
+                categories__category_id__in=category_ids)
 
         # Get category analytics
         category_data = []
         for category in Category.objects.all():
             category_statements = statements_qs.filter(
-                categories__category=category
-            ).distinct()
+                categories__category=category).distinct()
 
             if category_statements.exists():
                 avg_sentiment = category_statements.aggregate(
-                    avg_sentiment=Avg('sentiment_score')
-                )['avg_sentiment'] or 0
+                    avg_sentiment=Avg('sentiment_score'))['avg_sentiment'] or 0
 
                 statement_count = category_statements.count()
 
                 # Get party breakdown for this category
                 party_breakdown = category_statements.values(
-                    'speaker__plpt_nm'
-                ).annotate(
-                    count=Count('id'),
-                    avg_sentiment=Avg('sentiment_score')
-                ).order_by('-count')[:5]
+                    'speaker__plpt_nm').annotate(
+                        count=Count('id'),
+                        avg_sentiment=Avg('sentiment_score')).order_by(
+                            '-count')[:5]
 
                 category_data.append({
                     'category_id': category.id,
@@ -513,10 +512,8 @@ def category_analytics(request):
 
     except Exception as e:
         logger.error(f"Error in category analytics: {e}")
-        return Response(
-            {'error': 'Failed to fetch category analytics'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({'error': 'Failed to fetch category analytics'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -529,25 +526,23 @@ def category_trend_analysis(request, category_id):
         one_year_ago = timezone.now().date() - timedelta(days=365)
         statements = Statement.objects.filter(
             categories__category=category,
-            session__conf_dt__gte=one_year_ago
-        ).order_by('session__conf_dt')
+            session__conf_dt__gte=one_year_ago).order_by('session__conf_dt')
 
         # Group by month
         monthly_data = {}
         for statement in statements:
             month_key = statement.session.conf_dt.strftime('%Y-%m')
             if month_key not in monthly_data:
-                monthly_data[month_key] = {
-                    'count': 0,
-                    'sentiment_scores': []
-                }
+                monthly_data[month_key] = {'count': 0, 'sentiment_scores': []}
             monthly_data[month_key]['count'] += 1
-            monthly_data[month_key]['sentiment_scores'].append(statement.sentiment_score)
+            monthly_data[month_key]['sentiment_scores'].append(
+                statement.sentiment_score)
 
         # Calculate monthly averages
         trend_data = []
         for month, data in sorted(monthly_data.items()):
-            avg_sentiment = sum(data['sentiment_scores']) / len(data['sentiment_scores'])
+            avg_sentiment = sum(data['sentiment_scores']) / len(
+                data['sentiment_scores'])
             trend_data.append({
                 'month': month,
                 'statement_count': data['count'],
@@ -564,10 +559,8 @@ def category_trend_analysis(request, category_id):
 
     except Exception as e:
         logger.error(f"Error in category trend analysis: {e}")
-        return Response(
-            {'error': 'Failed to fetch category trends'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({'error': 'Failed to fetch category trends'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -597,37 +590,32 @@ def bill_sentiment_analysis(request, bill_id):
 
         # Calculate sentiment summary
         total_statements = statements.count()
-        average_sentiment = statements.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+        average_sentiment = statements.aggregate(
+            avg=Avg('sentiment_score'))['avg'] or 0
         positive_count = statements.filter(sentiment_score__gt=0.3).count()
         negative_count = statements.filter(sentiment_score__lt=-0.3).count()
         neutral_count = total_statements - positive_count - negative_count
 
         # Party breakdown
-        party_breakdown = statements.values(
-            'speaker__plpt_nm'
-        ).annotate(
+        party_breakdown = statements.values('speaker__plpt_nm').annotate(
             count=Count('id'),
             avg_sentiment=Avg('sentiment_score'),
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-        ).order_by('-avg_sentiment')
+            negative_count=Count(
+                'id',
+                filter=Q(sentiment_score__lt=-0.3))).order_by('-avg_sentiment')
 
         # Top speakers by sentiment (most positive and most negative)
         speaker_breakdown = statements.values(
-            'speaker__naas_nm',
-            'speaker__plpt_nm'
-        ).annotate(
-            count=Count('id'),
-            avg_sentiment=Avg('sentiment_score')
-        ).filter(count__gte=2).order_by('-avg_sentiment')[:10]
+            'speaker__naas_nm', 'speaker__plpt_nm').annotate(
+                count=Count('id'),
+                avg_sentiment=Avg('sentiment_score')).filter(
+                    count__gte=2).order_by('-avg_sentiment')[:10]
 
         # Sentiment timeline (by session date)
-        timeline_data = statements.values(
-            'session__conf_dt'
-        ).annotate(
+        timeline_data = statements.values('session__conf_dt').annotate(
             avg_sentiment=Avg('sentiment_score'),
-            count=Count('id')
-        ).order_by('session__conf_dt')
+            count=Count('id')).order_by('session__conf_dt')
 
         return Response({
             'bill': {
@@ -635,32 +623,39 @@ def bill_sentiment_analysis(request, bill_id):
                 'name': bill.bill_nm
             },
             'sentiment_summary': {
-                'total_statements': total_statements,
-                'average_sentiment': round(average_sentiment, 3),
-                'positive_count': positive_count,
-                'neutral_count': neutral_count,
-                'negative_count': negative_count,
-                'positive_percentage': round((positive_count / total_statements) * 100, 1),
-                'negative_percentage': round((negative_count / total_statements) * 100, 1)
+                'total_statements':
+                total_statements,
+                'average_sentiment':
+                round(average_sentiment, 3),
+                'positive_count':
+                positive_count,
+                'neutral_count':
+                neutral_count,
+                'negative_count':
+                negative_count,
+                'positive_percentage':
+                round((positive_count / total_statements) * 100, 1),
+                'negative_percentage':
+                round((negative_count / total_statements) * 100, 1)
             },
-            'party_breakdown': list(party_breakdown),
-            'speaker_breakdown': list(speaker_breakdown),
-            'sentiment_timeline': [
-                {
-                    'date': item['session__conf_dt'].strftime('%Y-%m-%d'),
-                    'avg_sentiment': round(item['avg_sentiment'], 3),
-                    'statement_count': item['count']
-                }
-                for item in timeline_data
-            ]
+            'party_breakdown':
+            list(party_breakdown),
+            'speaker_breakdown':
+            list(speaker_breakdown),
+            'sentiment_timeline': [{
+                'date':
+                item['session__conf_dt'].strftime('%Y-%m-%d'),
+                'avg_sentiment':
+                round(item['avg_sentiment'], 3),
+                'statement_count':
+                item['count']
+            } for item in timeline_data]
         })
 
     except Exception as e:
         logger.error(f"Error in bill sentiment analysis: {e}")
-        return Response(
-            {'error': 'Failed to fetch sentiment analysis'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({'error': 'Failed to fetch sentiment analysis'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -675,16 +670,13 @@ def overall_sentiment_stats(request):
         now = timezone.now()
         if time_range == 'year':
             statements_qs = statements_qs.filter(
-                session__conf_dt__gte=now.date() - timedelta(days=365)
-            )
+                session__conf_dt__gte=now.date() - timedelta(days=365))
         elif time_range == 'month':
             statements_qs = statements_qs.filter(
-                session__conf_dt__gte=now.date() - timedelta(days=30)
-            )
+                session__conf_dt__gte=now.date() - timedelta(days=30))
         elif time_range == 'week':
             statements_qs = statements_qs.filter(
-                session__conf_dt__gte=now.date() - timedelta(days=7)
-            )
+                session__conf_dt__gte=now.date() - timedelta(days=7))
 
         if not statements_qs.exists():
             return Response({
@@ -694,7 +686,8 @@ def overall_sentiment_stats(request):
 
         # Overall statistics
         total_statements = statements_qs.count()
-        avg_sentiment = statements_qs.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+        avg_sentiment = statements_qs.aggregate(
+            avg=Avg('sentiment_score'))['avg'] or 0
 
         # Sentiment distribution
         positive_count = statements_qs.filter(sentiment_score__gt=0.3).count()
@@ -702,34 +695,38 @@ def overall_sentiment_stats(request):
         neutral_count = total_statements - positive_count - negative_count
 
         # Party sentiment ranking
-        party_stats = statements_qs.values(
-            'speaker__plpt_nm'
-        ).annotate(
+        party_stats = statements_qs.values('speaker__plpt_nm').annotate(
             avg_sentiment=Avg('sentiment_score'),
             statement_count=Count('id'),
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-        ).filter(statement_count__gte=5).order_by('-avg_sentiment')
+            negative_count=Count(
+                'id', filter=Q(sentiment_score__lt=-0.3))).filter(
+                    statement_count__gte=5).order_by('-avg_sentiment')
 
         # Most active speakers
         speaker_stats = statements_qs.values(
-            'speaker__naas_nm',
-            'speaker__plpt_nm'
-        ).annotate(
-            avg_sentiment=Avg('sentiment_score'),
-            statement_count=Count('id')
-        ).filter(statement_count__gte=3).order_by('-statement_count')[:20]
+            'speaker__naas_nm', 'speaker__plpt_nm').annotate(
+                avg_sentiment=Avg('sentiment_score'),
+                statement_count=Count('id')).filter(
+                    statement_count__gte=3).order_by('-statement_count')[:20]
 
         return Response({
             'time_range': time_range,
             'overall_stats': {
-                'total_statements': total_statements,
-                'average_sentiment': round(avg_sentiment, 3),
-                'positive_count': positive_count,
-                'neutral_count': neutral_count,
-                'negative_count': negative_count,
-                'positive_percentage': round((positive_count / total_statements) * 100, 1),
-                'negative_percentage': round((negative_count / total_statements) * 100, 1)
+                'total_statements':
+                total_statements,
+                'average_sentiment':
+                round(avg_sentiment, 3),
+                'positive_count':
+                positive_count,
+                'neutral_count':
+                neutral_count,
+                'negative_count':
+                negative_count,
+                'positive_percentage':
+                round((positive_count / total_statements) * 100, 1),
+                'negative_percentage':
+                round((negative_count / total_statements) * 100, 1)
             },
             'party_rankings': list(party_stats),
             'active_speakers': list(speaker_stats)
@@ -737,10 +734,8 @@ def overall_sentiment_stats(request):
 
     except Exception as e:
         logger.error(f"Error in overall sentiment stats: {e}")
-        return Response(
-            {'error': 'Failed to fetch sentiment statistics'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({'error': 'Failed to fetch sentiment statistics'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -749,8 +744,7 @@ def trigger_statement_analysis(request):
     try:
         # Get statements that need analysis (no categories assigned)
         statements_to_analyze = Statement.objects.filter(
-            categories__isnull=True
-        )[:10]  # Limit to 10 for performance
+            categories__isnull=True)[:10]  # Limit to 10 for performance
 
         if not statements_to_analyze:
             return Response({
@@ -767,7 +761,9 @@ def trigger_statement_analysis(request):
                 analyze_statement_categories.delay(statement.id)
                 analyzed_count += 1
             except Exception as e:
-                logger.error(f"Failed to trigger analysis for statement {statement.id}: {e}")
+                logger.error(
+                    f"Failed to trigger analysis for statement {statement.id}: {e}"
+                )
 
         return Response({
             'message': f'Triggered analysis for {analyzed_count} statements',
@@ -776,10 +772,9 @@ def trigger_statement_analysis(request):
 
     except Exception as e:
         logger.error(f"Error triggering statement analysis: {e}")
-        return Response(
-            {'error': 'Failed to trigger analysis'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({'error': 'Failed to trigger analysis'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -788,23 +783,27 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q, Count, Avg
 from .models import Session, Bill, Speaker, Statement, Party
 from .serializers import SessionSerializer, BillSerializer, SpeakerSerializer, StatementSerializer, PartySerializer
-from .tasks import fetch_latest_sessions, analyze_statement_sentiment, fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
+from .tasks import fetch_latest_sessions, analyze_statement_categories, fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
+
 
 @api_view(['GET'])
 def parties_list(request):
     """Get list of all parties with basic statistics and trigger additional data fetch"""
     try:
         # Check if we should fetch additional data
-        fetch_additional = request.GET.get('fetch_additional', 'false').lower() == 'true'
+        fetch_additional = request.GET.get('fetch_additional',
+                                           'false').lower() == 'true'
 
         if fetch_additional:
             # Trigger additional data collection
             try:
                 if is_celery_available():
-                    fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=False, debug=False)
+                    fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=False,
+                                                                  debug=False)
                 else:
                     # Run synchronously if Celery is not available
-                    fetch_additional_data_nepjpxkkabqiqpbvk(force=False, debug=False)
+                    fetch_additional_data_nepjpxkkabqiqpbvk(force=False,
+                                                            debug=False)
             except Exception as e:
                 # Log but don't fail the request
                 print(f"Warning: Could not trigger additional data fetch: {e}")
@@ -820,11 +819,13 @@ def parties_list(request):
 
             # Get statements and sentiment analysis
             statements = Statement.objects.filter(speaker__plpt_nm=party.name)
-            avg_sentiment = statements.aggregate(Avg('sentiment_score'))['sentiment_score__avg']
+            avg_sentiment = statements.aggregate(
+                Avg('sentiment_score'))['sentiment_score__avg']
             total_statements = statements.count()
 
             # Get bills related to this party's speakers
-            bills = Bill.objects.filter(statements__speaker__plpt_nm=party.name).distinct()
+            bills = Bill.objects.filter(
+                statements__speaker__plpt_nm=party.name).distinct()
             total_bills = bills.count()
 
             party_info = {
@@ -850,10 +851,13 @@ def parties_list(request):
         })
 
     except Exception as e:
-        return Response({
-            'status': 'error',
-            'message': f'정당 목록을 불러오는 중 오류가 발생했습니다: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {
+                'status': 'error',
+                'message': f'정당 목록을 불러오는 중 오류가 발생했습니다: {str(e)}'
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET'])
 def party_detail(request, party_id):
@@ -862,23 +866,28 @@ def party_detail(request, party_id):
         party = get_object_or_404(Party, id=party_id)
 
         # Check if we should fetch additional data
-        fetch_additional = request.GET.get('fetch_additional', 'false').lower() == 'true'
+        fetch_additional = request.GET.get('fetch_additional',
+                                           'false').lower() == 'true'
 
         if fetch_additional:
             # Trigger additional data collection
             try:
                 if is_celery_available():
-                    fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=False, debug=False)
+                    fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=False,
+                                                                  debug=False)
                 else:
                     # Run synchronously if Celery is not available
-                    fetch_additional_data_nepjpxkkabqiqpbvk(force=False, debug=False)
+                    fetch_additional_data_nepjpxkkabqiqpbvk(force=False,
+                                                            debug=False)
             except Exception as e:
                 # Log but don't fail the request
                 print(f"Warning: Could not trigger additional data fetch: {e}")
 
         # Get query parameters for filtering
-        time_range = request.GET.get('time_range', 'all')  # 'all', 'month', 'year'
-        sort_by = request.GET.get('sort_by', 'sentiment')  # 'sentiment', 'statements', 'bills'
+        time_range = request.GET.get('time_range',
+                                     'all')  # 'all', 'month', 'year'
+        sort_by = request.GET.get(
+            'sort_by', 'sentiment')  # 'sentiment', 'statements', 'bills'
 
         # Filter statements based on time range
         statements_filter = Q(speaker__plpt_nm=party.name)
@@ -896,25 +905,36 @@ def party_detail(request, party_id):
         statements = Statement.objects.filter(statements_filter)
 
         # Calculate sentiment statistics
-        avg_sentiment = statements.aggregate(Avg('sentiment_score'))['sentiment_score__avg']
-        positive_statements = statements.filter(sentiment_score__gt=0.1).count()
-        negative_statements = statements.filter(sentiment_score__lt=-0.1).count()
-        neutral_statements = statements.filter(sentiment_score__gte=-0.1, sentiment_score__lte=0.1).count()
+        avg_sentiment = statements.aggregate(
+            Avg('sentiment_score'))['sentiment_score__avg']
+        positive_statements = statements.filter(
+            sentiment_score__gt=0.1).count()
+        negative_statements = statements.filter(
+            sentiment_score__lt=-0.1).count()
+        neutral_statements = statements.filter(
+            sentiment_score__gte=-0.1, sentiment_score__lte=0.1).count()
 
         # Get bills related to this party
-        bills = Bill.objects.filter(statements__speaker__plpt_nm=party.name).distinct()
+        bills = Bill.objects.filter(
+            statements__speaker__plpt_nm=party.name).distinct()
 
         # Get recent statements
         recent_statements = statements.order_by('-created_at')[:10]
         recent_statements_data = []
         for stmt in recent_statements:
             recent_statements_data.append({
-                'id': stmt.id,
-                'text': stmt.text[:200] + '...' if len(stmt.text) > 200 else stmt.text,
-                'sentiment_score': stmt.sentiment_score,
-                'speaker_name': stmt.speaker.naas_nm,
-                'session_id': stmt.session.conf_id,
-                'created_at': stmt.created_at
+                'id':
+                stmt.id,
+                'text':
+                stmt.text[:200] + '...' if len(stmt.text) > 200 else stmt.text,
+                'sentiment_score':
+                stmt.sentiment_score,
+                'speaker_name':
+                stmt.speaker.naas_nm,
+                'session_id':
+                stmt.session.conf_id,
+                'created_at':
+                stmt.created_at
             })
 
         party_detail_data = {
@@ -936,13 +956,12 @@ def party_detail(request, party_id):
             'additional_data_fetched': fetch_additional
         }
 
-        return Response({
-            'status': 'success',
-            'data': party_detail_data
-        })
+        return Response({'status': 'success', 'data': party_detail_data})
 
     except Exception as e:
-        return Response({
-            'status': 'error',
-            'message': f'정당 상세 정보를 불러오는 중 오류가 발생했습니다: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {
+                'status': 'error',
+                'message': f'정당 상세 정보를 불러오는 중 오류가 발생했습니다: {str(e)}'
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
