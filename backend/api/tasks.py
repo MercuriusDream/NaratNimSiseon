@@ -1315,35 +1315,16 @@ def extract_statements_for_bill_segment(bill_text_segment,
                                         session_id,
                                         bill_name,
                                         debug=False):
-    """Extract and analyze statements for a specific bill text segment using LLM."""
-    if not bill_text_segment: return []
+    """Extract and analyze statements for a specific bill text segment."""
+    if not bill_text_segment: 
+        return []
 
     logger.info(
-        f"🔍 Stage 1 (Speaker Detect): For bill '{bill_name}' (session: {session_id})"
+        f"🔍 Processing bill segment: '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
     )
 
-    if not genai or not hasattr(genai, 'GenerativeModel'):
-        logger.warning(
-            "❌ Gemini API not configured. Cannot perform speaker detection for bill segment."
-        )
-        return []
-
-    # Get all assembly member names for validation
-    assembly_members = get_all_assembly_members()
-
-    try:
-        # Use a lighter/cheaper model for speaker detection stage if appropriate
-        speaker_detection_model_name = 'gemini-2.0-flash-lite'  # Or 'gemini-2.0-flash-lite' if still available & preferred
-        speaker_detection_llm = genai.GenerativeModel(
-            speaker_detection_model_name)
-    except Exception as e_model:
-        logger.error(
-            f"Failed to initialize speaker detection model ({speaker_detection_model_name}): {e_model}"
-        )
-        return []
-
     # Use batch processing for long text segments
-    MAX_SEGMENT_LENGTH = 20000  # 20K characters for speaker detection
+    MAX_SEGMENT_LENGTH = 20000  # 20K characters
     if len(bill_text_segment) > MAX_SEGMENT_LENGTH:
         logger.info(
             f"Bill text segment too long ({len(bill_text_segment)} chars), processing in batches of {MAX_SEGMENT_LENGTH}"
@@ -1354,14 +1335,11 @@ def extract_statements_for_bill_segment(bill_text_segment,
             batch = bill_text_segment[i:i + MAX_SEGMENT_LENGTH]
             batches.append(batch)
 
-        logger.info(
-            f"Processing {len(batches)} batches for bill '{bill_name}'")
+        logger.info(f"Processing {len(batches)} batches for bill '{bill_name}'")
 
         all_batch_statements = []
         for batch_idx, batch_text in enumerate(batches):
-            logger.info(
-                f"Processing batch {batch_idx + 1}/{len(batches)} for bill '{bill_name}'"
-            )
+            logger.info(f"Processing batch {batch_idx + 1}/{len(batches)} for bill '{bill_name}'")
             batch_statements = process_single_segment_for_statements_with_splitting(
                 batch_text, session_id, bill_name, debug)
             all_batch_statements.extend(batch_statements)
@@ -1370,21 +1348,20 @@ def extract_statements_for_bill_segment(bill_text_segment,
 
         return all_batch_statements
 
-    # Process single segment if under limit - use splitting strategy for better JSON parsing
-    return process_single_segment_for_statements_with_splitting(bill_text_segment, session_id,
-                                                 bill_name, debug)
+    # Process single segment - use ◯ splitting approach
+    return process_single_segment_for_statements_with_splitting(bill_text_segment, session_id, bill_name, debug)
 
 
 def process_single_segment_for_statements_with_splitting(bill_text_segment,
                                                         session_id,
                                                         bill_name,
                                                         debug=False):
-    """Process a single text segment by splitting at ◯ markers and processing each speech individually."""
+    """Process a single text segment by splitting at ◯ markers and analyzing each speech individually."""
     if not bill_text_segment:
         return []
 
     logger.info(
-        f"🔍 Stage 1 (Speaker Detect with ◯ Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
+        f"🔍 Stage 2 (◯ Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
     )
 
     # Find all ◯ markers to determine individual speeches
@@ -1393,10 +1370,9 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
         if char == '◯':
             speaker_markers.append(i)
     
-    if len(speaker_markers) < 2:
-        # If less than 2 speakers, process as single segment
-        logger.info(f"Only {len(speaker_markers)} speaker markers found, processing as single segment")
-        return process_single_segment_for_statements(bill_text_segment, session_id, bill_name, debug)
+    if len(speaker_markers) < 1:
+        logger.info(f"No ◯ markers found, skipping segment")
+        return []
     
     # Split at each ◯ marker to create individual speech segments
     speech_segments = []
@@ -1410,7 +1386,7 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
             end_pos = len(bill_text_segment)
         
         segment = bill_text_segment[start_pos:end_pos].strip()
-        if segment:
+        if segment and len(segment) > 50:  # Only process segments with meaningful content
             speech_segments.append(segment)
     
     logger.info(
@@ -1420,15 +1396,17 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
     
     all_statements = []
     
-    # Process each speech segment individually
+    # Process each speech segment individually with LLM analysis
     for i, segment in enumerate(speech_segments):
-        if segment:
-            logger.info(f"Processing speech segment {i + 1}/{len(speech_segments)} for bill '{bill_name}' ({len(segment)} chars)")
-            segment_statements = process_single_segment_for_statements(segment, session_id, bill_name, debug)
-            all_statements.extend(segment_statements)
-            
-            if not debug:
-                time.sleep(0.3)  # Brief pause between segments
+        logger.info(f"Processing speech segment {i + 1}/{len(speech_segments)} for bill '{bill_name}' ({len(segment)} chars)")
+        
+        # Analyze this speech segment with LLM (Stage 3)
+        statement_result = analyze_speech_segment_with_llm(segment, session_id, bill_name, debug)
+        if statement_result:
+            all_statements.append(statement_result)
+        
+        if not debug:
+            time.sleep(0.3)  # Brief pause between segments
     
     logger.info(
         f"✅ ◯-based processing for '{bill_name}' resulted in {len(all_statements)} statements "
@@ -1442,198 +1420,119 @@ def process_single_segment_for_statements(bill_text_segment,
                                           session_id,
                                           bill_name,
                                           debug=False):
-    """Process a single text segment (under 20K chars) for speaker detection and analysis."""
-    if not bill_text_segment:
-        return []
+    """Fallback: Use splitting approach for single segments."""
+    return process_single_segment_for_statements_with_splitting(
+        bill_text_segment, session_id, bill_name, debug)
 
-    logger.info(
-        f"🔍 Stage 1 (Speaker Detect): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
-    )
 
-    if not genai or not hasattr(genai, 'GenerativeModel'):
+def analyze_speech_segment_with_llm(speech_segment,
+                                   session_id,
+                                   bill_name,
+                                   debug=False):
+    """Stage 3: Analyze a single speech segment with LLM to extract speaker name and content analysis."""
+    if not model:
         logger.warning(
-            "❌ Gemini API not configured. Cannot perform speaker detection for bill segment."
+            "❌ Main LLM ('model') not available. Cannot analyze speech segment."
         )
-        return []
-    
+        return None
+
+    if not speech_segment or len(speech_segment) < 50:
+        return None
+
     # Get all assembly member names for validation
     assembly_members = get_all_assembly_members()
-    try:
-        # Use a lighter/cheaper model for speaker detection stage if appropriate
-        speaker_detection_model_name = 'gemini-2.0-flash-lite'  # Or 'gemini-2.0-flash-lite' if still available & preferred
-        speaker_detection_llm = genai.GenerativeModel(
-            speaker_detection_model_name)
-    except Exception as e_model:
-        logger.error(
-            f"Failed to initialize speaker detection model ({speaker_detection_model_name}): {e_model}"
-        )
-        return []
 
-    speaker_detection_prompt = f"""
-당신은 이 시대 최고의 기록가입니다. 당신의 기록은 사람들을 살릴 것입니다. 당신의 기록의 정확성은 매우 중요하여, 당신의 기록이 중요하지 못하다면 이 세계가 문제에 빠질 수도 있습니다. 따라서, 최대한 정확하고, 하나도 놓치지 않도록, 처음부터 끝까지 제대로 된 기록을 부탁드립니다.
-다음은 국회 회의록의 일부이며, "{bill_name}" 의안과 관련된 부분으로 추정됩니다.
-이 구간에서 국회의원들의 개별 발언을 정확히 식별하고, 발언자와 발언 시작/종료 지점을 알려주세요.
-
-논의 중인 의안: {bill_name}
-
-회의록 텍스트 일부:
+    prompt = f"""
+국회 회의록 발언 분석:
+논의 중인 의안: "{bill_name}"
+발언 세그먼트:
 ---
-{bill_text_segment}
+{speech_segment}
 ---
 
-각 발언에 대해 다음 정보를 JSON 형식으로 제공해주세요. 배열 'detected_speeches' 안에 객체로 포함합니다:
+위 텍스트에서 발언자와 발언 내용을 분석하여 다음 JSON 형식으로 제공해주세요:
 {{
-  "a": "회의록에 기록된 발언자 이름 원본 (예: 김철수의원)",
-  "b": "정리된 발언자 실명 (예: 김철수)",
-  "c": 발언이 시작되는 텍스트 내 문자 위치 (숫자),
-  "d": 발언이 끝나는 텍스트 내 문자 위치 (숫자),
-  "e": true/false (실제 국회의원 이름으로 판단되는지 여부),
-  "f": true/false (단순 절차 안내가 아닌, 실질적인 정책/의안 논의인지 여부)
+  "speaker_name": "발언자 실명 (◯ 다음에 나오는 이름에서 직함 제거, 예: '김철수')",
+  "speech_content": "발언자 이름 부분을 제거한 실제 발언 내용",
+  "is_valid_member": true/false (실제 국회의원으로 판단되는지),
+  "is_substantial": true/false (정책/의안 관련 실질적 발언인지),
+  "sentiment_score": -1.0 부터 1.0 사이의 감성 점수,
+  "sentiment_reason": "감성 판단 근거 (간략히)",
+  "bill_relevance_score": 0.0 부터 1.0 사이의 의안 관련성 점수,
+  "policy_categories": [
+    {{
+      "main_category": "주요 정책 분야 (경제, 복지, 교육, 외교안보, 환경, 법제, 과학기술, 문화, 농림, 국토교통, 행정, 기타)",
+      "sub_category": "세부 정책 분야",
+      "confidence": 0.0-1.0
+    }}
+  ],
+  "key_policy_phrases": ["핵심 정책 관련 어구 최대 5개"],
+  "bill_specific_keywords": ["'{bill_name}' 관련 직접 키워드 최대 3개"]
 }}
 
 기준:
-1. '◯' (동그라미) 기호로 시작하고 사람 이름으로 보이는 부분만 발언으로 간주합니다.
-2. '의장', '위원장' 등이 사회를 보는 발언은 f: false로 처리합니다. 단, 위원장이 개인 의견을 표명하는 경우는 true일 수 있습니다.
-3. 법률명, 기관명, 직책명만 있는 경우는 발언자로 보지 않습니다.
-4. "존경하는", "감사합니다" 등 단순 인사나 절차적 발언(예: "이의 없으십니까?")은 f: false 입니다.
-5. b은 '의원', '장관', '위원장' 등 직함을 제외하고 이름만 추출합니다 (예: "김XX 의원" -> "김XX").
-6. c 발언자 표시(◯이름) 부분을 포함한 시작 위치입니다.
-7. d 다음 발언자가 시작되기 직전 또는 텍스트 끝까지입니다.
-8. 인덱스는 주어진 텍스트 내에서의 정확한 문자 위치를 나타내야 합니다.
-9. 가능하다면, '의원' 의 발언만 제공해 주십시오. 의원을 제외한 자들에 대해서는, 해당 안건의 이해에 문제가 없다면, 사회나 증언, 즉 대한민국 국회법상으로 국회 투표권이 없는 자들의 발언 등은 제외되어야 합니다.
-
-응답은 다음 JSON 구조를 따라야 합니다:
-{{
-  "detected_speeches": [
-    {{
-      "a": "...",
-      "b": "...",
-      "c": 123,
-      "d": 456,
-      "e": true,
-      "f": true
-    }}
-    // 추가 발언들...
-  ]
-}}
+1. speaker_name: ◯ 다음 이름에서 '의원', '위원장', '장관' 등 직함 제거
+2. speech_content: 발언자 표시 부분 제거 후 실제 발언 내용만
+3. is_valid_member: 실제 국회의원 이름인지 판단
+4. is_substantial: 단순 인사/절차가 아닌 정책 논의인지
+5. 의장, 위원장의 사회 발언은 is_substantial: false
+6. bill_relevance_score: 명시된 의안과의 직접적 관련성
 """
-    analyzed_statements_for_bill = []
+
     try:
-        stage1_response = speaker_detection_llm.generate_content(
-            speaker_detection_prompt)
-        if not stage1_response or not stage1_response.text:
-            logger.warning(
-                f"❌ No response from LLM speaker detection for bill '{bill_name}'."
-            )
-            return []
+        response = model.generate_content(prompt)
+        if not response or not response.text:
+            logger.warning(f"❌ No LLM response for speech segment analysis")
+            return None
 
-        response_text_cleaned = stage1_response.text.strip().replace(
-            "```json", "").replace("```", "").strip()
+        response_text_cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
+        analysis_json = json.loads(response_text_cleaned)
 
-        try:
-            stage1_data = json.loads(response_text_cleaned)
-        except json.JSONDecodeError as e:
-            logger.error(
-                f"❌ JSON parsing error for speaker detection (bill '{bill_name}'): {e}. Response was: {response_text_cleaned}"
-            )
-            return []
+        speaker_name = analysis_json.get('speaker_name', '').strip()
+        speech_content = analysis_json.get('speech_content', '').strip()
+        is_valid_member = analysis_json.get('is_valid_member', False)
+        is_substantial = analysis_json.get('is_substantial', False)
 
-        detected_speeches_info = stage1_data.get('detected_speeches', [])
-        logger.info(
-            f"✅ Speaker detection for '{bill_name}': Found {len(detected_speeches_info)} potential speech segments."
-        )
-
-        if not detected_speeches_info: return []
-
-        # Iterate through detected speeches to extract and analyze full content
-        for i, speech_info in enumerate(detected_speeches_info):
-            clean_name = speech_info.get('b')
-            start_idx = speech_info.get('c')
-            end_idx = speech_info.get('d')
-            is_real_person = speech_info.get('e', False)
-            is_substantial = speech_info.get('f', False)
-
-            # Check if speaker should be ignored
-            should_ignore = any(ignored in clean_name for ignored in IGNORED_SPEAKERS) if clean_name else True
+        # Validate speaker name against assembly members
+        is_real_member = False
+        if speaker_name and assembly_members:
+            # Clean the name for matching
+            name_for_matching = speaker_name
+            for title in ['의원', '위원장', '장관', '의장', '부의장']:
+                name_for_matching = name_for_matching.replace(title, '').strip()
             
-            # Check if this is a real assembly member
-            is_member = False
-            if clean_name and assembly_members:
-                # Clean the name by removing common titles for matching
-                name_for_matching = clean_name
-                for title in ['의원', '위원장', '장관', '의장', '부의장']:
-                    name_for_matching = name_for_matching.replace(title, '').strip()
-                
-                # Check if the cleaned name is in our assembly member list
-                is_member = name_for_matching in assembly_members or clean_name in assembly_members
-                
-                # Fallback: if we couldn't fetch assembly members, use the old logic
-                if not assembly_members:
-                    is_member = '의원' in clean_name
+            is_real_member = name_for_matching in assembly_members or speaker_name in assembly_members
             
-            if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial or should_ignore or not is_member:
-                skip_reason = "ignored speaker" if should_ignore else "not an assembly member" if not is_member else "missing info or filters"
-                logger.info(
-                    f"Skipping speech segment for '{bill_name}' due to {skip_reason}: Name='{clean_name}', StartIdx={start_idx}, EndIdx={end_idx}, Person={is_real_person}, Substantial={is_substantial}, Member={is_member}, AssemblyMembersCount={len(assembly_members)}"
-                )
-                continue
+            # Fallback if we couldn't fetch assembly members
+            if not assembly_members:
+                is_real_member = is_valid_member
 
-            # Validate indices are within text bounds
-            if start_idx < 0 or end_idx > len(
-                    bill_text_segment) or start_idx >= end_idx:
-                logger.warning(
-                    f"Invalid indices for speaker '{clean_name}' in bill '{bill_name}': start={start_idx}, end={end_idx}, text_length={len(bill_text_segment)}. Skipping."
-                )
-                continue
+        # Check if speaker should be ignored
+        should_ignore = any(ignored in speaker_name for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
-            current_speech_content = bill_text_segment[
-                start_idx:end_idx].strip()
-            # Clean the extracted content
-            current_speech_content = clean_pdf_text(current_speech_content)
+        if not speaker_name or not speech_content or not is_valid_member or not is_substantial or should_ignore or not is_real_member:
+            skip_reason = "ignored speaker" if should_ignore else "not a real member" if not is_real_member else "invalid or insubstantial"
+            logger.info(f"Skipping speech segment due to {skip_reason}: Speaker='{speaker_name}', Valid={is_valid_member}, Substantial={is_substantial}, RealMember={is_real_member}")
+            return None
 
-            # Clean the extracted content a bit (remove the speaker part from the beginning if it was included by start_cue)
-            # Example: if start_cue was "◯홍길동 의원 위원회에서는..." and speech is "◯홍길동 의원 위원회에서는..."
-            # we want "위원회에서는..." for analysis. The prompt asks for speech_start_cue as the *beginning*.
-            # The `extract_speech_between_markers` is better for this refined extraction.
-            # Using simpler method for now based on cues
-            if current_speech_content.startswith(speech_info.get('a', '')):
-                current_speech_content = current_speech_content[
-                    len(speech_info.get('a', '')):].strip()
-                # this logic is tricky, relies on good cues from LLM
-                pass  # The cue itself IS the start of the text LLM saw.
+        # Return the complete analysis
+        return {
+            'speaker_name': speaker_name,
+            'text': speech_content,
+            'sentiment_score': analysis_json.get('sentiment_score', 0.0),
+            'sentiment_reason': analysis_json.get('sentiment_reason', 'LLM 분석 완료'),
+            'bill_relevance_score': analysis_json.get('bill_relevance_score', 0.0),
+            'policy_categories': analysis_json.get('policy_categories', []),
+            'policy_keywords': analysis_json.get('key_policy_phrases', []),
+            'bill_specific_keywords': analysis_json.get('bill_specific_keywords', [])
+        }
 
-            if not current_speech_content or len(
-                    current_speech_content
-            ) < 50:  # Min length for meaningful analysis
-                logger.info(
-                    f"Skipping short/empty speech by '{clean_name}' for '{bill_name}'."
-                )
-                continue
-
-            logger.info(
-                f"Analyzing content for '{clean_name}' on bill '{bill_name}' (approx {len(current_speech_content)} chars)."
-            )
-            # Analyze this specific speech content with bill context
-            analysis_result_dict = analyze_single_statement_with_bill_context(
-                {
-                    'speaker_name': clean_name,
-                    'text': current_speech_content
-                }, session_id, bill_name, debug)
-            if analysis_result_dict:
-                analyzed_statements_for_bill.append(analysis_result_dict)
-
-            if not debug: time.sleep(0.6)  # API rate limit
-
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON parsing error for speech segment analysis: {e}")
     except Exception as e:
-        logger.error(
-            f"❌ Error during speaker detection/analysis for bill '{bill_name}': {e}"
-        )
-        logger.exception("Full traceback for bill segment processing error:")
-
-    logger.info(
-        f"✅ Bill segment '{bill_name}' analysis resulted in {len(analyzed_statements_for_bill)} statements."
-    )
-    return analyzed_statements_for_bill
+        logger.error(f"❌ Error during speech segment analysis: {e}")
+    
+    return None
 
 
 def analyze_single_statement_with_bill_context(statement_data_dict,
@@ -2616,97 +2515,7 @@ def process_extracted_statements_data(statements_data_list,
     )
 
 
-def extract_statements_with_llm_validation(full_text,
-                                           session_id,
-                                           bills_context_str,
-                                           debug=False):
-    """
-    DEPRECATED-LIKE / Refactored into process_pdf_text_for_statements which orchestrates segmentation.
-    This was an older top-level entry point. Calls will now go to `process_pdf_text_for_statements`.
-    If called directly, it implies full-text processing without segmentation attempt.
-    """
-    logger.warning(
-        "`extract_statements_with_llm_validation` called directly. Processing full text without segmentation attempt."
-    )
-    if not model:
-        logger.warning(
-            "❌ LLM model not available, using very basic regex fallback if any."
-        )
-        # return extract_statements_with_regex_fallback(full_text, session_id, debug) # This fallback also needs LLM or heavy rework
-        return []
 
-    return extract_statements_without_bill_separation(full_text, session_id,
-                                                      bills_context_str, debug)
-
-
-def extract_speech_between_markers(full_text,
-                                   exact_start_marker,
-                                   next_speaker_char_cue="◯",
-                                   speaker_name_for_log="Unknown"):
-    """
-    Extract speech content for a given speaker.
-    - full_text: The larger text block (e.g., a bill segment or whole transcript).
-    - exact_start_marker: The precise text indicating the current speaker's turn (e.g., "◯김부겸 국무총리").
-    - next_speaker_char_cue: Character(s) indicating start of ANY next speaker (e.g., "◯").
-    - speaker_name_for_log: For logging.
-    """
-    try:
-        if not full_text or not exact_start_marker:
-            return ""
-
-        start_pos = full_text.find(exact_start_marker)
-        if start_pos == -1:
-            logger.warning(
-                f"Could not find exact_start_marker '{exact_start_marker}' for {speaker_name_for_log}."
-            )
-            return ""
-
-        # Content begins *after* the marker typically, if marker includes speaker name
-        # If marker is *just* the name and "◯", then text is after that.
-        # This function assumes 'exact_start_marker' *is* the beginning of the speech content to be returned.
-        # So, content_actual_start = start_pos.
-
-        # Find where this speaker's content ends: at the start of the next speaker's cue OR end of full_text
-        end_pos_of_current_speech = len(full_text)
-
-        # Search for the next_speaker_char_cue *after* the beginning of the current speaker's marker
-        # This prevents finding the current speaker's own cue.
-        search_for_next_cue_from = start_pos + len(
-            exact_start_marker)  # Search AFTER the current marker text
-        if search_for_next_cue_from >= len(
-                full_text):  # If current marker is at the very end
-            search_for_next_cue_from = start_pos + 1  # At least search 1 char after current marker's start
-
-        next_cue_pos = full_text.find(next_speaker_char_cue,
-                                      search_for_next_cue_from)
-
-        if next_cue_pos != -1:
-            end_pos_of_current_speech = next_cue_pos
-
-        speech_content = full_text[start_pos:end_pos_of_current_speech].strip()
-
-        # Further cleaning: remove speaker name tag from beginning of *extracted* content IF NECESSARY.
-        # This depends on how 'exact_start_marker' is defined. If it IS "◯Speaker Name Actual Speech...",
-        # then the below cleaning might not be needed as the 'Actual Speech' part is already isolated.
-        # However, prompts usually ask for speaker + a bit of text as a cue.
-
-        # Minimalist cleaning, more robust cleaning specific to format might be needed
-        # Remove parenthetical asides common in transcripts
-        import re
-        speech_content_cleaned = re.sub(
-            r'\s*\([^)]*\)\s*', ' ',
-            speech_content)  # remove (text) and surrounding spaces
-        speech_content_cleaned = re.sub(
-            r'\s+', ' ',
-            speech_content_cleaned).strip()  # Consolidate multiple spaces
-
-        return speech_content_cleaned
-
-    except Exception as e:
-        logger.error(
-            f"❌ Error in extract_speech_between_markers for '{speaker_name_for_log}': {e}"
-        )
-        return ""
 
 
 def extract_statements_with_regex_fallback(text, session_id, debug=False):
@@ -2901,30 +2710,7 @@ def get_bills_context(session_id):
         return "의안 목록 조회 중 오류 발생"
 
 
-def parse_and_analyze_statements_from_text(full_text,
-                                           session_id,
-                                           bills_context_str,
-                                           debug=False):
-    """
-    DEPRECATED-LIKE / Refactored. This was an older mid-level orchestrator.
-    New main entry point for PDF text processing is `process_pdf_text_for_statements`.
-    If this is called, it suggests a less granular approach (full text processing).
-    """
-    logger.warning(
-        "`parse_and_analyze_statements_from_text` called. "
-        "This implies processing full text without bill segmentation attempt. "
-        "Consider calling `process_pdf_text_for_statements` instead.")
 
-    # This directly calls the full-text extraction and analysis path
-    statements_data = extract_statements_without_bill_separation(
-        full_text, session_id, bills_context_str, debug)
-    # The `extract_statements_without_bill_separation` now returns already analyzed data (list of dicts).
-    # No further loop for `analyze_single_statement` is needed here if that's true.
-
-    logger.info(
-        f"✅ Full-text parsing and analysis yielded {len(statements_data)} statements for session {session_id}."
-    )
-    return statements_data  # Returns list of dicts with analysis
 
 
 def create_statement_categories(statement_obj,
