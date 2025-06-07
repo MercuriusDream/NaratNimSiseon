@@ -1,3 +1,4 @@
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -40,6 +41,22 @@ class Bill(models.Model):
     def __str__(self):
         return self.bill_nm
 
+class Party(models.Model):
+    name = models.CharField(max_length=100, unique=True, help_text=_("정당명"), verbose_name=_("정당명"))
+    logo_url = models.URLField(blank=True, null=True, help_text=_("정당 로고 이미지 URL"), verbose_name=_("정당 로고 URL"))
+    slogan = models.CharField(max_length=255, blank=True, help_text=_("정당 슬로건"), verbose_name=_("정당 슬로건"))
+    description = models.TextField(blank=True, help_text=_("정당 설명"), verbose_name=_("정당 설명"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = "정당"
+        verbose_name_plural = "정당 목록"
+
 class Speaker(models.Model):
     naas_cd = models.CharField(max_length=20, primary_key=True, verbose_name=_("국회의원 코드"))
     naas_nm = models.CharField(max_length=100, help_text=_("국회의원명"), verbose_name=_("국회의원명"))
@@ -80,6 +97,22 @@ class Speaker(models.Model):
         parties = self.get_party_list()
         return parties[-1] if parties else "정당정보없음"
 
+class SpeakerPartyHistory(models.Model):
+    speaker = models.ForeignKey(Speaker, on_delete=models.CASCADE, verbose_name=_("국회의원"))
+    party = models.ForeignKey(Party, on_delete=models.CASCADE, verbose_name=_("정당"))
+    order = models.PositiveIntegerField(help_text=_("정당 이력 순서 (0부터 시작)"), verbose_name=_("순서"))
+    is_current = models.BooleanField(default=False, help_text=_("현재 소속 정당 여부"), verbose_name=_("현재 정당"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
+
+    class Meta:
+        ordering = ['speaker', 'order']
+        unique_together = ['speaker', 'party', 'order']
+        verbose_name = _("국회의원 정당 이력")
+        verbose_name_plural = _("국회의원 정당 이력")
+
+    def __str__(self):
+        return f"{self.speaker.naas_nm} - {self.party.name} ({self.order})"
+
 class Statement(models.Model):
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='statements', verbose_name=_("관련 회의"))
     bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name='statements', null=True, blank=True, verbose_name=_("관련 의안"))
@@ -97,45 +130,8 @@ class Statement(models.Model):
         verbose_name = _("발언")
         verbose_name_plural = _("발언")
 
-
-
-class SpeakerPartyHistory(models.Model):
-    speaker = models.ForeignKey(Speaker, on_delete=models.CASCADE, verbose_name=_("국회의원"))
-    party = models.ForeignKey(Party, on_delete=models.CASCADE, verbose_name=_("정당"))
-    order = models.PositiveIntegerField(help_text=_("정당 이력 순서 (0부터 시작)"), verbose_name=_("순서"))
-    is_current = models.BooleanField(default=False, help_text=_("현재 소속 정당 여부"), verbose_name=_("현재 정당"))
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
-
-    class Meta:
-        ordering = ['speaker', 'order']
-        unique_together = ['speaker', 'party', 'order']
-        verbose_name = _("국회의원 정당 이력")
-        verbose_name_plural = _("국회의원 정당 이력")
-
-    def __str__(self):
-        return f"{self.speaker.naas_nm} - {self.party.name} ({self.order})"
-
-
     def __str__(self):
         return f"{self.speaker.naas_nm}의 발언 ({self.created_at})"
-
-
-class Party(models.Model):
-    name = models.CharField(max_length=100, unique=True, help_text=_("정당명"), verbose_name=_("정당명"))
-    logo_url = models.URLField(blank=True, null=True, help_text=_("정당 로고 이미지 URL"), verbose_name=_("정당 로고 URL"))
-    slogan = models.CharField(max_length=255, blank=True, help_text=_("정당 슬로건"), verbose_name=_("정당 슬로건"))
-    description = models.TextField(blank=True, help_text=_("정당 설명"), verbose_name=_("정당 설명"))
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
-    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        ordering = ['name']
-        verbose_name = "정당"
-        verbose_name_plural = "정당 목록"
-
 
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True, help_text=_("카테고리명"), verbose_name=_("카테고리명"))
@@ -150,7 +146,6 @@ class Category(models.Model):
         ordering = ['name']
         verbose_name = "카테고리"
         verbose_name_plural = "카테고리 목록"
-
 
 class Subcategory(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='subcategories', verbose_name=_("상위 카테고리"))
@@ -167,7 +162,6 @@ class Subcategory(models.Model):
         unique_together = ['category', 'name']
         verbose_name = "하위카테고리"
         verbose_name_plural = "하위카테고리 목록"
-
 
 class StatementCategory(models.Model):
     statement = models.ForeignKey(Statement, on_delete=models.CASCADE, related_name='categories', verbose_name=_("발언"))
