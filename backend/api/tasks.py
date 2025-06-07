@@ -950,6 +950,32 @@ def fetch_session_details(self=None,
 
 
 def get_session_bills_list(session_id):
+    """Get list of bills for a specific session"""
+    try:
+        # Implementation for getting session bills
+        api_url = f"https://open.assembly.go.kr/portal/openapi/nwvrqwxyaytdsfvhu"
+        params = {
+            'Key': settings.OPEN_ASSEMBLY_API_KEY,
+            'Type': 'json',
+            'pIndex': 1,
+            'pSize': 1000,
+            'CONF_NUM': session_id
+        }
+        
+        response = requests.get(api_url, params=params)
+        response.raise_for_status()
+        
+        data = response.json()
+        bills = []
+        
+        if data.get('nwvrqwxyaytdsfvhu') and data['nwvrqwxyaytdsfvhu'][1].get('row'):
+            bills = data['nwvrqwxyaytdsfvhu'][1]['row']
+            
+        return bills
+        
+    except Exception as e:
+        logger.error(f"Error getting bills for session {session_id}: {e}")
+        return []
     """Get list of bill names for a specific session."""
     try:
         session = Session.objects.get(conf_id=session_id)
