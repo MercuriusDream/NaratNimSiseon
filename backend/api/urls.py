@@ -1,3 +1,4 @@
+
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework.decorators import api_view
@@ -7,8 +8,9 @@ from .views import (
     SessionViewSet, BillViewSet, SpeakerViewSet, StatementViewSet, PartyViewSet,
     CategoryListView,
     category_analytics, category_trend_analysis, trigger_statement_analysis,
-    bill_sentiment_analysis, overall_sentiment_stats, statement_list, bill_list,
-    refresh_all_data, data_status, parties_list
+    overall_sentiment_stats, statement_list, bill_list,
+    refresh_all_data, data_status, parties_list, party_detail,
+    category_sentiment_analysis
 )
 from .models import Session, Bill, Speaker, Statement
 
@@ -47,10 +49,11 @@ urlpatterns = [
     path('categories/', CategoryListView.as_view(), name='category-list'),
     path('analytics/categories/', category_analytics, name='category-analytics'),
     path('analytics/categories/<int:category_id>/trends/', category_trend_analysis, name='category-trends'),
+    path('analytics/category-sentiment/', category_sentiment_analysis, name='category-sentiment'),
     path('analysis/trigger/', trigger_statement_analysis, name='trigger-analysis'),
 
     # Sentiment analysis endpoints
-    path('bills/<str:bill_id>/sentiment/', bill_sentiment_analysis, name='bill-sentiment'),
+    path('bills/<str:bill_id>/sentiment/', 'views.BillViewSet', name='bill-sentiment'),
     path('analytics/sentiment/', overall_sentiment_stats, name='overall-sentiment'),
 
     # List endpoints with filtering
@@ -61,4 +64,5 @@ urlpatterns = [
     path('data/refresh/', refresh_all_data, name='refresh-data'),
     path('data/status/', data_status, name='data-status'),
     path('parties/', parties_list, name='party-list'),
+    path('parties/<int:party_id>/', party_detail, name='party-detail'),
 ]

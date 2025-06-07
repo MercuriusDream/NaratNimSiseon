@@ -1,3 +1,4 @@
+
 from rest_framework import serializers
 from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory, VotingRecord
 from django.utils import timezone
@@ -64,18 +65,19 @@ class StatementSerializer(serializers.ModelSerializer):
                                          read_only=True)
     bill_name = serializers.CharField(source='bill.bill_nm', read_only=True)
     categories = StatementCategorySerializer(many=True, read_only=True)
+    content = serializers.CharField(source='text', read_only=True)  # Add content field for frontend compatibility
 
     class Meta:
         model = Statement
         fields = '__all__'
 
-    def validate_content(self, value):
+    def validate_text(self, value):
         if len(value.strip()) < 10:
             raise serializers.ValidationError("발언 내용은 10자 이상이어야 합니다.")
         return value
 
     def validate_sentiment_score(self, value):
-        if value < -1 or value > 1:
+        if value is not None and (value < -1 or value > 1):
             raise serializers.ValidationError("감정 점수는 -1에서 1 사이여야 합니다.")
         return value
 
@@ -96,9 +98,6 @@ class SessionSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        # if data.get('conf_dt') and data.get('conf_dt_end'): # conf_dt_end does not exist
-        #     if data['conf_dt'] > data['conf_dt_end']:
-        #         raise serializers.ValidationError("회의 종료 시간은 시작 시간보다 이후여야 합니다.")
         if 'bg_ptm' in data and 'ed_ptm' in data and data['bg_ptm'] and data[
                 'ed_ptm']:
             if data['bg_ptm'] > data['ed_ptm']:

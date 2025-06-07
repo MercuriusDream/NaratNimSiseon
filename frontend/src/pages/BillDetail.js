@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
@@ -18,11 +19,11 @@ function BillDetail() {
     const fetchBillData = async () => {
       try {
         setLoading(true);
-        const [billRes, statementsRes, votingSentimentRes, sentimentRes] = await Promise.all([
+        
+        // Handle potential missing data gracefully
+        const [billRes, statementsRes] = await Promise.all([
           axios.get(`/api/bills/${id}/`),
-          axios.get(`/api/bills/${id}/statements/`),
-          axios.get(`/api/bills/${id}/voting-sentiment/`),
-          axios.get(`/api/bills/${id}/sentiment/`)
+          axios.get(`/api/bills/${id}/statements/`)
         ]);
 
         setBill(billRes.data);
@@ -38,10 +39,35 @@ function BillDetail() {
           statementsArray = statementsData.results;
         }
         setStatements(statementsArray);
-        
-        // Set voting sentiment data
-        setVotingSentiment(votingSentimentRes.data);
-        setSentimentAnalysis(sentimentRes.data);
+
+        // Try to fetch additional data, but don't fail if it's not available
+        try {
+          const [votingSentimentRes, sentimentRes] = await Promise.all([
+            axios.get(`/api/bills/${id}/voting-sentiment/`),
+            axios.get(`/api/bills/${id}/sentiment/`)
+          ]);
+          setVotingSentiment(votingSentimentRes.data);
+          setSentimentAnalysis(sentimentRes.data);
+        } catch (additionalError) {
+          console.warn('Additional data not available:', additionalError);
+          // Set default values to prevent crashes
+          setVotingSentiment({
+            summary: { total_statements: 0, total_voting_records: 0, vote_distribution: [] },
+            party_analysis: []
+          });
+          setSentimentAnalysis({
+            sentiment_summary: {
+              total_statements: statementsArray.length,
+              average_sentiment: 0,
+              positive_count: 0,
+              negative_count: 0,
+              neutral_count: statementsArray.length
+            },
+            party_breakdown: [],
+            speaker_breakdown: [],
+            sentiment_timeline: []
+          });
+        }
         
       } catch (err) {
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -148,20 +174,20 @@ function BillDetail() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-blue-50 p-4 rounded-lg">
               <h3 className="font-semibold text-blue-800">총 발언 수</h3>
-              <p className="text-2xl font-bold text-blue-600">{votingSentiment.summary.total_statements}</p>
+              <p className="text-2xl font-bold text-blue-600">{votingSentiment.summary?.total_statements || 0}</p>
             </div>
             <div className="bg-green-50 p-4 rounded-lg">
               <h3 className="font-semibold text-green-800">총 투표 수</h3>
-              <p className="text-2xl font-bold text-green-600">{votingSentiment.summary.total_voting_records}</p>
+              <p className="text-2xl font-bold text-green-600">{votingSentiment.summary?.total_voting_records || 0}</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
               <h3 className="font-semibold text-purple-800">참여 정당</h3>
-              <p className="text-2xl font-bold text-purple-600">{votingSentiment.party_analysis.length}</p>
+              <p className="text-2xl font-bold text-purple-600">{votingSentiment.party_analysis?.length || 0}</p>
             </div>
           </div>
 
           {/* Vote Distribution */}
-          {votingSentiment.summary.vote_distribution && votingSentiment.summary.vote_distribution.length > 0 && (
+          {votingSentiment.summary?.vote_distribution && votingSentiment.summary.vote_distribution.length > 0 && (
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-3">투표 결과 분포</h3>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
@@ -180,62 +206,66 @@ function BillDetail() {
           )}
 
           {/* Party Analysis */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-3">정당별 종합 감성 분석</h3>
-            <div className="space-y-4">
-              {votingSentiment.party_analysis.map((party, index) => (
-                <div key={index} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-lg font-medium">{party.party_name}</h4>
-                    <div className="flex items-center space-x-4">
-                      <span className="text-sm text-gray-600">발언: {party.statement_count}</span>
-                      <span className="text-sm text-gray-600">투표: {party.voting_count}</span>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        party.combined_sentiment > 0.3 ? 'bg-green-100 text-green-800' :
-                        party.combined_sentiment < -0.3 ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        종합: {party.combined_sentiment}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {/* Individual Members */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {Object.values(party.members).map((member, memberIndex) => (
-                      <div key={memberIndex} className="bg-gray-50 p-3 rounded">
-                        <div className="font-medium text-sm">{member.speaker_name}</div>
-                        <div className="text-xs text-gray-600">
-                          {member.vote_result && (
-                            <span className={`inline-block px-2 py-1 rounded mr-2 ${
-                              member.vote_result === '찬성' ? 'bg-green-200 text-green-800' :
-                              member.vote_result === '반대' ? 'bg-red-200 text-red-800' :
-                              'bg-gray-200 text-gray-800'
-                            }`}>
-                              {member.vote_result}
-                            </span>
-                          )}
-                          {member.statements.length > 0 && (
-                            <span>발언 {member.statements.length}건</span>
-                          )}
-                        </div>
-                        <div className="text-xs">
-                          종합 감성: 
-                          <span className={`ml-1 font-medium ${
-                            member.combined_sentiment > 0.3 ? 'text-green-600' :
-                            member.combined_sentiment < -0.3 ? 'text-red-600' :
-                            'text-gray-600'
-                          }`}>
-                            {member.combined_sentiment}
-                          </span>
-                        </div>
+          {votingSentiment.party_analysis && votingSentiment.party_analysis.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3">정당별 종합 감성 분석</h3>
+              <div className="space-y-4">
+                {votingSentiment.party_analysis.map((party, index) => (
+                  <div key={index} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-lg font-medium">{party.party_name}</h4>
+                      <div className="flex items-center space-x-4">
+                        <span className="text-sm text-gray-600">발언: {party.statement_count}</span>
+                        <span className="text-sm text-gray-600">투표: {party.voting_count}</span>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          party.combined_sentiment > 0.3 ? 'bg-green-100 text-green-800' :
+                          party.combined_sentiment < -0.3 ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          종합: {party.combined_sentiment}
+                        </span>
                       </div>
-                    ))}
+                    </div>
+                    
+                    {/* Individual Members */}
+                    {party.members && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {Object.values(party.members).map((member, memberIndex) => (
+                          <div key={memberIndex} className="bg-gray-50 p-3 rounded">
+                            <div className="font-medium text-sm">{member.speaker_name}</div>
+                            <div className="text-xs text-gray-600">
+                              {member.vote_result && (
+                                <span className={`inline-block px-2 py-1 rounded mr-2 ${
+                                  member.vote_result === '찬성' ? 'bg-green-200 text-green-800' :
+                                  member.vote_result === '반대' ? 'bg-red-200 text-red-800' :
+                                  'bg-gray-200 text-gray-800'
+                                }`}>
+                                  {member.vote_result}
+                                </span>
+                              )}
+                              {member.statements && member.statements.length > 0 && (
+                                <span>발언 {member.statements.length}건</span>
+                              )}
+                            </div>
+                            <div className="text-xs">
+                              종합 감성: 
+                              <span className={`ml-1 font-medium ${
+                                member.combined_sentiment > 0.3 ? 'text-green-600' :
+                                member.combined_sentiment < -0.3 ? 'text-red-600' :
+                                'text-gray-600'
+                              }`}>
+                                {member.combined_sentiment}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -257,16 +287,16 @@ function BillDetail() {
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <h3 className="text-lg font-semibold">
-                      {statement.speaker?.naas_nm || '알 수 없는 발언자'}
+                      {statement.speaker_name || statement.speaker?.naas_nm || '알 수 없는 발언자'}
                     </h3>
                     <p className="text-sm text-gray-600">
-                      {statement.speaker?.plpt_nm || ''}
+                      {statement.party_name || statement.speaker?.plpt_nm || ''}
                     </p>
                   </div>
                   <div className="text-sm">
                     <span className={`px-2 py-1 rounded ${
-                      statement.sentiment_score > 0.3 ? 'bg-green-100 text-green-800' :
-                      statement.sentiment_score < -0.3 ? 'bg-red-100 text-red-800' :
+                      (statement.sentiment_score || 0) > 0.3 ? 'bg-green-100 text-green-800' :
+                      (statement.sentiment_score || 0) < -0.3 ? 'bg-red-100 text-red-800' :
                       'bg-gray-100 text-gray-800'
                     }`}>
                       감성 점수: {statement.sentiment_score?.toFixed(2) || '0.00'}
@@ -274,7 +304,7 @@ function BillDetail() {
                   </div>
                 </div>
                 <p className="text-gray-700 whitespace-pre-wrap">
-                  {statement.content}
+                  {statement.content || statement.text || '발언 내용을 불러올 수 없습니다.'}
                 </p>
               </div>
             ))
