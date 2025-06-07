@@ -798,6 +798,218 @@ def overall_sentiment_stats(request):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['GET'])
+def comprehensive_sentiment_analysis(request):
+    """Get comprehensive sentiment analysis combining speech and voting data"""
+    try:
+        from .models import VotingRecord
+        time_range = request.query_params.get('time_range', 'all')
+        party_filter = request.query_params.get('party')
+        category_filter = request.query_params.get('category')
+        
+        # Base querysets
+        statements_qs = Statement.objects.all()
+        voting_qs = VotingRecord.objects.all()
+        
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=365))
+            voting_qs = voting_qs.filter(vote_date__gte=now - timedelta(days=365))
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=30))
+            voting_qs = voting_qs.filter(vote_date__gte=now - timedelta(days=30))
+        
+        # Apply party filter
+        if party_filter:
+            statements_qs = statements_qs.filter(speaker__plpt_nm__icontains=party_filter)
+            voting_qs = voting_qs.filter(speaker__plpt_nm__icontains=party_filter)
+            
+        # Apply category filter
+        if category_filter:
+            statements_qs = statements_qs.filter(categories__category__name=category_filter)
+
+        # Speech-based sentiment analysis
+        speech_sentiment = {
+            'total_statements': statements_qs.count(),
+            'avg_sentiment': statements_qs.aggregate(avg=Avg('sentiment_score'))['avg'] or 0,
+            'positive_count': statements_qs.filter(sentiment_score__gt=0.3).count(),
+            'negative_count': statements_qs.filter(sentiment_score__lt=-0.3).count(),
+        }
+        
+        # Voting-based sentiment analysis
+        voting_sentiment = {
+            'total_votes': voting_qs.count(),
+            'avg_sentiment': voting_qs.aggregate(avg=Avg('vote_sentiment_score'))['avg'] or 0,
+            'positive_votes': voting_qs.filter(vote_result='찬성').count(),
+            'negative_votes': voting_qs.filter(vote_result='반대').count(),
+            'abstain_votes': voting_qs.filter(vote_result__in=['기권', '불참', '무효']).count(),
+        }
+
+        # Party breakdown for both speech and voting
+        party_analysis = []
+        party_names = set()
+        
+        # Get unique party names from both sources
+        speech_parties = statements_qs.values_list('speaker__plpt_nm', flat=True).distinct()
+        voting_parties = voting_qs.values_list('speaker__plpt_nm', flat=True).distinct()
+        party_names.update(speech_parties)
+        party_names.update(voting_parties)
+        
+        for party_name in party_names:
+            if not party_name:
+                continue
+                
+            party_statements = statements_qs.filter(speaker__plpt_nm=party_name)
+            party_votes = voting_qs.filter(speaker__plpt_nm=party_name)
+            
+            party_data = {
+                'party_name': party_name,
+                'speech_sentiment': {
+                    'count': party_statements.count(),
+                    'avg_sentiment': party_statements.aggregate(avg=Avg('sentiment_score'))['avg'] or 0,
+                },
+                'voting_sentiment': {
+                    'count': party_votes.count(),
+                    'avg_sentiment': party_votes.aggregate(avg=Avg('vote_sentiment_score'))['avg'] or 0,
+                    'positive_votes': party_votes.filter(vote_result='찬성').count(),
+                    'negative_votes': party_votes.filter(vote_result='반대').count(),
+                }
+            }
+            party_analysis.append(party_data)
+        
+        # Sort by combined sentiment (average of speech and voting)
+        for party in party_analysis:
+            speech_avg = party['speech_sentiment']['avg_sentiment']
+            voting_avg = party['voting_sentiment']['avg_sentiment']
+            party['combined_sentiment'] = (speech_avg + voting_avg) / 2 if speech_avg and voting_avg else (speech_avg or voting_avg)
+        
+        party_analysis.sort(key=lambda x: x['combined_sentiment'], reverse=True)
+
+        return Response({
+            'time_range': time_range,
+            'filters': {
+                'party': party_filter,
+                'category': category_filter,
+            },
+            'speech_sentiment': speech_sentiment,
+            'voting_sentiment': voting_sentiment,
+            'party_analysis': party_analysis,
+        })
+
+    except Exception as e:
+        logger.error(f"Error in comprehensive sentiment analysis: {e}")
+        return Response({'error': 'Failed to fetch comprehensive sentiment analysis'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def category_sentiment_analysis(request):
+    """Get sentiment analysis per category and subcategory"""
+    try:
+        time_range = request.query_params.get('time_range', 'all')
+        party_filter = request.query_params.get('party')
+        
+        statements_qs = Statement.objects.all()
+        
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=365))
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=30))
+        
+        # Apply party filter
+        if party_filter:
+            statements_qs = statements_qs.filter(speaker__plpt_nm__icontains=party_filter)
+
+        # Get category analysis
+        category_data = []
+        categories = Category.objects.all()
+        
+        for category in categories:
+            category_statements = statements_qs.filter(categories__category=category).distinct()
+            
+            if not category_statements.exists():
+                continue
+                
+            # Overall category sentiment
+            avg_sentiment = category_statements.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+            total_statements = category_statements.count()
+            
+            # Party breakdown within this category
+            party_breakdown = category_statements.values('speaker__plpt_nm').annotate(
+                count=Count('id'),
+                avg_sentiment=Avg('sentiment_score')
+            ).order_by('-avg_sentiment')
+            
+            # Subcategory breakdown
+            subcategory_breakdown = category_statements.values(
+                'categories__subcategory__name'
+            ).annotate(
+                count=Count('id'),
+                avg_sentiment=Avg('sentiment_score')
+            ).order_by('-avg_sentiment')
+            
+            category_data.append({
+                'category_id': category.id,
+                'category_name': category.name,
+                'total_statements': total_statements,
+                'avg_sentiment': round(avg_sentiment, 3),
+                'party_breakdown': list(party_breakdown),
+                'subcategory_breakdown': list(subcategory_breakdown),
+            })
+        
+        # Sort by average sentiment
+        category_data.sort(key=lambda x: x['avg_sentiment'], reverse=True)
+
+        return Response({
+            'time_range': time_range,
+            'party_filter': party_filter,
+            'category_analysis': category_data,
+        })
+
+    except Exception as e:
+        logger.error(f"Error in category sentiment analysis: {e}")
+        return Response({'error': 'Failed to fetch category sentiment analysis'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+def fetch_bill_voting_records(request):
+    """Manually trigger fetching of voting records for a specific bill"""
+    try:
+        bill_id = request.data.get('bill_id')
+        force = request.data.get('force', False)
+        
+        if not bill_id:
+            return Response({'error': 'bill_id is required'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Import the task function
+        from .tasks import fetch_voting_records
+        
+        if is_celery_available():
+            task = fetch_voting_records.delay(bill_id=bill_id, force=force)
+            return Response({
+                'message': f'Voting records fetch started for bill {bill_id}',
+                'task_id': task.id,
+                'status': 'started'
+            })
+        else:
+            # Run synchronously if Celery not available
+            fetch_voting_records(bill_id=bill_id, force=force)
+            return Response({
+                'message': f'Voting records fetch completed for bill {bill_id}',
+                'status': 'completed'
+            })
+
+    except Exception as e:
+        logger.error(f"Error triggering voting records fetch: {e}")
+        return Response({'error': 'Failed to trigger voting records fetch'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['POST'])
 def trigger_statement_analysis(request):
     """Manually trigger LLM analysis for statements"""

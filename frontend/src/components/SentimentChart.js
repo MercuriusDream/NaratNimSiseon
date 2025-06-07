@@ -20,8 +20,11 @@ const SentimentChart = ({ data }) => {
     if (dataArray.length === 0) return [];
 
     return dataArray.map(item => ({
-      date: item.date || item.session?.conf_dt || 'Unknown',
-      sentiment: parseFloat(item.sentiment_score || 0),
+      name: item.name || item.party_name || item.date || item.session?.conf_dt || 'Unknown',
+      sentiment: parseFloat(item.sentiment || item.sentiment_score || item.combined_sentiment || 0),
+      party: item.party || item.party_name || item.speaker?.plpt_nm || 'Unknown Party',
+      speech_count: item.speech_count || 0,
+      voting_count: item.voting_count || 0,
       speaker: item.speaker?.naas_nm || 'Unknown Speaker'
     }));
   };
@@ -31,15 +34,26 @@ const SentimentChart = ({ data }) => {
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
+      const data = payload[0].payload;
       return (
         <div className="bg-white p-4 border border-gray-200 shadow-lg rounded">
           <p className="font-medium">{label}</p>
           <p className="text-sm text-gray-600">
-            정당: {payload[0].payload.party}
+            정당: {data.party}
           </p>
           <p className="text-sm text-gray-600">
-            감성 점수: {payload[0].value.toFixed(2)}
+            감성 점수: {payload[0].value.toFixed(3)}
           </p>
+          {data.speech_count > 0 && (
+            <p className="text-sm text-gray-600">
+              발언 수: {data.speech_count}
+            </p>
+          )}
+          {data.voting_count > 0 && (
+            <p className="text-sm text-gray-600">
+              투표 수: {data.voting_count}
+            </p>
+          )}
         </div>
       );
     }

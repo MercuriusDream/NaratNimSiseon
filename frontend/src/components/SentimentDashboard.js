@@ -1,39 +1,47 @@
 
 import React, { useState, useEffect } from 'react';
+import SentimentChart from './SentimentChart';
 import api from '../api';
 
-const SentimentDashboard = ({ billId = null }) => {
+const SentimentDashboard = () => {
   const [sentimentData, setSentimentData] = useState(null);
-  const [overallStats, setOverallStats] = useState(null);
+  const [categoryData, setCategoryData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState('all');
   const [error, setError] = useState(null);
-
-  useEffect(() => {
-    fetchSentimentData();
-  }, [billId, timeRange]);
+  const [timeRange, setTimeRange] = useState('all');
+  const [selectedParty, setSelectedParty] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
 
   const fetchSentimentData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      if (billId) {
-        // Fetch bill-specific sentiment data
-        const response = await api.get(`/api/bills/${billId}/sentiment/`);
-        setSentimentData(response.data);
-      } else {
-        // Fetch overall sentiment statistics
-        const response = await api.get(`/api/analytics/sentiment/?time_range=${timeRange}`);
-        setOverallStats(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching sentiment data:', error);
+      // Fetch comprehensive sentiment analysis
+      const params = new URLSearchParams({
+        time_range: timeRange,
+        ...(selectedParty && { party: selectedParty }),
+        ...(selectedCategory && { category: selectedCategory }),
+      });
+
+      const [comprehensiveResponse, categoryResponse] = await Promise.all([
+        api.get(`/analytics/sentiment/comprehensive/?${params}`),
+        api.get(`/analytics/sentiment/categories/?${params}`)
+      ]);
+
+      setSentimentData(comprehensiveResponse.data);
+      setCategoryData(categoryResponse.data);
+    } catch (err) {
+      console.error('Error fetching sentiment data:', err);
       setError('감성 분석 데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchSentimentData();
+  }, [timeRange, selectedParty, selectedCategory]);
 
   const getSentimentColor = (score) => {
     if (score > 0.3) return 'text-green-600 bg-green-50 border-green-200';
@@ -51,10 +59,10 @@ const SentimentDashboard = ({ billId = null }) => {
     return (
       <div className="bg-white rounded-lg shadow p-6">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-300 rounded w-1/4 mb-4"></div>
-          <div className="space-y-3">
-            <div className="h-4 bg-gray-300 rounded"></div>
-            <div className="h-4 bg-gray-300 rounded w-5/6"></div>
+          <div className="h-4 bg-gray-300 rounded w-1/4 mb-6"></div>
+          <div className="space-y-4">
+            <div className="h-20 bg-gray-300 rounded"></div>
+            <div className="h-40 bg-gray-300 rounded"></div>
           </div>
         </div>
       </div>
@@ -64,216 +72,241 @@ const SentimentDashboard = ({ billId = null }) => {
   if (error) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="text-red-600 text-center">{error}</div>
+        <div className="text-center text-red-600">
+          <p>{error}</p>
+          <button 
+            onClick={fetchSentimentData}
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            다시 시도
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Time Range Filter for Overall Stats */}
-      {!billId && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold">전체 감성 분석</h2>
+      {/* Controls */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              기간
+            </label>
             <select
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
               className="border border-gray-300 rounded-md px-3 py-2"
             >
-              <option value="all">전체 기간</option>
+              <option value="all">전체</option>
               <option value="year">최근 1년</option>
-              <option value="month">최근 1달</option>
-              <option value="week">최근 1주</option>
+              <option value="month">최근 1개월</option>
             </select>
           </div>
-        </div>
-      )}
-
-      {/* Bill-specific Sentiment Analysis */}
-      {billId && sentimentData && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-2xl font-bold mb-4">의안 감성 분석</h2>
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">{sentimentData.bill.name}</h3>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              정당
+            </label>
+            <input
+              type="text"
+              value={selectedParty}
+              onChange={(e) => setSelectedParty(e.target.value)}
+              placeholder="정당명 입력"
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
           </div>
           
-          {/* Sentiment Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <h4 className="font-semibold text-blue-800">총 발언 수</h4>
-              <p className="text-2xl font-bold text-blue-600">
-                {sentimentData.sentiment_summary.total_statements}
-              </p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-              <h4 className="font-semibold text-green-800">긍정적 발언</h4>
-              <p className="text-2xl font-bold text-green-600">
-                {sentimentData.sentiment_summary.positive_count}
-              </p>
-              <p className="text-sm text-green-600">
-                ({sentimentData.sentiment_summary.positive_percentage}%)
-              </p>
-            </div>
-            <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-              <h4 className="font-semibold text-red-800">부정적 발언</h4>
-              <p className="text-2xl font-bold text-red-600">
-                {sentimentData.sentiment_summary.negative_count}
-              </p>
-              <p className="text-sm text-red-600">
-                ({sentimentData.sentiment_summary.negative_percentage}%)
-              </p>
-            </div>
-            <div className={`p-4 rounded-lg border ${getSentimentColor(sentimentData.sentiment_summary.average_sentiment)}`}>
-              <h4 className="font-semibold">평균 감성 점수</h4>
-              <p className="text-2xl font-bold">
-                {sentimentData.sentiment_summary.average_sentiment}
-              </p>
-              <p className="text-sm">
-                ({getSentimentLabel(sentimentData.sentiment_summary.average_sentiment)})
-              </p>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              카테고리
+            </label>
+            <input
+              type="text"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              placeholder="카테고리명 입력"
+              className="border border-gray-300 rounded-md px-3 py-2"
+            />
           </div>
-
-          {/* Party Breakdown */}
-          {sentimentData.party_breakdown.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-3">정당별 감성 분석</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">정당</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">발언 수</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">평균 감성</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">긍정/부정</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {sentimentData.party_breakdown.map((party, index) => (
-                      <tr key={index}>
-                        <td className="px-6 py-4 whitespace-nowrap font-medium">{party.speaker__plpt_nm}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{party.count}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-sm ${getSentimentColor(party.avg_sentiment)}`}>
-                            {party.avg_sentiment.toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className="text-green-600">{party.positive_count}</span> / 
-                          <span className="text-red-600 ml-1">{party.negative_count}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Timeline */}
-          {sentimentData.sentiment_timeline.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-3">감성 변화 추이</h3>
-              <div className="space-y-2">
-                {sentimentData.sentiment_timeline.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                    <span className="font-medium">{item.date}</span>
-                    <div className="flex items-center space-x-3">
-                      <span className="text-sm text-gray-600">{item.statement_count}개 발언</span>
-                      <span className={`px-2 py-1 rounded text-sm ${getSentimentColor(item.avg_sentiment)}`}>
-                        {item.avg_sentiment}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
-      )}
+      </div>
 
       {/* Overall Statistics */}
-      {!billId && overallStats && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4">전체 통계 ({overallStats.time_range})</h3>
-          
-          {/* Overall Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h4 className="font-semibold text-blue-800">총 발언 수</h4>
-              <p className="text-2xl font-bold text-blue-600">
-                {overallStats.overall_stats.total_statements}
-              </p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h4 className="font-semibold text-green-800">긍정적 발언</h4>
-              <p className="text-2xl font-bold text-green-600">
-                {overallStats.overall_stats.positive_count}
-              </p>
-              <p className="text-sm text-green-600">
-                ({overallStats.overall_stats.positive_percentage}%)
-              </p>
-            </div>
-            <div className="bg-red-50 p-4 rounded-lg">
-              <h4 className="font-semibold text-red-800">부정적 발언</h4>
-              <p className="text-2xl font-bold text-red-600">
-                {overallStats.overall_stats.negative_count}
-              </p>
-              <p className="text-sm text-red-600">
-                ({overallStats.overall_stats.negative_percentage}%)
-              </p>
-            </div>
-            <div className={`p-4 rounded-lg ${getSentimentColor(overallStats.overall_stats.average_sentiment)}`}>
-              <h4 className="font-semibold">평균 감성 점수</h4>
-              <p className="text-2xl font-bold">
-                {overallStats.overall_stats.average_sentiment}
-              </p>
+      {sentimentData && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Speech-based Sentiment */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">발언 기반 감성 분석</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span className="text-gray-600">총 발언 수:</span>
+                <span className="font-medium">{sentimentData.speech_sentiment.total_statements.toLocaleString()}개</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">평균 감성 점수:</span>
+                <span className={`px-2 py-1 rounded text-sm font-medium ${getSentimentColor(sentimentData.speech_sentiment.avg_sentiment)}`}>
+                  {sentimentData.speech_sentiment.avg_sentiment.toFixed(3)} ({getSentimentLabel(sentimentData.speech_sentiment.avg_sentiment)})
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-green-600">긍정적 발언:</span>
+                  <span className="font-medium">{sentimentData.speech_sentiment.positive_count}개</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-red-600">부정적 발언:</span>
+                  <span className="font-medium">{sentimentData.speech_sentiment.negative_count}개</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Party Rankings */}
-          {overallStats.party_rankings.length > 0 && (
-            <div className="mb-6">
-              <h4 className="text-lg font-semibold mb-3">정당별 감성 순위</h4>
+          {/* Voting-based Sentiment */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">투표 기반 감성 분석</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span className="text-gray-600">총 투표 수:</span>
+                <span className="font-medium">{sentimentData.voting_sentiment.total_votes.toLocaleString()}개</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">평균 감성 점수:</span>
+                <span className={`px-2 py-1 rounded text-sm font-medium ${getSentimentColor(sentimentData.voting_sentiment.avg_sentiment)}`}>
+                  {sentimentData.voting_sentiment.avg_sentiment.toFixed(3)} ({getSentimentLabel(sentimentData.voting_sentiment.avg_sentiment)})
+                </span>
+              </div>
               <div className="space-y-2">
-                {overallStats.party_rankings.slice(0, 5).map((party, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                    <div>
-                      <span className="font-medium">{party.speaker__plpt_nm}</span>
-                      <span className="text-sm text-gray-600 ml-2">({party.statement_count}개 발언)</span>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-sm ${getSentimentColor(party.avg_sentiment)}`}>
-                      {party.avg_sentiment.toFixed(2)}
+                <div className="flex justify-between">
+                  <span className="text-green-600">찬성 투표:</span>
+                  <span className="font-medium">{sentimentData.voting_sentiment.positive_votes}개</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-red-600">반대 투표:</span>
+                  <span className="font-medium">{sentimentData.voting_sentiment.negative_votes}개</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">기권/불참:</span>
+                  <span className="font-medium">{sentimentData.voting_sentiment.abstain_votes}개</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Party Analysis */}
+      {sentimentData?.party_analysis && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">정당별 감성 분석</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    정당
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    발언 감성
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    투표 감성
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    종합 감성
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {sentimentData.party_analysis.slice(0, 10).map((party, index) => (
+                  <tr key={index}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {party.party_name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div className={`px-2 py-1 rounded text-sm ${getSentimentColor(party.speech_sentiment.avg_sentiment)}`}>
+                        {party.speech_sentiment.avg_sentiment.toFixed(3)}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {party.speech_sentiment.count}개 발언
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div className={`px-2 py-1 rounded text-sm ${getSentimentColor(party.voting_sentiment.avg_sentiment)}`}>
+                        {party.voting_sentiment.avg_sentiment.toFixed(3)}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {party.voting_sentiment.count}개 투표
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div className={`px-2 py-1 rounded text-sm font-medium ${getSentimentColor(party.combined_sentiment)}`}>
+                        {party.combined_sentiment.toFixed(3)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Category Analysis */}
+      {categoryData?.category_analysis && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">카테고리별 감성 분석</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categoryData.category_analysis.map((category) => (
+              <div key={category.category_id} className="border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-2">{category.category_name}</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">발언 수:</span>
+                    <span>{category.total_statements}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">평균 감성:</span>
+                    <span className={`px-2 py-1 rounded text-xs ${getSentimentColor(category.avg_sentiment)}`}>
+                      {category.avg_sentiment}
                     </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Active Speakers */}
-          {overallStats.active_speakers.length > 0 && (
-            <div>
-              <h4 className="text-lg font-semibold mb-3">활발한 발언자</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {overallStats.active_speakers.slice(0, 10).map((speaker, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                    <div>
-                      <span className="font-medium">{speaker.speaker__naas_nm}</span>
-                      <span className="text-sm text-gray-600 block">{speaker.speaker__plpt_nm}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">{speaker.statement_count}개 발언</div>
-                      <span className={`px-2 py-1 rounded text-xs ${getSentimentColor(speaker.avg_sentiment)}`}>
-                        {speaker.avg_sentiment.toFixed(2)}
-                      </span>
+                </div>
+                
+                {/* Top parties in this category */}
+                {category.party_breakdown?.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <h5 className="text-xs font-medium text-gray-700 mb-2">상위 정당</h5>
+                    <div className="space-y-1">
+                      {category.party_breakdown.slice(0, 3).map((party, idx) => (
+                        <div key={idx} className="flex justify-between text-xs">
+                          <span className="text-gray-600 truncate">{party.speaker__plpt_nm || '정당정보없음'}</span>
+                          <span className={`px-1 rounded ${getSentimentColor(party.avg_sentiment)}`}>
+                            {party.avg_sentiment?.toFixed(2) || 'N/A'}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
               </div>
-            </div>
-          )}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Chart Visualization */}
+      {sentimentData?.party_analysis && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">정당별 감성 점수 차트</h3>
+          <SentimentChart data={sentimentData.party_analysis.map(party => ({
+            name: party.party_name,
+            sentiment: party.combined_sentiment,
+            party: party.party_name,
+            speech_count: party.speech_sentiment.count,
+            voting_count: party.voting_sentiment.count
+          }))} />
         </div>
       )}
     </div>

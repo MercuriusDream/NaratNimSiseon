@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory
+from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory, VotingRecord
 from django.utils import timezone
 
 
@@ -15,6 +15,18 @@ class StatementCategorySerializer(serializers.ModelSerializer):
             'category', 'subcategory', 'category_name', 'subcategory_name',
             'confidence_score'
         ]
+
+
+class VotingRecordSerializer(serializers.ModelSerializer):
+    speaker_name = serializers.CharField(source='speaker.naas_nm', read_only=True)
+    party_name = serializers.CharField(source='speaker.plpt_nm', read_only=True)
+    bill_name = serializers.CharField(source='bill.bill_nm', read_only=True)
+
+    class Meta:
+        model = VotingRecord
+        fields = ['id', 'vote_result', 'vote_date', 'vote_sentiment_score', 
+                 'speaker_name', 'party_name', 'bill_name', 'bill_no', 
+                 'session_cd', 'age', 'created_at']
 
 
 class SpeakerSerializer(serializers.ModelSerializer):
@@ -42,11 +54,13 @@ class BillSerializer(serializers.ModelSerializer):
     propose_dt = serializers.DateField(source='session.conf_dt', read_only=True)
     content = serializers.CharField(source='bill_nm', read_only=True)
     status = serializers.SerializerMethodField()
+    voting_records = VotingRecordSerializer(many=True, read_only=True)
 
     class Meta:
         model = Bill
         fields = ['bill_id', 'bill_nm', 'bill_name', 'bill_no', 'session', 'session_date', 
-                 'proposer', 'propose_dt', 'content', 'status', 'link_url', 'created_at', 'updated_at']
+                 'proposer', 'propose_dt', 'content', 'status', 'link_url', 'voting_records',
+                 'created_at', 'updated_at']
 
     def get_proposer(self, obj):
         return "국회"  # Default proposer since we don't have this field in the model

@@ -151,6 +151,46 @@ class Statement(models.Model):
         """Get hash for this statement instance"""
         return self.calculate_hash(self.text, self.speaker.naas_cd, self.session.conf_id)
 
+class VotingRecord(models.Model):
+    """Model to store assembly voting records from the nojepdqqaweusdfbi API"""
+    VOTE_CHOICES = [
+        ('찬성', '찬성'),
+        ('반대', '반대'),
+        ('기권', '기권'),
+        ('불참', '불참'),
+        ('무효', '무효'),
+    ]
+    
+    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name='voting_records', verbose_name=_("관련 의안"))
+    speaker = models.ForeignKey(Speaker, on_delete=models.CASCADE, related_name='voting_records', verbose_name=_("투표자"))
+    vote_result = models.CharField(max_length=10, choices=VOTE_CHOICES, help_text=_("투표 결과"), verbose_name=_("투표 결과"))
+    vote_date = models.DateTimeField(help_text=_("투표 일시"), verbose_name=_("투표 일시"))
+    vote_sentiment_score = models.FloatField(help_text=_("투표 기반 감성 점수 (1.0=찬성, -1.0=반대, 0.0=중립)"), verbose_name=_("투표 감성 점수"))
+    bill_no = models.CharField(max_length=50, blank=True, help_text=_("의안 번호"), verbose_name=_("의안 번호"))
+    session_cd = models.IntegerField(blank=True, null=True, help_text=_("회기 코드"), verbose_name=_("회기 코드"))
+    age = models.IntegerField(blank=True, null=True, help_text=_("국회 대수"), verbose_name=_("국회 대수"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
+
+    class Meta:
+        ordering = ['-vote_date']
+        unique_together = ['bill', 'speaker']
+        verbose_name = _("투표 기록")
+        verbose_name_plural = _("투표 기록")
+
+    def __str__(self):
+        return f"{self.speaker.naas_nm} - {self.bill.bill_nm} ({self.vote_result})"
+    
+    def save(self, *args, **kwargs):
+        # Calculate sentiment score based on vote result
+        if self.vote_result == '찬성':
+            self.vote_sentiment_score = 1.0
+        elif self.vote_result == '반대':
+            self.vote_sentiment_score = -1.0
+        else:  # 기권, 불참, 무효
+            self.vote_sentiment_score = 0.0
+        super().save(*args, **kwargs)
+
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True, help_text=_("카테고리명"), verbose_name=_("카테고리명"))
     description = models.TextField(blank=True, help_text=_("카테고리 설명"), verbose_name=_("카테고리 설명"))
