@@ -1258,6 +1258,7 @@ def extract_statements_for_bill_segment(bill_text_segment,
 6. speech_start_index는 발언자 표시(◯이름) 부분을 포함한 시작 위치입니다.
 7. speech_end_index는 다음 발언자가 시작되기 직전 또는 텍스트 끝까지입니다.
 8. 인덱스는 주어진 텍스트 내에서의 정확한 문자 위치를 나타내야 합니다.
+9. 가능하다면, '의원' 의 발언만 제공해 주십시오. 의원을 제외한 자들에 대해서는, 해당 안건의 이해에 문제가 없다면, 사회나 증언, 즉 대한민국 국회법상으로 국회 투표권이 없는 자들의 발언 등은 제외되어야 합니다.
 
 응답은 다음 JSON 구조를 따라야 합니다:
 {{
@@ -1505,16 +1506,15 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
 
 
 def extract_statements_with_bill_based_chunking(full_text,
-                                                       session_id,
-                                                       bill_names_list,
-                                                       debug=False):
+                                                session_id,
+                                                bill_names_list,
+                                                debug=False):
     """
     Process full text by first identifying bill segments using LLM,
     then processing each bill segment in chunks for statement extraction.
     """
     logger.info(
-        f"🔄 Using bill-based chunked processing for session: {session_id}"
-    )
+        f"🔄 Using bill-based chunked processing for session: {session_id}")
 
     if not genai or not hasattr(genai, 'GenerativeModel'):
         logger.warning(
@@ -1538,8 +1538,7 @@ def extract_statements_with_bill_based_chunking(full_text,
     bill_segments_from_llm = []
     if bill_names_list and len(bill_names_list) > 0:
         logger.info(
-            f"🔍 Step 1: Identifying bill segments for session {session_id}"
-        )
+            f"🔍 Step 1: Identifying bill segments for session {session_id}")
 
         # Limit text for segmentation to prevent prompt overflow
         MAX_SEGMENTATION_LENGTH = 100000
@@ -1594,9 +1593,12 @@ def extract_statements_with_bill_based_chunking(full_text,
             # Fallback: treat entire text as one bill segment
             if bill_names_list:
                 bill_segments_from_llm = [{
-                    "bill_name_identified": bill_names_list[0],
-                    "discussion_start_idx": 0,
-                    "relevance_to_provided_list": 0.5
+                    "bill_name_identified":
+                    bill_names_list[0],
+                    "discussion_start_idx":
+                    0,
+                    "relevance_to_provided_list":
+                    0.5
                 }]
 
     # Step 2: Create ordered bill segments with text
@@ -1635,7 +1637,8 @@ def extract_statements_with_bill_based_chunking(full_text,
 
     # If no segments identified, create one segment with first bill name or generic
     if not sorted_segments_with_text:
-        bill_name_fallback = bill_names_list[0] if bill_names_list else "General Discussion"
+        bill_name_fallback = bill_names_list[
+            0] if bill_names_list else "General Discussion"
         sorted_segments_with_text = [{
             "bill_name": bill_name_fallback,
             "text": full_text
@@ -1649,7 +1652,7 @@ def extract_statements_with_bill_based_chunking(full_text,
     for seg_data in sorted_segments_with_text:
         bill_name_for_seg = seg_data["bill_name"]
         bill_segment_text = seg_data["text"]
-        
+
         logger.info(
             f"--- Processing bill segment: {bill_name_for_seg} ({len(bill_segment_text)} chars) ---"
         )
@@ -1665,20 +1668,21 @@ def extract_statements_with_bill_based_chunking(full_text,
             all_analyzed_statements.extend(statements_in_segment)
         else:
             # Split bill segment into chunks and process each
-            bill_chunks = split_text_into_chunks(bill_segment_text, MAX_CHUNK_LENGTH)
+            bill_chunks = split_text_into_chunks(bill_segment_text,
+                                                 MAX_CHUNK_LENGTH)
             logger.info(f"Split bill segment into {len(bill_chunks)} chunks")
-            
+
             for chunk_idx, chunk_text in enumerate(bill_chunks):
                 logger.info(
                     f"Processing chunk {chunk_idx + 1}/{len(bill_chunks)} for bill {bill_name_for_seg}"
                 )
-                
+
                 chunk_statements = extract_statements_for_bill_segment(
                     chunk_text, session_id, bill_name_for_seg, debug)
                 for stmt_data in chunk_statements:
                     stmt_data['associated_bill_name'] = bill_name_for_seg
                 all_analyzed_statements.extend(chunk_statements)
-                
+
                 if not debug:
                     time.sleep(0.5)  # Brief pause between chunks
 
