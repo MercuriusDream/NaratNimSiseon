@@ -17,31 +17,64 @@ logger = logging.getLogger(__name__)
 
 
 def with_db_retry(func, max_retries=3):
-    """Wrapper to retry database operations with connection management"""
+    """Wrapper to retry database operations with connection management for serverless databases"""
 
     def wrapper(*args, **kwargs):
         from django.db import connection
         from django.db.utils import OperationalError, InterfaceError
+        import psycopg2
 
         for attempt in range(max_retries):
             try:
+                # Close any stale connections before starting
+                if connection.connection and hasattr(connection.connection, 'closed') and connection.connection.closed:
+                    connection.close()
+                
                 # Ensure fresh connection
                 connection.ensure_connection()
                 return func(*args, **kwargs)
-            except (OperationalError, InterfaceError) as e:
-                if 'connection already closed' in str(
-                        e) or 'server closed the connection' in str(e):
+                
+            except (OperationalError, InterfaceError, psycopg2.OperationalError) as e:
+                error_msg = str(e).lower()
+                is_connection_error = any(phrase in error_msg for phrase in [
+                    'connection already closed',
+                    'server closed the connection',
+                    'ssl connection has been closed',
+                    'connection lost',
+                    'connection broken',
+                    'server has gone away',
+                    'connection timeout'
+                ])
+                
+                if is_connection_error:
                     logger.warning(
-                        f"Database connection issue on attempt {attempt + 1}: {e}"
+                        f"Database connection issue on attempt {attempt + 1}/{max_retries}: {e}"
                     )
                     if attempt < max_retries - 1:
-                        connection.close()
-                        time.sleep(1)  # Brief pause before retry
+                        # Force close the connection and wait before retry
+                        try:
+                            connection.close()
+                        except:
+                            pass  # Ignore errors when closing
+                        
+                        # Exponential backoff: 1s, 2s, 4s
+                        wait_time = 2 ** attempt
+                        logger.info(f"Waiting {wait_time}s before retry...")
+                        time.sleep(wait_time)
                         continue
-                raise e
+                    else:
+                        logger.error(f"Max retries ({max_retries}) exceeded for database operation")
+                        raise e
+                else:
+                    # Non-connection database error, don't retry
+                    logger.error(f"Non-connection database error (not retrying): {e}")
+                    raise e
+                    
             except Exception as e:
-                # For non-connection errors, don't retry
+                # For non-database errors, don't retry
+                logger.error(f"Non-database error in with_db_retry (not retrying): {e}")
                 raise e
+                
         return None
 
     return wrapper
@@ -1199,14 +1232,25 @@ def extract_statements_for_bill_segment(bill_text_segment,
         )
         return []
 
-    # Filter to ignore procedural speakers (국회의장, 부의장, etc.)
+    # Filter to ignore non-의원 speakers - only 의원 can vote legally
     IGNORED_SPEAKERS = [
         '우원식',  # Current 국회의장
         '이학영',  # 부의장
         '정우택',  # 부의장  
         '의장',
         '부의장',
-        '위원장'
+        '위원장',
+        '국무총리',
+        '장관',
+        '차관',
+        '실장',
+        '청장',
+        '원장',
+        '대변인',
+        '비서관',
+        '수석',
+        '정무위원',
+        '간사'
     ]
 
     try:
@@ -1312,18 +1356,28 @@ def extract_statements_for_bill_segment(bill_text_segment,
             is_substantial = speech_info.get('is_substantial_discussion_guess',
                                              False)
 
-            # Check if speaker should be ignored
+            # Check if speaker should be ignored - only allow 의원
             should_ignore = False
+            is_member = False
+            
             if clean_name:
+                # Check if this is a 의원 (member of parliament who can vote)
+                is_member = '의원' in clean_name or any(keyword in clean_name for keyword in ['의원'])
+                
+                # Check if this speaker should be ignored (non-voting officials)
                 for ignored_speaker in IGNORED_SPEAKERS:
                     if ignored_speaker in clean_name:
                         should_ignore = True
                         break
+                
+                # If not explicitly a 의원 and not in ignored list, still ignore
+                if not is_member and not should_ignore:
+                    should_ignore = True
 
-            if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial or should_ignore:
-                skip_reason = "ignored speaker" if should_ignore else "missing info or filters"
+            if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial or should_ignore or not is_member:
+                skip_reason = "ignored speaker" if should_ignore else "not a 의원" if not is_member else "missing info or filters"
                 logger.info(
-                    f"Skipping speech segment for '{bill_name}' due to {skip_reason}: Name='{clean_name}', StartIdx={start_idx}, EndIdx={end_idx}, Person={is_real_person}, Substantial={is_substantial}"
+                    f"Skipping speech segment for '{bill_name}' due to {skip_reason}: Name='{clean_name}', StartIdx={start_idx}, EndIdx={end_idx}, Person={is_real_person}, Substantial={is_substantial}, Member={is_member}"
                 )
                 continue
 
@@ -2735,26 +2789,14 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
         return None
 
     speaker_name_cleaned = speaker_name_raw.strip()
-    # Optional: Basic title stripping if LLM missed it or raw name is used
-    # common_titles = ["의원", "위원장", "장관", "의장", "후보자", "대통령"] # etc.
-    # for title in common_titles:
-    #     if speaker_name_cleaned.endswith(title):
-    #         speaker_name_cleaned = speaker_name_cleaned[:-len(title)].strip()
 
     if not speaker_name_cleaned:  # If stripping resulted in empty name
         logger.warning(
             f"Speaker name '{speaker_name_raw}' became empty after cleaning.")
         return None
 
-    try:
-        from django.db import connection  # Ensure connection for long tasks
-        connection.ensure_connection()
-
-        # Close any stale connections before critical operations
-        if connection.connection and connection.connection.closed:
-            connection.close()
-            connection.ensure_connection()
-
+    @with_db_retry
+    def _get_or_create_speaker_db():
         # Try to find by exact cleaned name first
         speaker_obj = Speaker.objects.filter(
             naas_nm=speaker_name_cleaned).first()
@@ -2764,12 +2806,6 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
                 logger.debug(f"Found existing speaker: {speaker_name_cleaned}")
             return speaker_obj
 
-        # If not found by exact name, try case-insensitive and containing (more risky for ambiguity)
-        # speaker_obj = Speaker.objects.filter(naas_nm__icontains=speaker_name_cleaned).first() # Use with caution
-        # if speaker_obj:
-        #     logger.info(f"Found speaker by icontains: {speaker_name_raw} -> {speaker_obj.naas_nm}. Using this.")
-        #     return speaker_obj
-
         # If still not found, this speaker is new to our DB.
         # Attempt to fetch full details from API.
         logger.info(
@@ -2777,8 +2813,6 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
         )
 
         # `fetch_speaker_details` tries to get/create from API and returns the Speaker object.
-        # This function should be robust and handle API failures.
-        # It's not a Celery task itself in this definition.
         if not debug:  # Avoid external API calls in some debug scenarios for speed/cost
             speaker_obj_from_api = fetch_speaker_details(speaker_name_cleaned)
             if speaker_obj_from_api:
@@ -2821,9 +2855,11 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
             )
         return speaker_obj
 
+    try:
+        return _get_or_create_speaker_db()
     except Exception as e:
         logger.error(
-            f"❌ Error in get_or_create_speaker for '{speaker_name_raw}': {e}")
+            f"❌ Error in get_or_create_speaker for '{speaker_name_raw}' after retries: {e}")
         logger.exception("Full traceback for get_or_create_speaker error:")
         return None
 
