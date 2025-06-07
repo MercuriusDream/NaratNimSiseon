@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory
+from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory, VotingRecord
 from django.utils import timezone
 
 
@@ -167,3 +167,14 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name', 'description', 'subcategories']
+
+
+class VotingRecordSerializer(serializers.ModelSerializer):
+    speaker_name = serializers.CharField(source='speaker.naas_nm', read_only=True)
+    party_name = serializers.CharField(source='speaker.plpt_nm', read_only=True)
+    bill_name = serializers.CharField(source='bill.bill_nm', read_only=True)
+
+    class Meta:
+        model = VotingRecord
+        fields = ['id', 'bill', 'speaker', 'vote_result', 'vote_date', 'sentiment_score', 
+                 'speaker_name', 'party_name', 'bill_name', 'created_at']

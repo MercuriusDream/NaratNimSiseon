@@ -9,6 +9,8 @@ function BillDetail() {
   const { id } = useParams();
   const [bill, setBill] = useState(null);
   const [statements, setStatements] = useState([]);
+  const [votingSentiment, setVotingSentiment] = useState(null);
+  const [sentimentAnalysis, setSentimentAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -16,12 +18,15 @@ function BillDetail() {
     const fetchBillData = async () => {
       try {
         setLoading(true);
-        const [billRes, statementsRes] = await Promise.all([
+        const [billRes, statementsRes, votingSentimentRes, sentimentRes] = await Promise.all([
           axios.get(`/api/bills/${id}/`),
-          axios.get(`/api/bills/${id}/statements/`)
+          axios.get(`/api/bills/${id}/statements/`),
+          axios.get(`/api/bills/${id}/voting-sentiment/`),
+          axios.get(`/api/bills/${id}/sentiment/`)
         ]);
 
         setBill(billRes.data);
+        
         // Handle the statements response structure
         const statementsData = statementsRes.data;
         let statementsArray = [];
@@ -33,7 +38,11 @@ function BillDetail() {
           statementsArray = statementsData.results;
         }
         setStatements(statementsArray);
-        setLoading(false);
+        
+        // Set voting sentiment data
+        setVotingSentiment(votingSentimentRes.data);
+        setSentimentAnalysis(sentimentRes.data);
+        
       } catch (err) {
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
         console.error('Error fetching bill data:', err);
@@ -76,7 +85,7 @@ function BillDetail() {
         <div className="container mx-auto px-4 py-8">
       {/* Bill Header */}
       <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h1 className="text-3xl font-bold mb-4">{bill.bill_name}</h1>
+        <h1 className="text-3xl font-bold mb-4">{bill.bill_nm || bill.bill_name}</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <p className="text-gray-600">
@@ -85,13 +94,18 @@ function BillDetail() {
             </p>
             <p className="text-gray-600">
               <span className="font-semibold">제안자:</span>{' '}
-              {bill.proposer || 'N/A'}
+              {bill.proposer || '국회'}
+            </p>
+            <p className="text-gray-600">
+              <span className="font-semibold">회의:</span>{' '}
+              {bill.session ? `${bill.session.era_co} ${bill.session.sess} ${bill.session.dgr}` : 'N/A'}
             </p>
           </div>
           <div>
             <p className="text-gray-600">
-              <span className="font-semibold">생성일:</span>{' '}
-              {bill.created_at ? new Date(bill.created_at).toLocaleDateString('ko-KR') : 'N/A'}
+              <span className="font-semibold">회의일:</span>{' '}
+              {bill.session_date ? new Date(bill.session_date).toLocaleDateString('ko-KR') : 
+               bill.created_at ? new Date(bill.created_at).toLocaleDateString('ko-KR') : 'N/A'}
             </p>
             <p className="text-gray-600">
               <span className="font-semibold">상태:</span>{' '}
@@ -102,9 +116,17 @@ function BillDetail() {
               }`}>
                 {bill.status === 'approved' ? '가결' :
                  bill.status === 'rejected' ? '부결' :
-                 '대기중'}
+                 '심의중'}
               </span>
             </p>
+            {bill.link_url && (
+              <p className="text-gray-600">
+                <a href={bill.link_url} target="_blank" rel="noopener noreferrer" 
+                   className="text-blue-600 hover:text-blue-800 underline">
+                  의안 상세 보기
+                </a>
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -117,11 +139,113 @@ function BillDetail() {
         </div>
       </div>
 
-      {/* Sentiment Analysis */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h2 className="text-2xl font-bold mb-4">감성 분석 결과</h2>
-        <SentimentChart data={statements} />
-      </div>
+      {/* Voting and Sentiment Analysis */}
+      {votingSentiment && (
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 className="text-2xl font-bold mb-4">투표 및 감성 분석</h2>
+          
+          {/* Summary Statistics */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-blue-800">총 발언 수</h3>
+              <p className="text-2xl font-bold text-blue-600">{votingSentiment.summary.total_statements}</p>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-green-800">총 투표 수</h3>
+              <p className="text-2xl font-bold text-green-600">{votingSentiment.summary.total_voting_records}</p>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <h3 className="font-semibold text-purple-800">참여 정당</h3>
+              <p className="text-2xl font-bold text-purple-600">{votingSentiment.party_analysis.length}</p>
+            </div>
+          </div>
+
+          {/* Vote Distribution */}
+          {votingSentiment.summary.vote_distribution && votingSentiment.summary.vote_distribution.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3">투표 결과 분포</h3>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                {votingSentiment.summary.vote_distribution.map((vote, index) => (
+                  <div key={index} className={`p-3 rounded text-center ${
+                    vote.vote_result === '찬성' ? 'bg-green-100 text-green-800' :
+                    vote.vote_result === '반대' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    <div className="font-semibold">{vote.vote_result}</div>
+                    <div className="text-lg font-bold">{vote.count}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Party Analysis */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold mb-3">정당별 종합 감성 분석</h3>
+            <div className="space-y-4">
+              {votingSentiment.party_analysis.map((party, index) => (
+                <div key={index} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-lg font-medium">{party.party_name}</h4>
+                    <div className="flex items-center space-x-4">
+                      <span className="text-sm text-gray-600">발언: {party.statement_count}</span>
+                      <span className="text-sm text-gray-600">투표: {party.voting_count}</span>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        party.combined_sentiment > 0.3 ? 'bg-green-100 text-green-800' :
+                        party.combined_sentiment < -0.3 ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        종합: {party.combined_sentiment}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Individual Members */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {Object.values(party.members).map((member, memberIndex) => (
+                      <div key={memberIndex} className="bg-gray-50 p-3 rounded">
+                        <div className="font-medium text-sm">{member.speaker_name}</div>
+                        <div className="text-xs text-gray-600">
+                          {member.vote_result && (
+                            <span className={`inline-block px-2 py-1 rounded mr-2 ${
+                              member.vote_result === '찬성' ? 'bg-green-200 text-green-800' :
+                              member.vote_result === '반대' ? 'bg-red-200 text-red-800' :
+                              'bg-gray-200 text-gray-800'
+                            }`}>
+                              {member.vote_result}
+                            </span>
+                          )}
+                          {member.statements.length > 0 && (
+                            <span>발언 {member.statements.length}건</span>
+                          )}
+                        </div>
+                        <div className="text-xs">
+                          종합 감성: 
+                          <span className={`ml-1 font-medium ${
+                            member.combined_sentiment > 0.3 ? 'text-green-600' :
+                            member.combined_sentiment < -0.3 ? 'text-red-600' :
+                            'text-gray-600'
+                          }`}>
+                            {member.combined_sentiment}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Traditional Sentiment Analysis */}
+      {sentimentAnalysis && (
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 className="text-2xl font-bold mb-4">발언 감성 분석</h2>
+          <SentimentChart data={statements} />
+        </div>
+      )}
 
       {/* Related Statements */}
       <div className="bg-white rounded-lg shadow p-6">

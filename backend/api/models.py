@@ -198,6 +198,44 @@ class StatementCategory(models.Model):
         verbose_name_plural = "발언 카테고리 목록"
 
 
+class VotingRecord(models.Model):
+    VOTE_CHOICES = [
+        ('찬성', '찬성'),
+        ('반대', '반대'),
+        ('기권', '기권'),
+        ('불참', '불참'),
+        ('무효', '무효'),
+    ]
+    
+    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name='voting_records', verbose_name=_("관련 의안"))
+    speaker = models.ForeignKey(Speaker, on_delete=models.CASCADE, related_name='voting_records', verbose_name=_("투표자"))
+    vote_result = models.CharField(max_length=10, choices=VOTE_CHOICES, verbose_name=_("투표 결과"))
+    vote_date = models.DateTimeField(verbose_name=_("투표 일시"))
+    sentiment_score = models.FloatField(help_text=_("투표 감성 점수 (-1 ~ 1)"), verbose_name=_("투표 감성 점수"))
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='voting_records', null=True, blank=True, verbose_name=_("관련 회의"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
+
+    def save(self, *args, **kwargs):
+        # Auto-calculate sentiment score based on vote result
+        if self.vote_result == '찬성':
+            self.sentiment_score = 1.0
+        elif self.vote_result == '반대':
+            self.sentiment_score = -1.0
+        else:  # 기권, 불참, 무효
+            self.sentiment_score = 0.0
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.speaker.naas_nm} - {self.bill.bill_nm[:20]}... ({self.vote_result})"
+
+    class Meta:
+        ordering = ['-vote_date']
+        unique_together = ['bill', 'speaker']
+        verbose_name = "투표 기록"
+        verbose_name_plural = "투표 기록"
+
+
 @receiver(pre_save, sender=Statement)
 def calculate_statement_hash(sender, instance, **kwargs):
     """Automatically calculate hash before saving statement"""

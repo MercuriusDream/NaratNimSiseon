@@ -2828,3 +2828,136 @@ def fetch_additional_data_nepjpxkkabqiqpbvk(self,
             logger.error(
                 f"Max retries after unexpected error for {api_endpoint_name}.")
         # raise # Optionally
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
+    """Fetch voting data for a specific bill using nojepdqqaweusdfbi API."""
+    logger.info(f"🗳️ Fetching voting data for bill: {bill_id} (force={force}, debug={debug})")
+    
+    if debug:
+        logger.debug(f"🐛 DEBUG: Skipping voting data fetch for bill {bill_id}")
+        return
+    
+    try:
+        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error("ASSEMBLY_API_KEY not configured for voting data fetch.")
+            return
+
+        # Get the bill object
+        try:
+            bill = Bill.objects.get(bill_id=bill_id)
+        except Bill.DoesNotExist:
+            logger.error(f"Bill {bill_id} not found in database.")
+            return
+
+        url = "https://open.assembly.go.kr/portal/openapi/nojepdqqaweusdfbi"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "AGE": "22",
+            "BILL_ID": bill_id,
+            "Type": "json",
+            "pSize": 300
+        }
+
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        if debug:
+            logger.debug(f"🐛 DEBUG: Voting API response for {bill_id}: {json.dumps(data, indent=2, ensure_ascii=False)}")
+
+        voting_data = []
+        api_key_name = 'nojepdqqaweusdfbi'
+        if data and api_key_name in data and isinstance(data[api_key_name], list):
+            if len(data[api_key_name]) > 1 and isinstance(data[api_key_name][1], dict):
+                voting_data = data[api_key_name][1].get('row', [])
+            elif len(data[api_key_name]) > 0 and isinstance(data[api_key_name][0], dict):
+                head_info = data[api_key_name][0].get('head')
+                if head_info and head_info[0].get('RESULT', {}).get('CODE', '').startswith("INFO-200"):
+                    logger.info(f"API result for voting data ({bill_id}) indicates no data.")
+                elif 'row' in data[api_key_name][0]:
+                    voting_data = data[api_key_name][0].get('row', [])
+
+        if not voting_data:
+            logger.info(f"No voting data found for bill {bill_id}")
+            return
+
+        created_count = 0
+        updated_count = 0
+
+        for vote_item in voting_data:
+            try:
+                member_name = vote_item.get('HG_NM', '').strip()
+                vote_result = vote_item.get('RESULT_VOTE_MOD', '').strip()
+                vote_date_str = vote_item.get('VOTE_DATE', '')
+                
+                if not member_name or not vote_result:
+                    continue
+
+                # Parse vote date
+                vote_date = None
+                if vote_date_str:
+                    try:
+                        vote_date = datetime.strptime(vote_date_str, '%Y%m%d %H%M%S')
+                    except ValueError:
+                        logger.warning(f"Could not parse vote date: {vote_date_str}")
+                        vote_date = datetime.now()
+
+                # Find the speaker by name
+                speaker = None
+                speakers = Speaker.objects.filter(naas_nm__icontains=member_name)
+                if speakers.count() == 1:
+                    speaker = speakers.first()
+                elif speakers.count() > 1:
+                    # Try exact match first
+                    exact_match = speakers.filter(naas_nm=member_name).first()
+                    if exact_match:
+                        speaker = exact_match
+                    else:
+                        speaker = speakers.first()
+                        logger.warning(f"Multiple speakers found for {member_name}, using first match")
+
+                if not speaker:
+                    logger.warning(f"Speaker not found for voting record: {member_name}")
+                    continue
+
+                # Create or update voting record
+                voting_record, created = VotingRecord.objects.update_or_create(
+                    bill=bill,
+                    speaker=speaker,
+                    defaults={
+                        'vote_result': vote_result,
+                        'vote_date': vote_date,
+                        'session': bill.session
+                    }
+                )
+
+                if created:
+                    created_count += 1
+                    logger.info(f"✨ Created voting record: {member_name} - {vote_result} for {bill.bill_nm[:30]}...")
+                else:
+                    updated_count += 1
+                    logger.info(f"🔄 Updated voting record: {member_name} - {vote_result} for {bill.bill_nm[:30]}...")
+
+            except Exception as e_vote:
+                logger.error(f"❌ Error processing vote item for {bill_id}: {e_vote}. Item: {vote_item}")
+                continue
+
+        logger.info(f"🎉 Voting data processed for bill {bill_id}: {created_count} created, {updated_count} updated.")
+
+    except RequestException as re_exc:
+        logger.error(f"Request error fetching voting data for {bill_id}: {re_exc}")
+        try:
+            self.retry(exc=re_exc)
+        except MaxRetriesExceededError:
+            logger.error(f"Max retries for voting data {bill_id}.")
+    except json.JSONDecodeError as json_e:
+        logger.error(f"JSON decode error for voting data {bill_id}: {json_e}")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error fetching voting data for {bill_id}: {e}")
+        logger.exception(f"Full traceback for voting data {bill_id}:")
+        try:
+            self.retry(exc=e)
+        except MaxRetriesExceededError:
+            logger.error(f"Max retries after unexpected error for voting data {bill_id}.")

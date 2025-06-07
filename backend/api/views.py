@@ -7,10 +7,10 @@ from django.core.exceptions import ValidationError
 from django.http import Http404
 from rest_framework.exceptions import NotFound, PermissionDenied
 from .utils import api_action_wrapper
-from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory
+from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory, VotingRecord
 from .serializers import (SessionSerializer, BillSerializer, SpeakerSerializer,
                           StatementSerializer, StatementCreateSerializer,
-                          PartySerializer, CategorySerializer)
+                          PartySerializer, CategorySerializer, VotingRecordSerializer)
 from .llm_analyzer import LLMPolicyAnalyzer
 import logging
 from django.utils import timezone
@@ -795,6 +795,363 @@ def overall_sentiment_stats(request):
     except Exception as e:
         logger.error(f"Error in overall sentiment stats: {e}")
         return Response({'error': 'Failed to fetch sentiment statistics'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def category_sentiment_analysis(request):
+    """Get sentiment analysis by categories and subcategories"""
+    try:
+        time_range = request.query_params.get('time_range', 'all')
+        party_filter = request.query_params.get('party')
+        category_filter = request.query_params.get('category')
+
+        # Base queryset for statements with categories
+        statements_qs = Statement.objects.filter(categories__isnull=False).distinct()
+
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=365))
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=30))
+
+        # Apply party filter
+        if party_filter:
+            statements_qs = statements_qs.filter(speaker__plpt_nm__icontains=party_filter)
+
+        # Apply category filter
+        if category_filter:
+            statements_qs = statements_qs.filter(categories__category__name=category_filter)
+
+        # Get category-wise sentiment analysis
+        category_data = []
+        for category in Category.objects.all():
+            category_statements = statements_qs.filter(categories__category=category)
+            
+            if not category_statements.exists():
+                continue
+
+            avg_sentiment = category_statements.aggregate(
+                avg_sentiment=Avg('sentiment_score'))['avg_sentiment'] or 0
+            
+            statement_count = category_statements.count()
+            positive_count = category_statements.filter(sentiment_score__gt=0.3).count()
+            negative_count = category_statements.filter(sentiment_score__lt=-0.3).count()
+            neutral_count = statement_count - positive_count - negative_count
+
+            # Get party breakdown for this category
+            party_breakdown = category_statements.values('speaker__plpt_nm').annotate(
+                count=Count('id'),
+                avg_sentiment=Avg('sentiment_score')
+            ).order_by('-avg_sentiment')[:10]
+
+            # Get subcategory breakdown
+            subcategory_breakdown = []
+            for subcategory in category.subcategories.all():
+                subcat_statements = category_statements.filter(categories__subcategory=subcategory)
+                if subcat_statements.exists():
+                    subcategory_breakdown.append({
+                        'subcategory_id': subcategory.id,
+                        'subcategory_name': subcategory.name,
+                        'statement_count': subcat_statements.count(),
+                        'avg_sentiment': round(subcat_statements.aggregate(
+                            avg=Avg('sentiment_score'))['avg'] or 0, 3)
+                    })
+
+            category_data.append({
+                'category_id': category.id,
+                'category_name': category.name,
+                'statement_count': statement_count,
+                'avg_sentiment': round(avg_sentiment, 3),
+                'positive_count': positive_count,
+                'negative_count': negative_count,
+                'neutral_count': neutral_count,
+                'positive_percentage': round((positive_count / statement_count) * 100, 1),
+                'negative_percentage': round((negative_count / statement_count) * 100, 1),
+                'party_breakdown': list(party_breakdown),
+                'subcategory_breakdown': subcategory_breakdown
+            })
+
+        # Sort by average sentiment (descending)
+        category_data.sort(key=lambda x: x['avg_sentiment'], reverse=True)
+
+        return Response({
+            'time_range': time_range,
+            'party_filter': party_filter,
+            'category_filter': category_filter,
+            'results': category_data,
+            'total_categories': len(category_data)
+        })
+
+    except Exception as e:
+        logger.error(f"Error in category sentiment analysis: {e}")
+        return Response({'error': 'Failed to fetch category sentiment analysis'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def bill_voting_sentiment(request, bill_id):
+    """Get comprehensive sentiment analysis for a bill including voting records"""
+    try:
+        bill = get_object_or_404(Bill, bill_id=bill_id)
+        
+        # Fetch voting data if not exists
+        from .tasks import fetch_voting_data_for_bill
+        try:
+            if is_celery_available():
+                fetch_voting_data_for_bill.delay(bill_id)
+            else:
+                fetch_voting_data_for_bill(bill_id)
+        except Exception as e:
+            logger.warning(f"Could not trigger voting data fetch for {bill_id}: {e}")
+
+        # Get statements for this bill
+        statements = Statement.objects.filter(bill=bill)
+        
+        # Get voting records for this bill
+        voting_records = VotingRecord.objects.filter(bill=bill)
+
+        # Combine sentiment from statements and voting
+        combined_sentiment = {}
+
+        # Process statements
+        for statement in statements:
+            party_name = statement.speaker.get_current_party_name()
+            speaker_name = statement.speaker.naas_nm
+            
+            if party_name not in combined_sentiment:
+                combined_sentiment[party_name] = {
+                    'party_name': party_name,
+                    'members': {},
+                    'statement_count': 0,
+                    'voting_count': 0,
+                    'avg_statement_sentiment': 0,
+                    'avg_voting_sentiment': 0,
+                    'combined_sentiment': 0
+                }
+            
+            if speaker_name not in combined_sentiment[party_name]['members']:
+                combined_sentiment[party_name]['members'][speaker_name] = {
+                    'speaker_name': speaker_name,
+                    'statements': [],
+                    'vote_result': None,
+                    'vote_sentiment': 0,
+                    'avg_statement_sentiment': 0,
+                    'combined_sentiment': 0
+                }
+            
+            combined_sentiment[party_name]['members'][speaker_name]['statements'].append({
+                'text': statement.text[:200] + '...' if len(statement.text) > 200 else statement.text,
+                'sentiment_score': statement.sentiment_score,
+                'created_at': statement.created_at
+            })
+            
+            combined_sentiment[party_name]['statement_count'] += 1
+
+        # Process voting records
+        for vote in voting_records:
+            party_name = vote.speaker.get_current_party_name()
+            speaker_name = vote.speaker.naas_nm
+            
+            if party_name not in combined_sentiment:
+                combined_sentiment[party_name] = {
+                    'party_name': party_name,
+                    'members': {},
+                    'statement_count': 0,
+                    'voting_count': 0,
+                    'avg_statement_sentiment': 0,
+                    'avg_voting_sentiment': 0,
+                    'combined_sentiment': 0
+                }
+            
+            if speaker_name not in combined_sentiment[party_name]['members']:
+                combined_sentiment[party_name]['members'][speaker_name] = {
+                    'speaker_name': speaker_name,
+                    'statements': [],
+                    'vote_result': None,
+                    'vote_sentiment': 0,
+                    'avg_statement_sentiment': 0,
+                    'combined_sentiment': 0
+                }
+            
+            combined_sentiment[party_name]['members'][speaker_name]['vote_result'] = vote.vote_result
+            combined_sentiment[party_name]['members'][speaker_name]['vote_sentiment'] = vote.sentiment_score
+            combined_sentiment[party_name]['voting_count'] += 1
+
+        # Calculate averages and combined sentiment
+        for party_data in combined_sentiment.values():
+            statement_sentiments = []
+            voting_sentiments = []
+            
+            for member_data in party_data['members'].values():
+                # Calculate average statement sentiment for member
+                if member_data['statements']:
+                    member_statement_avg = sum(s['sentiment_score'] for s in member_data['statements']) / len(member_data['statements'])
+                    member_data['avg_statement_sentiment'] = round(member_statement_avg, 3)
+                    statement_sentiments.append(member_statement_avg)
+                
+                # Add voting sentiment
+                if member_data['vote_result']:
+                    voting_sentiments.append(member_data['vote_sentiment'])
+                
+                # Calculate combined sentiment (weighted average of statements and voting)
+                statement_weight = 0.6 if member_data['statements'] else 0
+                voting_weight = 0.4 if member_data['vote_result'] else 0
+                
+                if statement_weight > 0 and voting_weight > 0:
+                    member_data['combined_sentiment'] = round(
+                        (member_data['avg_statement_sentiment'] * statement_weight + 
+                         member_data['vote_sentiment'] * voting_weight), 3)
+                elif statement_weight > 0:
+                    member_data['combined_sentiment'] = member_data['avg_statement_sentiment']
+                elif voting_weight > 0:
+                    member_data['combined_sentiment'] = member_data['vote_sentiment']
+            
+            # Calculate party averages
+            if statement_sentiments:
+                party_data['avg_statement_sentiment'] = round(sum(statement_sentiments) / len(statement_sentiments), 3)
+            if voting_sentiments:
+                party_data['avg_voting_sentiment'] = round(sum(voting_sentiments) / len(voting_sentiments), 3)
+            
+            # Calculate combined party sentiment
+            all_member_sentiments = [m['combined_sentiment'] for m in party_data['members'].values() if m['combined_sentiment'] != 0]
+            if all_member_sentiments:
+                party_data['combined_sentiment'] = round(sum(all_member_sentiments) / len(all_member_sentiments), 3)
+
+        # Convert to list and sort by combined sentiment
+        party_list = list(combined_sentiment.values())
+        party_list.sort(key=lambda x: x['combined_sentiment'], reverse=True)
+
+        # Calculate overall statistics
+        total_voting_records = voting_records.count()
+        vote_distribution = voting_records.values('vote_result').annotate(count=Count('id'))
+        
+        return Response({
+            'bill': {
+                'id': bill.bill_id,
+                'name': bill.bill_nm,
+                'session_date': bill.session.conf_dt if bill.session else None
+            },
+            'summary': {
+                'total_statements': statements.count(),
+                'total_voting_records': total_voting_records,
+                'vote_distribution': list(vote_distribution)
+            },
+            'party_analysis': party_list
+        })
+
+    except Exception as e:
+        logger.error(f"Error in bill voting sentiment analysis: {e}")
+        return Response({'error': 'Failed to fetch bill voting sentiment analysis'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def party_sentiment_analysis(request, party_id):
+    """Get comprehensive sentiment analysis for a specific party"""
+    try:
+        party = get_object_or_404(Party, id=party_id)
+        time_range = request.query_params.get('time_range', 'all')
+        
+        # Get all members of this party
+        party_members = Speaker.objects.filter(
+            Q(current_party=party) | Q(plpt_nm__icontains=party.name)
+        )
+        
+        # Filter statements by party members and time range
+        statements_qs = Statement.objects.filter(speaker__in=party_members)
+        voting_records_qs = VotingRecord.objects.filter(speaker__in=party_members)
+        
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            date_filter = now.date() - timedelta(days=365)
+            statements_qs = statements_qs.filter(session__conf_dt__gte=date_filter)
+            voting_records_qs = voting_records_qs.filter(vote_date__gte=date_filter)
+        elif time_range == 'month':
+            date_filter = now.date() - timedelta(days=30)
+            statements_qs = statements_qs.filter(session__conf_dt__gte=date_filter)
+            voting_records_qs = voting_records_qs.filter(vote_date__gte=date_filter)
+
+        # Category breakdown
+        category_breakdown = []
+        for category in Category.objects.all():
+            category_statements = statements_qs.filter(categories__category=category)
+            if category_statements.exists():
+                category_breakdown.append({
+                    'category_id': category.id,
+                    'category_name': category.name,
+                    'statement_count': category_statements.count(),
+                    'avg_sentiment': round(category_statements.aggregate(
+                        avg=Avg('sentiment_score'))['avg'] or 0, 3)
+                })
+
+        # Member performance analysis
+        member_analysis = []
+        for member in party_members:
+            member_statements = statements_qs.filter(speaker=member)
+            member_votes = voting_records_qs.filter(speaker=member)
+            
+            if member_statements.exists() or member_votes.exists():
+                statement_avg = member_statements.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+                voting_avg = member_votes.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+                
+                # Calculate combined sentiment
+                statement_weight = 0.6 if member_statements.exists() else 0
+                voting_weight = 0.4 if member_votes.exists() else 0
+                
+                if statement_weight > 0 and voting_weight > 0:
+                    combined_sentiment = (statement_avg * statement_weight + voting_avg * voting_weight)
+                elif statement_weight > 0:
+                    combined_sentiment = statement_avg
+                elif voting_weight > 0:
+                    combined_sentiment = voting_avg
+                else:
+                    combined_sentiment = 0
+                
+                member_analysis.append({
+                    'member_id': member.naas_cd,
+                    'member_name': member.naas_nm,
+                    'statement_count': member_statements.count(),
+                    'voting_count': member_votes.count(),
+                    'avg_statement_sentiment': round(statement_avg, 3),
+                    'avg_voting_sentiment': round(voting_avg, 3),
+                    'combined_sentiment': round(combined_sentiment, 3)
+                })
+
+        # Sort members by combined sentiment
+        member_analysis.sort(key=lambda x: x['combined_sentiment'], reverse=True)
+
+        # Overall party statistics
+        total_statements = statements_qs.count()
+        total_votes = voting_records_qs.count()
+        avg_statement_sentiment = statements_qs.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+        avg_voting_sentiment = voting_records_qs.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+
+        return Response({
+            'party': {
+                'id': party.id,
+                'name': party.name,
+                'assembly_era': party.assembly_era
+            },
+            'time_range': time_range,
+            'overall_stats': {
+                'total_members': party_members.count(),
+                'total_statements': total_statements,
+                'total_votes': total_votes,
+                'avg_statement_sentiment': round(avg_statement_sentiment, 3),
+                'avg_voting_sentiment': round(avg_voting_sentiment, 3)
+            },
+            'category_breakdown': category_breakdown,
+            'member_analysis': member_analysis
+        })
+
+    except Exception as e:
+        logger.error(f"Error in party sentiment analysis: {e}")
+        return Response({'error': 'Failed to fetch party sentiment analysis'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
