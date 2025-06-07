@@ -8,8 +8,7 @@ from .views import (
     CategoryListView,
     category_analytics, category_trend_analysis, trigger_statement_analysis,
     bill_sentiment_analysis, overall_sentiment_stats, statement_list, bill_list,
-    refresh_all_data, data_status, parties_list, party_detail, comprehensive_sentiment_analysis,
-    category_sentiment_analysis, fetch_bill_voting_records
+    refresh_all_data, data_status, parties_list
 )
 from .models import Session, Bill, Speaker, Statement
 
@@ -62,12 +61,4 @@ urlpatterns = [
     path('data/refresh/', refresh_all_data, name='refresh-data'),
     path('data/status/', data_status, name='data-status'),
     path('parties/', parties_list, name='party-list'),
-
-    # Comprehensive sentiment analysis endpoints
-    path('analytics/sentiment/comprehensive/', comprehensive_sentiment_analysis, name='comprehensive-sentiment'),
-    path('analytics/sentiment/categories/', category_sentiment_analysis, name='category-sentiment'),
-    path('analytics/voting/fetch/', fetch_bill_voting_records, name='fetch-voting-records'),
-
-    # Party endpoints
-    path('parties/<int:party_id>/', party_detail, name='party-detail'),
 ]
