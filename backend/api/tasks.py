@@ -624,6 +624,8 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         logger.info("No sessions data provided to process.")
         return
 
+    from django.db import connection
+
     @with_db_retry
     def _process_session_item(session_defaults, confer_num):
         return Session.objects.update_or_create(
