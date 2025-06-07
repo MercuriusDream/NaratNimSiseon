@@ -106,11 +106,16 @@ class BillViewSet(viewsets.ModelViewSet):
     @api_action_wrapper(log_prefix="Fetching statements for bill",
                         default_error_message='발언 목록을 불러오는 중 오류가 발생했습니다.')
     def statements(self, request, pk=None):
-        bill = self.get_object()
-        statements = bill.statements.all()
-        # TODO: Consider pagination
-        serializer = StatementSerializer(statements, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+        try:
+            bill = self.get_object()
+            logger.info(f"Fetching statements for bill: {bill.bill_id}")
+            statements = bill.statements.all()
+            logger.info(f"Found {statements.count()} statements for bill {bill.bill_id}")
+            serializer = StatementSerializer(statements, many=True)
+            return Response({'status': 'success', 'data': serializer.data})
+        except Exception as e:
+            logger.error(f"Error fetching statements for bill {pk}: {e}")
+            return Response({'status': 'error', 'message': str(e)}, status=500)
 
 
 class SpeakerViewSet(viewsets.ModelViewSet):

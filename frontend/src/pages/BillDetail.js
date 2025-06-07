@@ -22,11 +22,16 @@ function BillDetail() {
         ]);
 
         setBill(billRes.data);
-        // Ensure statements is always an array
+        // Handle the statements response structure
         const statementsData = statementsRes.data;
-        const statementsArray = Array.isArray(statementsData) ? statementsData : 
-                               (statementsData?.data && Array.isArray(statementsData.data)) ? statementsData.data : 
-                               (statementsData?.results && Array.isArray(statementsData.results)) ? statementsData.results : [];
+        let statementsArray = [];
+        if (statementsData?.status === 'success' && Array.isArray(statementsData.data)) {
+          statementsArray = statementsData.data;
+        } else if (Array.isArray(statementsData)) {
+          statementsArray = statementsData;
+        } else if (statementsData?.results && Array.isArray(statementsData.results)) {
+          statementsArray = statementsData.results;
+        }
         setStatements(statementsArray);
         setLoading(false);
       } catch (err) {
@@ -76,17 +81,17 @@ function BillDetail() {
           <div>
             <p className="text-gray-600">
               <span className="font-semibold">의안번호:</span>{' '}
-              {bill.bill_no}
+              {bill.bill_id || bill.bill_no || 'N/A'}
             </p>
             <p className="text-gray-600">
               <span className="font-semibold">제안자:</span>{' '}
-              {bill.proposer}
+              {bill.proposer || 'N/A'}
             </p>
           </div>
           <div>
             <p className="text-gray-600">
-              <span className="font-semibold">제안일:</span>{' '}
-              {new Date(bill.propose_dt).toLocaleDateString('ko-KR')}
+              <span className="font-semibold">생성일:</span>{' '}
+              {bill.created_at ? new Date(bill.created_at).toLocaleDateString('ko-KR') : 'N/A'}
             </p>
             <p className="text-gray-600">
               <span className="font-semibold">상태:</span>{' '}
@@ -108,7 +113,7 @@ function BillDetail() {
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <h2 className="text-2xl font-bold mb-4">의안 내용</h2>
         <div className="prose max-w-none">
-          <p className="whitespace-pre-wrap">{bill.content}</p>
+          <p className="whitespace-pre-wrap">{bill.content || bill.bill_nm || '의안 내용을 불러올 수 없습니다.'}</p>
         </div>
       </div>
 
