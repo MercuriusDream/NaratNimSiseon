@@ -19,8 +19,8 @@ class Command(BaseCommand):
         for party in Party.objects.all():
             # Check if this party has speakers with 22대 in their gtelt_eraco
             current_speakers = Speaker.objects.filter(
-                plpt_nm__icontains=party.name,
-                Q(gtelt_eraco__icontains='22') | Q(gtelt_eraco__icontains='제22대')
+                Q(plpt_nm__icontains=party.name) &
+                (Q(gtelt_eraco__icontains='22') | Q(gtelt_eraco__icontains='제22대'))
             )
             
             if current_speakers.exists() or any(cp in party.name for cp in current_parties):
