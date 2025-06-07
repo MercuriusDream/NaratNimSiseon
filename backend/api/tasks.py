@@ -1245,7 +1245,7 @@ def get_all_assembly_members():
         url = "https://open.assembly.go.kr/portal/openapi/ALLNAMEMBER"
         all_members = set()
         page = 1
-        page_size = 100
+        page_size = 300
         
         while True:
             params = {
