@@ -46,34 +46,35 @@ const BillList = ({ filter }) => {
       {loading && <p>Loading bills...</p>}
       {error && <p>Error: {error}</p>}
       {bills && bills.map(bill => (
-        <div key={bill.id}>
-          {bill.name}
+        <div key={bill.id} className="border p-4 mb-4 rounded-lg cursor-pointer hover:shadow-md" onClick={() => navigate(`/bills/${bill.bill_id}`)}>
+          <h3 className="font-semibold text-lg mb-2">{bill.bill_nm}</h3>
+          <p className="text-gray-600 mb-2">의안번호: {bill.bill_id}</p>
+          {bill.summary && <p className="text-gray-700">{bill.summary}</p>}
         </div>
       ))}
 
-        {/* Pagination */}
-        {pagination.count > 10 && (
-          <div className="flex justify-center space-x-2 mt-8">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={!pagination.previous}
-              className="px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              이전
-            </button>
-            <span className="px-4 py-2 text-gray-700">
-              페이지 {currentPage} / {Math.ceil(pagination.count / 10)}
-            </span>
-            <button
-              onClick={() => setCurrentPage(prev => prev + 1)}
-              disabled={!pagination.next}
-              className="px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              다음
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Pagination */}
+      {pagination.count > 10 && (
+        <div className="flex justify-center space-x-2 mt-8">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={!pagination.previous}
+            className="px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            이전
+          </button>
+          <span className="px-4 py-2 text-gray-700">
+            페이지 {currentPage} / {Math.ceil(pagination.count / 10)}
+          </span>
+          <button
+            onClick={() => setCurrentPage(prev => prev + 1)}
+            disabled={!pagination.next}
+            className="px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            다음
+          </button>
+        </div>
+      )}
     </div>
   );
 };
