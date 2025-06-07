@@ -945,4 +945,4 @@ def party_detail(request, party_id):
         return Response({
             'status': 'error',
             'message': f'정당 상세 정보를 불러오는 중 오류가 발생했습니다: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)```python
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
