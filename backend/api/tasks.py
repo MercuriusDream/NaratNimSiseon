@@ -624,9 +624,10 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         logger.info("No sessions data provided to process.")
         return
 
-    # Ensure database connection is alive
-    from django.db import connection
-    connection.ensure_connection()
+    @with_db_retry
+    def _process_session_item(session_defaults, confer_num):
+        return Session.objects.update_or_create(
+            conf_id=confer_num, defaults=session_defaults)
 
     # Group by CONFER_NUM (session_id) as multiple agenda items can be part of the same physical session meeting
     sessions_by_confer_num = {}
@@ -721,11 +722,8 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                 )
                 continue  # Skip database operations in debug mode for this part
 
-            # Ensure database connection before creating/updating
-            connection.ensure_connection()
-
-            session_obj, created = Session.objects.update_or_create(
-                conf_id=confer_num, defaults=session_defaults)
+            # Use retry wrapper for database operations
+            session_obj, created = _process_session_item(session_defaults, confer_num)
 
             if created:
                 created_count += 1
@@ -1163,6 +1161,7 @@ def get_session_bills_list(session_id):
     return []
 
 
+@with_db_retry
 def get_session_bill_names(session_id):
     """Get list of bill names for a specific session (CONF_ID) from already stored Bills."""
     try:
@@ -2354,6 +2353,34 @@ def process_extracted_statements_data(statements_data_list,
             f"No statement data to save for session {session_obj.conf_id}.")
         return
 
+    @with_db_retry
+    def _check_statement_exists(session_obj, speaker_obj, statement_text):
+        return Statement.objects.filter(session=session_obj,
+                                      speaker=speaker_obj,
+                                      text_hash=Statement.calculate_hash(
+                                          statement_text,
+                                          speaker_obj.naas_cd,
+                                          session_obj.conf_id)).exists()
+
+    @with_db_retry
+    def _find_bill_for_statement(session_obj, assoc_bill_name_from_data):
+        associated_bill_obj = Bill.objects.filter(
+            session=session_obj,
+            bill_nm__iexact=assoc_bill_name_from_data).first()
+        if not associated_bill_obj:
+            bill_candidates = Bill.objects.filter(
+                session=session_obj,
+                bill_nm__icontains=assoc_bill_name_from_data.split(
+                    '(')[0].strip())
+            if bill_candidates.count() == 1:
+                associated_bill_obj = bill_candidates.first()
+        return associated_bill_obj
+
+    @with_db_retry
+    def _save_statement(new_statement):
+        new_statement.save()
+        return new_statement
+
     created_count = 0
     logger.info(
         f"Attempting to save {len(statements_data_list)} statements for session {session_obj.conf_id}."
@@ -2369,10 +2396,6 @@ def process_extracted_statements_data(statements_data_list,
                 )
                 continue
 
-            # Ensure Django DB connection is alive, esp. in long tasks
-            from django.db import connection
-            connection.ensure_connection()
-
             speaker_obj = get_or_create_speaker(
                 speaker_name,
                 debug=debug)  # Debug here should match overall debug
@@ -2383,12 +2406,7 @@ def process_extracted_statements_data(statements_data_list,
                 continue
 
             # Check for existing identical statement (text, speaker, session) to avoid duplicates from reprocessing
-            if Statement.objects.filter(session=session_obj,
-                                        speaker=speaker_obj,
-                                        text_hash=Statement.calculate_hash(
-                                            statement_text,
-                                            speaker_obj.naas_cd,
-                                            session_obj.conf_id)).exists():
+            if _check_statement_exists(session_obj, speaker_obj, statement_text):
                 logger.info(
                     f"ℹ️ Identical statement by {speaker_name} (hash match) already exists for session {session_obj.conf_id}. Skipping."
                 )
@@ -2404,24 +2422,11 @@ def process_extracted_statements_data(statements_data_list,
             ]:
                 # Try to find the Bill object precisely
                 try:
-                    # Prefer exact match if possible, or high-confidence partial
-                    associated_bill_obj = Bill.objects.filter(
-                        session=session_obj,
-                        bill_nm__iexact=assoc_bill_name_from_data).first()
-                    if not associated_bill_obj:
-                        # Fallback to icontains if exact name might have variations from LLM
-                        # Be cautious with icontains if bill names are very similar
-                        bill_candidates = Bill.objects.filter(
-                            session=session_obj,
-                            bill_nm__icontains=assoc_bill_name_from_data.split(
-                                '(')[0].strip())  # Match before parenthesis
-                        if bill_candidates.count() == 1:
-                            associated_bill_obj = bill_candidates.first()
-                        elif bill_candidates.count() > 1:
-                            logger.warning(
-                                f"Ambiguous bill name '{assoc_bill_name_from_data}' for session {session_obj.conf_id}, found multiple matches. Not associating."
-                            )
-
+                    associated_bill_obj = _find_bill_for_statement(session_obj, assoc_bill_name_from_data)
+                    if not associated_bill_obj and Bill.objects.filter(session=session_obj, bill_nm__icontains=assoc_bill_name_from_data.split('(')[0].strip()).count() > 1:
+                        logger.warning(
+                            f"Ambiguous bill name '{assoc_bill_name_from_data}' for session {session_obj.conf_id}, found multiple matches. Not associating."
+                        )
                 except Exception as e_bill_find:
                     logger.warning(
                         f"⚠️ Error finding bill '{assoc_bill_name_from_data}' for statement: {e_bill_find}"
@@ -2447,8 +2452,7 @@ def process_extracted_statements_data(statements_data_list,
                 bill_specific_keywords_json=json.dumps(stmt_data.get(
                     'bill_specific_keywords', []),
                                                        ensure_ascii=False))
-            new_statement.save(
-            )  # This also calculates and saves text_hash via pre_save signal
+            new_statement = _save_statement(new_statement)  # This also calculates and saves text_hash via pre_save signal
             created_count += 1
 
             bill_info_log = f" (Bill: {associated_bill_obj.bill_nm[:20]}...)" if associated_bill_obj else f" (Assoc. Bill Name: {assoc_bill_name_from_data[:20]})" if assoc_bill_name_from_data else ""
@@ -2794,6 +2798,29 @@ def create_statement_categories(statement_obj,
 
     from .models import Category, Subcategory, StatementCategory  # Ensure models are importable
 
+    @with_db_retry
+    def _get_or_create_category(main_cat_name):
+        return Category.objects.get_or_create(
+            name=main_cat_name,
+            defaults={'description': f'{main_cat_name} 관련 정책'})
+
+    @with_db_retry
+    def _get_or_create_subcategory(sub_cat_name, category_obj, main_cat_name):
+        return Subcategory.objects.get_or_create(
+            name=sub_cat_name,
+            category=category_obj,
+            defaults={
+                'description': f'{sub_cat_name} 관련 세부 정책 ({main_cat_name})'
+            })
+
+    @with_db_retry
+    def _update_or_create_statement_category(statement_obj, category_obj, subcategory_obj, confidence):
+        return StatementCategory.objects.update_or_create(
+            statement=statement_obj,
+            category=category_obj,
+            subcategory=subcategory_obj,
+            defaults={'confidence_score': confidence})
+
     # Clear existing categories for this statement to repopulate, or implement update logic
     # StatementCategory.objects.filter(statement=statement_obj).delete() # Simple way: delete and recreate
 
@@ -2816,28 +2843,15 @@ def create_statement_categories(statement_obj,
         processed_categories_for_statement.add(category_tuple)
 
         try:
-            category_obj, _ = Category.objects.get_or_create(
-                name=main_cat_name,
-                defaults={'description': f'{main_cat_name} 관련 정책'})
+            category_obj, _ = _get_or_create_category(main_cat_name)
 
             subcategory_obj = None
             if sub_cat_name and sub_cat_name.lower(
             ) != '일반' and sub_cat_name.lower() != '없음':
-                subcategory_obj, _ = Subcategory.objects.get_or_create(
-                    name=sub_cat_name,
-                    category=category_obj,  # Associate with parent category
-                    defaults={
-                        'description':
-                        f'{sub_cat_name} 관련 세부 정책 ({main_cat_name})'
-                    })
+                subcategory_obj, _ = _get_or_create_subcategory(sub_cat_name, category_obj, main_cat_name)
 
             # Create or update StatementCategory link
-            StatementCategory.objects.update_or_create(
-                statement=statement_obj,
-                category=category_obj,
-                subcategory=
-                subcategory_obj,  # Can be None if no specific subcategory
-                defaults={'confidence_score': confidence})
+            _update_or_create_statement_category(statement_obj, category_obj, subcategory_obj, confidence)
         except Exception as e_cat_create:
             logger.error(
                 f"Error creating category links for statement {statement_obj.id} (Cat: {main_cat_name}/{sub_cat_name}): {e_cat_create}"
