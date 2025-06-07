@@ -1,6 +1,8 @@
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
 
 class Session(models.Model):
     conf_id = models.CharField(max_length=50, primary_key=True, verbose_name=_("회의 ID"))
@@ -124,6 +126,7 @@ class Statement(models.Model):
     sentiment_reason = models.TextField(help_text=_("감성 분석 근거"), verbose_name=_("감성 분석 근거"))
     category_analysis = models.TextField(blank=True, help_text=_("카테고리 분석 결과"), verbose_name=_("카테고리 분석 결과"))
     policy_keywords = models.TextField(blank=True, help_text=_("정책 키워드"), verbose_name=_("정책 키워드"))
+    text_hash = models.CharField(max_length=64, blank=True, help_text=_("텍스트 해시"), verbose_name=_("텍스트 해시"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
 
@@ -135,13 +138,18 @@ class Statement(models.Model):
     def __str__(self):
         return f"{self.speaker.naas_nm}의 발언 ({self.created_at})"
     
-    def calculate_hash(self):
-        """Calculate a hash for this statement based on text, speaker, and session"""
+    @staticmethod
+    def calculate_hash(text, speaker_code, session_id):
+        """Calculate a hash for a statement based on text, speaker, and session"""
         import hashlib
         # Create a string combining the key identifying fields
-        identifier = f"{self.text}|{self.speaker.naas_cd}|{self.session.conf_id}"
+        identifier = f"{text}|{speaker_code}|{session_id}"
         # Return SHA256 hash
         return hashlib.sha256(identifier.encode('utf-8')).hexdigest()
+    
+    def get_hash(self):
+        """Get hash for this statement instance"""
+        return self.calculate_hash(self.text, self.speaker.naas_cd, self.session.conf_id)
 
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True, help_text=_("카테고리명"), verbose_name=_("카테고리명"))
@@ -188,3 +196,14 @@ class StatementCategory(models.Model):
         unique_together = ['statement', 'category']
         verbose_name = "발언 카테고리"
         verbose_name_plural = "발언 카테고리 목록"
+
+
+@receiver(pre_save, sender=Statement)
+def calculate_statement_hash(sender, instance, **kwargs):
+    """Automatically calculate hash before saving statement"""
+    if instance.text and instance.speaker and instance.session:
+        instance.text_hash = Statement.calculate_hash(
+            instance.text, 
+            instance.speaker.naas_cd, 
+            instance.session.conf_id
+        )

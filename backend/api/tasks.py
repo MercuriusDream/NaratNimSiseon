@@ -2098,7 +2098,7 @@ def process_extracted_statements_data(statements_data_list,
             if Statement.objects.filter(session=session_obj,
                                         speaker=speaker_obj,
                                         text_hash=Statement.calculate_hash(
-                                            statement_text)).exists():
+                                            statement_text, speaker_obj.naas_cd, session_obj.conf_id)).exists():
                 logger.info(
                     f"ℹ️ Identical statement by {speaker_name} (hash match) already exists for session {session_obj.conf_id}. Skipping."
                 )
