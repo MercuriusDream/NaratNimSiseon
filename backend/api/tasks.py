@@ -1485,162 +1485,189 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
     return statement_data_dict
 
 
-def extract_statements_without_bill_separation(full_text,
-                                               session_id,
-                                               bills_context_str,
-                                               debug=False):
-    """Fallback: LLM speaker detection on chunked text, then individual analysis if no bill segmentation."""
+def extract_statements_with_bill_based_chunking(full_text,
+                                                       session_id,
+                                                       bill_names_list,
+                                                       debug=False):
+    """
+    Process full text by first identifying bill segments using LLM,
+    then processing each bill segment in chunks for statement extraction.
+    """
     logger.info(
-        f"🔄 Using chunked text speaker detection for session: {session_id} (no bill segmentation)."
+        f"🔄 Using bill-based chunked processing for session: {session_id}"
     )
 
     if not genai or not hasattr(genai, 'GenerativeModel'):
         logger.warning(
-            "❌ Gemini API not configured. Cannot perform full-text speaker detection."
+            "❌ Gemini API not configured. Cannot perform bill-based chunked processing."
         )
         return []
+
     try:
-        speaker_detection_model_name = 'gemini-2.0-flash-lite'  # Or 'gemini-2.0-flash-lite'
-        speaker_detection_llm = genai.GenerativeModel(
-            speaker_detection_model_name)
+        segmentation_model_name = 'gemini-2.0-flash-lite'
+        segmentation_llm = genai.GenerativeModel(segmentation_model_name)
+        speaker_detection_llm = genai.GenerativeModel(segmentation_model_name)
     except Exception as e_model:
         logger.error(
-            f"Failed to initialize speaker detection model ({speaker_detection_model_name}): {e_model}"
+            f"Failed to initialize models ({segmentation_model_name}): {e_model}"
         )
         return []
 
-    # Split text into manageable chunks
-    MAX_CHUNK_LENGTH = 40000  # Smaller chunks to ensure reliable processing
-    text_chunks = split_text_into_chunks(full_text, MAX_CHUNK_LENGTH)
-    logger.info(f"Split text into {len(text_chunks)} chunks for processing")
-
     all_analyzed_statements = []
-    global_character_offset = 0  # Track position across chunks
 
-    for chunk_idx, text_chunk in enumerate(text_chunks):
+    # Step 1: Get bill segments using LLM (use existing bill segmentation logic)
+    bill_segments_from_llm = []
+    if bill_names_list and len(bill_names_list) > 0:
         logger.info(
-            f"Processing chunk {chunk_idx + 1}/{len(text_chunks)} for session {session_id}"
+            f"🔍 Step 1: Identifying bill segments for session {session_id}"
         )
 
-        speaker_detection_prompt = f"""
-당신은 기록자입니다. 당신의 기록은 미래에 사람들을 살릴 것입니다. 국회 회의록 텍스트 일부에서 국회의원들의 개별 발언을 식별해주세요.
-회의에서 논의된 주요 의안 목록: {bills_context_str if bills_context_str else "제공되지 않음"}
+        # Limit text for segmentation to prevent prompt overflow
+        MAX_SEGMENTATION_LENGTH = 100000
+        segmentation_text = full_text
+        if len(full_text) > MAX_SEGMENTATION_LENGTH:
+            logger.warning(
+                f"Text too long for segmentation ({len(full_text)} chars), truncating to {MAX_SEGMENTATION_LENGTH}"
+            )
+            segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
 
-회의록 텍스트 (일부):
+        bill_segmentation_prompt = f"""
+국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
+다음은 이 회의에서 논의된 의안 목록입니다: {", ".join(bill_names_list)}
+
+회의록 텍스트:
 ---
-{text_chunk}
+{segmentation_text}
 ---
 
-각 발언에 대해 다음 정보를 JSON 형식으로 제공해주세요. 배열 'detected_speeches' 안에 객체로 포함합니다:
+각 의안에 대한 논의 시작 지점을 알려주세요. JSON 형식 응답:
 {{
-  "speaker_name_raw": "회의록 기록된 발언자 이름 원본 (예: 김철수의원)",
-  "speaker_name_clean": "정리된 발언자 실명 (예: 김철수)",
-  "speech_start_index": 발언이 시작되는 이 텍스트 조각 내 문자 위치 (숫자),
-  "speech_end_index": 발언이 끝나는 이 텍스트 조각 내 문자 위치 (숫자),
-  "is_real_person_guess": true/false,
-  "is_substantial_discussion_guess": true/false
+  "bill_discussion_segments": [
+    {{
+      "bill_name_identified": "LLM이 식별한 의안명 (목록에 있는 이름과 최대한 일치)",
+      "discussion_start_idx": 해당 의안 논의가 시작되는 텍스트 내 문자 위치 (숫자),
+      "relevance_to_provided_list": 0.0-1.0 (제공된 의안 목록과의 관련성 추정치)
+    }}
+  ]
 }}
 
-기준:
-1. '◯' (동그라미) 기호로 시작하고 사람 이름으로 보이는 부분만 발언으로 간주합니다.
-2. '의장', '위원장' 등이 사회를 보는 발언은 is_substantial_discussion_guess: false로 처리합니다.
-3. speech_start_index는 발언자 표시(◯이름) 부분을 포함한 시작 위치입니다.
-4. speech_end_index는 다음 발언자가 시작되기 직전 또는 텍스트 끝까지입니다.
-5. 인덱스는 주어진 텍스트 조각 내에서의 정확한 문자 위치를 나타내야 합니다.
-
-응답 JSON 구조:
-{{
-  "detected_speeches": [ /* ... */ ]
-}}
+- "bill_name_identified"는 제공된 의안 목록에 있는 이름 중 하나와 일치하거나 매우 유사해야 합니다.
+- "discussion_start_idx"는 회의록 텍스트 내에서의 정확한 문자 위치를 나타내야 합니다.
+- 순서는 회의록에 나타난 순서대로 정렬해주세요.
 """
+
         try:
-            stage1_response = speaker_detection_llm.generate_content(
-                speaker_detection_prompt)
-            if not stage1_response or not stage1_response.text:
-                logger.warning(
-                    f"No response from speaker detection LLM for chunk {chunk_idx + 1} of session {session_id}."
+            seg_response = segmentation_llm.generate_content(
+                bill_segmentation_prompt)
+            if seg_response and seg_response.text:
+                seg_text_cleaned = seg_response.text.strip().replace(
+                    "```json", "").replace("```", "").strip()
+                seg_data = json.loads(seg_text_cleaned)
+                bill_segments_from_llm = seg_data.get(
+                    "bill_discussion_segments", [])
+                logger.info(
+                    f"LLM identified {len(bill_segments_from_llm)} bill segments"
                 )
-                continue
-
-            response_text_cleaned = stage1_response.text.strip().replace(
-                "```json", "").replace("```", "").strip()
-            stage1_data = json.loads(response_text_cleaned)
-            detected_speeches_info = stage1_data.get('detected_speeches', [])
-            logger.info(
-                f"Chunk {chunk_idx + 1} speaker detection for session {session_id}: Found {len(detected_speeches_info)} potential speech segments."
-            )
-
-            if not detected_speeches_info:
-                global_character_offset += len(text_chunk)
-                continue
-
-            for i, speech_info in enumerate(detected_speeches_info):
-                # Similar extraction and analysis logic as in extract_statements_for_bill_segment
-                clean_name = speech_info.get('speaker_name_clean')
-                start_idx = speech_info.get('speech_start_index')
-                end_idx = speech_info.get('speech_end_index')
-                is_real_person = speech_info.get('is_real_person_guess', False)
-                is_substantial = speech_info.get(
-                    'is_substantial_discussion_guess', False)
-
-                if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial:
-                    continue  # Skip if basic filters fail
-
-                # Validate indices are within chunk bounds
-                if start_idx < 0 or end_idx > len(
-                        text_chunk) or start_idx >= end_idx:
-                    logger.warning(
-                        f"Invalid indices for speaker '{clean_name}' in chunk {chunk_idx + 1}: start={start_idx}, end={end_idx}, chunk_length={len(text_chunk)}"
-                    )
-                    continue
-
-                current_speech_content = text_chunk[start_idx:end_idx].strip()
-                # Clean the extracted content
-                current_speech_content = clean_pdf_text(current_speech_content)
-
-                # Clean content similar to bill_segment version
-                if current_speech_content.startswith(
-                        speech_info.get('speaker_name_raw', '')):
-                    current_speech_content = current_speech_content[
-                        len(speech_info.get('speaker_name_raw', '')):].strip()
-
-                if not current_speech_content or len(
-                        current_speech_content) < 50:
-                    continue
-
-                # For chunked text extraction, bill context is more general. We use `analyze_single_statement` (no bill_name)
-                analysis_result_dict = analyze_single_statement(  # Uses simpler analysis
-                    {
-                        'speaker_name': clean_name,
-                        'text': current_speech_content
-                    }, session_id, debug)
-                if analysis_result_dict:  # analyze_single_statement should return a dict
-                    # We might want to add a general 'associated_bill_name' here if schema expects it.
-                    analysis_result_dict[
-                        'associated_bill_name'] = "General Discussion / Chunked Transcript"
-                    all_analyzed_statements.append(analysis_result_dict)
-
-                if not debug: time.sleep(0.6)
-
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, Exception) as e:
             logger.error(
-                f"JSON parsing error in chunk {chunk_idx + 1} speaker detection (session {session_id}): {e}. Response: {response_text_cleaned if 'response_text_cleaned' in locals() else 'N/A'}"
+                f"Error in bill segmentation: {e}. Will process as single bill segment."
             )
-        except Exception as e:
-            logger.error(
-                f"❌ Error in chunk {chunk_idx + 1} statement extraction (session {session_id}): {e}"
-            )
-            logger.exception(
-                f"Full traceback for chunk {chunk_idx + 1} extraction error:")
+            # Fallback: treat entire text as one bill segment
+            if bill_names_list:
+                bill_segments_from_llm = [{
+                    "bill_name_identified": bill_names_list[0],
+                    "discussion_start_idx": 0,
+                    "relevance_to_provided_list": 0.5
+                }]
 
-        # Update global offset for next chunk
-        global_character_offset += len(text_chunk)
+    # Step 2: Create ordered bill segments with text
+    sorted_segments_with_text = []
+    if bill_segments_from_llm:
+        valid_segments_for_sort = []
+        for seg_info in bill_segments_from_llm:
+            start_idx = seg_info.get("discussion_start_idx")
+            if start_idx is not None and isinstance(
+                    start_idx, int) and 0 <= start_idx < len(full_text):
+                seg_info['start_index'] = start_idx
+                valid_segments_for_sort.append(seg_info)
+
+        # Sort by start_index
+        valid_segments_for_sort.sort(key=lambda x: x['start_index'])
+
+        # Define text segments
+        for i, current_seg_info in enumerate(valid_segments_for_sort):
+            segment_text_start_index = current_seg_info['start_index']
+            segment_text_end_index = len(full_text)
+
+            if i + 1 < len(valid_segments_for_sort):
+                next_segment_start_index = valid_segments_for_sort[
+                    i + 1]['start_index']
+                segment_text_end_index = next_segment_start_index
+
+            segment_actual_text = full_text[
+                segment_text_start_index:segment_text_end_index]
+            sorted_segments_with_text.append({
+                "bill_name":
+                current_seg_info.get("bill_name_identified",
+                                     "Unknown Bill Segment"),
+                "text":
+                segment_actual_text
+            })
+
+    # If no segments identified, create one segment with first bill name or generic
+    if not sorted_segments_with_text:
+        bill_name_fallback = bill_names_list[0] if bill_names_list else "General Discussion"
+        sorted_segments_with_text = [{
+            "bill_name": bill_name_fallback,
+            "text": full_text
+        }]
+
+    # Step 3: Process each bill segment in chunks
+    logger.info(
+        f"🔍 Step 2: Processing {len(sorted_segments_with_text)} bill segments in chunks"
+    )
+
+    for seg_data in sorted_segments_with_text:
+        bill_name_for_seg = seg_data["bill_name"]
+        bill_segment_text = seg_data["text"]
+        
+        logger.info(
+            f"--- Processing bill segment: {bill_name_for_seg} ({len(bill_segment_text)} chars) ---"
+        )
+
+        # If bill segment is small enough, process directly
+        MAX_CHUNK_LENGTH = 40000
+        if len(bill_segment_text) <= MAX_CHUNK_LENGTH:
+            # Process as single chunk
+            statements_in_segment = extract_statements_for_bill_segment(
+                bill_segment_text, session_id, bill_name_for_seg, debug)
+            for stmt_data in statements_in_segment:
+                stmt_data['associated_bill_name'] = bill_name_for_seg
+            all_analyzed_statements.extend(statements_in_segment)
+        else:
+            # Split bill segment into chunks and process each
+            bill_chunks = split_text_into_chunks(bill_segment_text, MAX_CHUNK_LENGTH)
+            logger.info(f"Split bill segment into {len(bill_chunks)} chunks")
+            
+            for chunk_idx, chunk_text in enumerate(bill_chunks):
+                logger.info(
+                    f"Processing chunk {chunk_idx + 1}/{len(bill_chunks)} for bill {bill_name_for_seg}"
+                )
+                
+                chunk_statements = extract_statements_for_bill_segment(
+                    chunk_text, session_id, bill_name_for_seg, debug)
+                for stmt_data in chunk_statements:
+                    stmt_data['associated_bill_name'] = bill_name_for_seg
+                all_analyzed_statements.extend(chunk_statements)
+                
+                if not debug:
+                    time.sleep(0.5)  # Brief pause between chunks
 
         if not debug:
-            time.sleep(1)  # Brief pause between chunks
+            time.sleep(1)  # Pause between bill segments
 
     logger.info(
-        f"✅ Chunked text LLM extraction for session {session_id} completed: {len(all_analyzed_statements)} statements from {len(text_chunks)} chunks."
+        f"✅ Bill-based chunked processing for session {session_id} completed: {len(all_analyzed_statements)} statements"
     )
     return all_analyzed_statements
 
@@ -2147,11 +2174,11 @@ def process_pdf_text_for_statements(full_text,
                 time.sleep(1)  # Pause between processing major segments
     else:
         logger.info(
-            "No bill segments identified or processed. Processing PDF text as a single unit."
+            "No bill segments identified or bill-based processing failed. Using bill-based chunking approach."
         )
         # This function returns list of DICTS (speaker, text, LLM analysis fields)
-        all_extracted_statements_data = extract_statements_without_bill_separation(
-            full_text, session_id, bills_context_str, debug)
+        all_extracted_statements_data = extract_statements_with_bill_based_chunking(
+            full_text, session_id, bill_names_list, debug)
 
     # Final step: Save all collected and analyzed statements to DB
     logger.info(
