@@ -23,10 +23,24 @@ class Command(BaseCommand):
             action='store_true', 
             help='Debug mode: print data instead of storing it',
         )
+        parser.add_argument(
+            '--parties-only',
+            action='store_true',
+            help='Only create Party objects from existing Speaker data',
+        )
 
     def handle(self, *args, **options):
         force = options.get('force', False)
         debug = options.get('debug', False)
+        parties_only = options.get('parties_only', False)
+        
+        if parties_only:
+            self.stdout.write('🏛️ Creating Party objects from existing Speaker data...')
+            self.create_parties_from_speakers()
+            self.stdout.write(
+                self.style.SUCCESS('✅ Party creation completed!')
+            )
+            return
         
         self.stdout.write('🏛️ Starting party and member data parsing...')
         
@@ -189,6 +203,45 @@ class Command(BaseCommand):
                 if party_created:
                     party_created_count += 1
                     self.stdout.write(f'✨ Created party: {party_name}')
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f'❌ Error creating party {party_name}: {e}')
+                )
+                continue
+        
+        self.stdout.write(
+            self.style.SUCCESS(f'✅ Parties processed: {party_created_count} created')
+        )
+
+    def create_parties_from_speakers(self):
+        """Create Party objects from unique party names in existing Speaker data"""
+        from api.models import Party
+        
+        # Get unique party names from existing speakers
+        unique_parties = Speaker.objects.values_list('plpt_nm', flat=True).distinct()
+        unique_parties = set(filter(None, unique_parties))  # Remove None/empty values
+        
+        if '정당정보없음' in unique_parties:
+            unique_parties.remove('정당정보없음')
+        
+        party_created_count = 0
+        self.stdout.write(f'📝 Creating Party objects for {len(unique_parties)} unique parties...')
+        
+        for party_name in unique_parties:
+            try:
+                party, party_created = Party.objects.get_or_create(
+                    name=party_name,
+                    defaults={
+                        'description': f'{party_name} 정당',
+                        'slogan': '',
+                        'logo_url': ''
+                    }
+                )
+                if party_created:
+                    party_created_count += 1
+                    self.stdout.write(f'✨ Created party: {party_name}')
+                else:
+                    self.stdout.write(f'🔄 Party already exists: {party_name}')
             except Exception as e:
                 self.stdout.write(
                     self.style.ERROR(f'❌ Error creating party {party_name}: {e}')
