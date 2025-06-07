@@ -446,6 +446,179 @@ def category_trend_analysis(request, category_id):
         )
 
 
+@api_view(['GET'])
+def bill_sentiment_analysis(request, bill_id):
+    """Get detailed sentiment analysis for a specific bill"""
+    try:
+        bill = get_object_or_404(Bill, bill_id=bill_id)
+        statements = Statement.objects.filter(bill=bill)
+        
+        if not statements.exists():
+            return Response({
+                'bill': {
+                    'id': bill.bill_id,
+                    'name': bill.bill_nm
+                },
+                'sentiment_summary': {
+                    'total_statements': 0,
+                    'average_sentiment': 0,
+                    'positive_count': 0,
+                    'neutral_count': 0,
+                    'negative_count': 0
+                },
+                'party_breakdown': [],
+                'speaker_breakdown': [],
+                'sentiment_timeline': []
+            })
+        
+        # Calculate sentiment summary
+        total_statements = statements.count()
+        average_sentiment = statements.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+        positive_count = statements.filter(sentiment_score__gt=0.3).count()
+        negative_count = statements.filter(sentiment_score__lt=-0.3).count()
+        neutral_count = total_statements - positive_count - negative_count
+        
+        # Party breakdown
+        party_breakdown = statements.values(
+            'speaker__plpt_nm'
+        ).annotate(
+            count=Count('id'),
+            avg_sentiment=Avg('sentiment_score'),
+            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+        ).order_by('-avg_sentiment')
+        
+        # Top speakers by sentiment (most positive and most negative)
+        speaker_breakdown = statements.values(
+            'speaker__naas_nm',
+            'speaker__plpt_nm'
+        ).annotate(
+            count=Count('id'),
+            avg_sentiment=Avg('sentiment_score')
+        ).filter(count__gte=2).order_by('-avg_sentiment')[:10]
+        
+        # Sentiment timeline (by session date)
+        timeline_data = statements.values(
+            'session__conf_dt'
+        ).annotate(
+            avg_sentiment=Avg('sentiment_score'),
+            count=Count('id')
+        ).order_by('session__conf_dt')
+        
+        return Response({
+            'bill': {
+                'id': bill.bill_id,
+                'name': bill.bill_nm
+            },
+            'sentiment_summary': {
+                'total_statements': total_statements,
+                'average_sentiment': round(average_sentiment, 3),
+                'positive_count': positive_count,
+                'neutral_count': neutral_count,
+                'negative_count': negative_count,
+                'positive_percentage': round((positive_count / total_statements) * 100, 1),
+                'negative_percentage': round((negative_count / total_statements) * 100, 1)
+            },
+            'party_breakdown': list(party_breakdown),
+            'speaker_breakdown': list(speaker_breakdown),
+            'sentiment_timeline': [
+                {
+                    'date': item['session__conf_dt'].strftime('%Y-%m-%d'),
+                    'avg_sentiment': round(item['avg_sentiment'], 3),
+                    'statement_count': item['count']
+                }
+                for item in timeline_data
+            ]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in bill sentiment analysis: {e}")
+        return Response(
+            {'error': 'Failed to fetch sentiment analysis'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def overall_sentiment_stats(request):
+    """Get overall sentiment statistics across all statements"""
+    try:
+        time_range = request.query_params.get('time_range', 'all')
+        
+        statements_qs = Statement.objects.all()
+        
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=365)
+            )
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=30)
+            )
+        elif time_range == 'week':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=7)
+            )
+        
+        if not statements_qs.exists():
+            return Response({
+                'message': 'No statements found for the specified time range',
+                'stats': {}
+            })
+        
+        # Overall statistics
+        total_statements = statements_qs.count()
+        avg_sentiment = statements_qs.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+        
+        # Sentiment distribution
+        positive_count = statements_qs.filter(sentiment_score__gt=0.3).count()
+        negative_count = statements_qs.filter(sentiment_score__lt=-0.3).count()
+        neutral_count = total_statements - positive_count - negative_count
+        
+        # Party sentiment ranking
+        party_stats = statements_qs.values(
+            'speaker__plpt_nm'
+        ).annotate(
+            avg_sentiment=Avg('sentiment_score'),
+            statement_count=Count('id'),
+            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+        ).filter(statement_count__gte=5).order_by('-avg_sentiment')
+        
+        # Most active speakers
+        speaker_stats = statements_qs.values(
+            'speaker__naas_nm',
+            'speaker__plpt_nm'
+        ).annotate(
+            avg_sentiment=Avg('sentiment_score'),
+            statement_count=Count('id')
+        ).filter(statement_count__gte=3).order_by('-statement_count')[:20]
+        
+        return Response({
+            'time_range': time_range,
+            'overall_stats': {
+                'total_statements': total_statements,
+                'average_sentiment': round(avg_sentiment, 3),
+                'positive_count': positive_count,
+                'neutral_count': neutral_count,
+                'negative_count': negative_count,
+                'positive_percentage': round((positive_count / total_statements) * 100, 1),
+                'negative_percentage': round((negative_count / total_statements) * 100, 1)
+            },
+            'party_rankings': list(party_stats),
+            'active_speakers': list(speaker_stats)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in overall sentiment stats: {e}")
+        return Response(
+            {'error': 'Failed to fetch sentiment statistics'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 @api_view(['POST'])
 def trigger_statement_analysis(request):
     """Manually trigger LLM analysis for statements"""

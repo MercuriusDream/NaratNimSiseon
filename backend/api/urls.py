@@ -6,7 +6,8 @@ from django.db.models import Count, Avg
 from .views import (
     SessionViewSet, BillViewSet, SpeakerViewSet, StatementViewSet, PartyViewSet,
     CategoryListView,
-    category_analytics, category_trend_analysis, trigger_statement_analysis
+    category_analytics, category_trend_analysis, trigger_statement_analysis,
+    bill_sentiment_analysis, overall_sentiment_stats
 )
 from .models import Session, Bill, Speaker, Statement
 
@@ -46,4 +47,8 @@ urlpatterns = [
     path('analytics/categories/', category_analytics, name='category-analytics'),
     path('analytics/categories/<int:category_id>/trends/', category_trend_analysis, name='category-trends'),
     path('analysis/trigger/', trigger_statement_analysis, name='trigger-analysis'),
+    
+    # Sentiment analysis endpoints
+    path('bills/<str:bill_id>/sentiment/', bill_sentiment_analysis, name='bill-sentiment'),
+    path('analytics/sentiment/', overall_sentiment_stats, name='overall-sentiment'),
 ]
