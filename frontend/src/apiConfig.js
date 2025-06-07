@@ -1,5 +1,5 @@
 // frontend/src/apiConfig.js
-const API_BASE_URL = window.location.origin;
+export const API_BASE_URL = window.location.origin;
 
 export const ENDPOINTS = {
   SESSIONS: `${API_BASE_URL}/api/sessions/`,
