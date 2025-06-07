@@ -1279,8 +1279,6 @@ def extract_statements_for_bill_segment(bill_text_segment,
                     speech_info.get('speaker_name_raw', '')):
                 current_speech_content = current_speech_content[
                     len(speech_info.get('speaker_name_raw', '')):].strip()
-            elif current_speech_content.startswith(
-                    start_cue):  # if start_cue includes the name
                 # this logic is tricky, relies on good cues from LLM
                 pass  # The cue itself IS the start of the text LLM saw.
 
