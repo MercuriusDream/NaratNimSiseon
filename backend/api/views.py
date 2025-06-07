@@ -817,7 +817,7 @@ def category_trend_analysis(request, category_id):
                 monthly_data[month_key] = {'count': 0, 'sentiment_scores': []}
             monthly_data[month_key]['count'] += 1
             if statement.sentiment_score is not None:
-monthly_data[month_key]['sentiment_scores'].append(statement.sentiment_score)
+                monthly_data[month_key]['sentiment_scores'].append(statement.sentiment_score)
 
         # Calculate monthly averages
         trend_data = []
