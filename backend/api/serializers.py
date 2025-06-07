@@ -50,7 +50,7 @@ class BillSerializer(serializers.ModelSerializer):
 
     def get_proposer(self, obj):
         return "국회"  # Default proposer since we don't have this field in the model
-    
+
     def get_status(self, obj):
         return "pending"  # Default status since we don't have this field in the model
 
@@ -86,7 +86,9 @@ class SessionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Session
-        fields = '__all__'
+        fields = ['conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 'conf_knd', 
+                 'cmit_nm', 'conf_plc', 'title', 'bg_ptm', 'ed_ptm', 'down_url', 
+                 'bills', 'statements']
 
     def validate_conf_dt(self, value):
         if value > timezone.now().date():  # Compare date with date

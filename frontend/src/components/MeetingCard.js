@@ -6,7 +6,7 @@ import React from 'react';
 // conf_knd: session.conf_knd (회의종류)
 // conf_dt: session.conf_dt (회의일자)
 // description prop is removed as Session model has no summary/description
-const MeetingCard = ({ id, cmit_nm, conf_knd, conf_dt }) => {
+const MeetingCard = ({ id, cmit_nm, conf_knd, conf_dt, title }) => {
   const formatDate = (dateString) => {
     if (!dateString) return '날짜 미정';
     try {
@@ -34,8 +34,8 @@ const MeetingCard = ({ id, cmit_nm, conf_knd, conf_dt }) => {
           </span>
         </div>
         <h3 className="text-lg font-bold text-slate-800 leading-tight mb-3 line-clamp-2">
-          {meetingTitle} {/* Use constructed title */}
-        </h3>
+        {title || `${cmit_nm || '위원회 정보 없음'} - ${conf_knd || '회의 종류 없음'}`}
+      </h3>
         <p className="text-sm text-slate-600 leading-relaxed line-clamp-3 flex-1 mb-4">
           {/* Description removed as Session model has no summary. Placeholder can be used if desired. */}
           회의록 요약 정보는 제공되지 않습니다.

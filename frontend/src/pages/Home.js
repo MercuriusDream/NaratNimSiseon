@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import NavigationHeader from '../components/NavigationHeader';
 import HeroSection from '../components/HeroSection';
@@ -106,7 +105,7 @@ const Home = () => {
       <NavigationHeader />
       <main className="flex flex-col w-full">
         <HeroSection />
-        
+
         {/* 주요 정당 소개 섹션 */}
         <ContentSection
           title="주요 정당 소개"
