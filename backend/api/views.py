@@ -752,13 +752,18 @@ def trigger_statement_analysis(request):
                 'analyzed_count': 0
             })
 
+        # Import the task function locally to avoid conflicts
         from .tasks import analyze_statement_categories
 
         analyzed_count = 0
         for statement in statements_to_analyze:
             try:
                 # Trigger async analysis
-                analyze_statement_categories.delay(statement.id)
+                if is_celery_available():
+                    analyze_statement_categories.delay(statement.id)
+                else:
+                    # Run synchronously if Celery not available
+                    analyze_statement_categories(statement.id)
                 analyzed_count += 1
             except Exception as e:
                 logger.error(
@@ -783,7 +788,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q, Count, Avg
 from .models import Session, Bill, Speaker, Statement, Party
 from .serializers import SessionSerializer, BillSerializer, SpeakerSerializer, StatementSerializer, PartySerializer
-from .tasks import fetch_latest_sessions, analyze_statement_categories, fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
+from .tasks import fetch_latest_sessions, fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
 
 
 @api_view(['GET'])
