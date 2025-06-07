@@ -817,26 +817,35 @@ def parties_list(request):
 
         # Get basic party statistics
         party_data = []
+        current_parties = []  # For 22대 parties
+        other_parties = []    # For older parties
+        
         for party in parties:
-            # Get speakers count for this party
-            speakers = Speaker.objects.filter(plpt_nm=party.name)
-            member_count = speakers.count()
+            # Get speakers count for this party - prioritize current assembly (22대)
+            current_speakers = Speaker.objects.filter(
+                plpt_nm__icontains=party.name, 
+                gtelt_eraco__icontains='22'
+            )
+            all_speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
+            
+            # Use current assembly member count if available, otherwise all members
+            member_count = current_speakers.count() if current_speakers.exists() else all_speakers.count()
 
             # Get statements and sentiment analysis
-            statements = Statement.objects.filter(speaker__plpt_nm=party.name)
+            statements = Statement.objects.filter(speaker__plpt_nm__icontains=party.name)
             avg_sentiment = statements.aggregate(
                 Avg('sentiment_score'))['sentiment_score__avg']
             total_statements = statements.count()
 
             # Get bills related to this party's speakers
             bills = Bill.objects.filter(
-                statements__speaker__plpt_nm=party.name).distinct()
+                statements__speaker__plpt_nm__icontains=party.name).distinct()
             total_bills = bills.count()
 
             party_info = {
                 'id': party.id,
                 'name': party.name,
-                'logo_url': party.logo_url,
+                'logo_url': None,  # Don't send logo URLs to reduce requests
                 'slogan': party.slogan,
                 'description': party.description,
                 'member_count': member_count,
@@ -846,7 +855,19 @@ def parties_list(request):
                 'created_at': party.created_at,
                 'updated_at': party.updated_at
             }
-            party_data.append(party_info)
+            
+            # Check if this is a current (22대) party
+            if current_speakers.exists():
+                current_parties.append(party_info)
+            else:
+                other_parties.append(party_info)
+
+        # Sort current parties by member count (descending), then other parties
+        current_parties.sort(key=lambda x: x['member_count'], reverse=True)
+        other_parties.sort(key=lambda x: x['member_count'], reverse=True)
+        
+        # Combine lists with current parties first
+        party_data = current_parties + other_parties
 
         return Response({
             'status': 'success',

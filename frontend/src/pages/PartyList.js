@@ -191,12 +191,19 @@ function PartyList() {
           <div key={party.id} className="bg-white rounded-lg shadow overflow-hidden">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <Link
-                  to={`/parties/${party.id}`}
-                  className="text-xl font-bold text-gray-900 hover:text-blue-600"
-                >
-                  {party.name}
-                </Link>
+                <div className="flex items-center">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                    <span className="text-blue-600 font-bold">
+                      {party.name ? party.name.charAt(0) : '정'}
+                    </span>
+                  </div>
+                  <Link
+                    to={`/parties/${party.id}`}
+                    className="text-xl font-bold text-gray-900 hover:text-blue-600"
+                  >
+                    {party.name}
+                  </Link>
+                </div>
                 <span className="text-sm text-gray-500">
                   {party.member_count || 0}명
                 </span>

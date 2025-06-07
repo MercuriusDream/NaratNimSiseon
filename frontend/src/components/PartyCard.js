@@ -5,14 +5,11 @@ const PartyCard = ({ id, image, title, subtitle, description }) => {
   return (
     <div className="flex overflow-hidden flex-col flex-1 shrink p-6 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 basis-0 min-w-64 max-md:max-w-full">
       <div className="flex flex-col items-center text-center">
-        <img
-          src={image || '/logo192.png'}
-          alt={title}
-          className="object-contain w-16 h-16 rounded-full mb-4 bg-gray-100"
-          onError={(e) => {
-            e.target.src = '/logo192.png';
-          }}
-        />
+        <div className="w-16 h-16 rounded-full mb-4 bg-blue-100 flex items-center justify-center">
+          <span className="text-blue-600 font-bold text-lg">
+            {title ? title.charAt(0) : '정'}
+          </span>
+        </div>
         <h3 className="text-xl font-bold text-slate-800 mb-2">
           {title}
         </h3>
