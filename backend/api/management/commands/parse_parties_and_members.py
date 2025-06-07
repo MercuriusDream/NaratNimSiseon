@@ -185,69 +185,136 @@ class Command(BaseCommand):
             self.style.SUCCESS(f'✅ Members processed: {created_count} created, {updated_count} updated')
         )
         
-        # Create Party objects from unique party names
-        from api.models import Party
-        party_created_count = 0
-        self.stdout.write(f'📝 Creating Party objects for {len(unique_parties)} unique parties...')
-        
-        for party_name in unique_parties:
-            try:
-                party, party_created = Party.objects.get_or_create(
-                    name=party_name,
-                    defaults={
-                        'description': f'{party_name} 정당',
-                        'slogan': '',
-                        'logo_url': ''
-                    }
-                )
-                if party_created:
-                    party_created_count += 1
-                    self.stdout.write(f'✨ Created party: {party_name}')
-            except Exception as e:
-                self.stdout.write(
-                    self.style.ERROR(f'❌ Error creating party {party_name}: {e}')
-                )
-                continue
-        
-        self.stdout.write(
-            self.style.SUCCESS(f'✅ Parties processed: {party_created_count} created')
-        )
+        # Create Party objects from clean API data
+        self.fetch_and_create_parties(force=force, debug=debug)
 
     def create_parties_from_speakers(self):
-        """Create Party objects from unique party names in existing Speaker data"""
+        """Create Party objects from clean API data instead of messy speaker data"""
+        self.stdout.write('📝 Creating Party objects from Assembly API data...')
+        self.fetch_and_create_parties(force=False, debug=False)
+
+    def fetch_and_create_parties(self, force=False, debug=False):
+        """Fetch clean party data from Assembly APIs and create Party objects"""
         from api.models import Party
         
-        # Get unique party names from existing speakers
-        unique_parties = Speaker.objects.values_list('plpt_nm', flat=True).distinct()
-        unique_parties = set(filter(None, unique_parties))  # Remove None/empty values
+        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            self.stdout.write(
+                self.style.ERROR('❌ ASSEMBLY_API_KEY not configured')
+            )
+            return
+
+        # Try current party composition first (22nd assembly)
+        current_parties = self.fetch_current_parties()
         
-        if '정당정보없음' in unique_parties:
-            unique_parties.remove('정당정보없음')
+        # Try historical party data (21st assembly and below)
+        historical_parties = self.fetch_historical_parties()
         
+        # Combine and deduplicate
+        all_parties = {}
+        
+        # Add current parties
+        for party in current_parties:
+            party_name = party.get('POLY_NM', '').strip()
+            if party_name and party_name not in ['비교섭단체', '합계']:
+                all_parties[party_name] = {
+                    'name': party_name,
+                    'description': f'{party_name} - 현재 의석수: {party.get("N3", 0)}석',
+                    'current_seats': party.get('N3', 0)
+                }
+        
+        # Add historical parties
+        for party in historical_parties:
+            party_name = party.get('PLPT_NM', '').strip()
+            if party_name and party_name not in ['합계'] and party_name not in all_parties:
+                all_parties[party_name] = {
+                    'name': party_name,
+                    'description': f'{party_name} - 제21대 국회',
+                    'current_seats': 0
+                }
+        
+        if debug:
+            self.stdout.write('🐛 DEBUG: Party data to create:')
+            for party_name, party_data in all_parties.items():
+                self.stdout.write(f'  - {party_name}: {party_data}')
+            return
+        
+        # Create Party objects
         party_created_count = 0
-        self.stdout.write(f'📝 Creating Party objects for {len(unique_parties)} unique parties...')
+        party_updated_count = 0
         
-        for party_name in unique_parties:
+        self.stdout.write(f'📝 Creating/updating {len(all_parties)} parties from API data...')
+        
+        for party_name, party_data in all_parties.items():
             try:
-                party, party_created = Party.objects.get_or_create(
+                party, created = Party.objects.update_or_create(
                     name=party_name,
                     defaults={
-                        'description': f'{party_name} 정당',
+                        'description': party_data['description'],
                         'slogan': '',
                         'logo_url': ''
                     }
                 )
-                if party_created:
+                
+                if created:
                     party_created_count += 1
                     self.stdout.write(f'✨ Created party: {party_name}')
                 else:
-                    self.stdout.write(f'🔄 Party already exists: {party_name}')
+                    party_updated_count += 1
+                    self.stdout.write(f'🔄 Updated party: {party_name}')
+                    
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f'❌ Error creating party {party_name}: {e}')
+                    self.style.ERROR(f'❌ Error creating/updating party {party_name}: {e}')
                 )
                 continue
         
         self.stdout.write(
-            self.style.SUCCESS(f'✅ Parties processed: {party_created_count} created')
+            self.style.SUCCESS(f'✅ Parties processed: {party_created_count} created, {party_updated_count} updated')
         )
+
+    def fetch_current_parties(self):
+        """Fetch current party composition from nepjpxkkabqiqpbvk API"""
+        url = "https://open.assembly.go.kr/portal/openapi/nepjpxkkabqiqpbvk"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "Type": "json"
+        }
+        
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            if 'nepjpxkkabqiqpbvk' in data and len(data['nepjpxkkabqiqpbvk']) > 1:
+                parties = data['nepjpxkkabqiqpbvk'][1].get('row', [])
+                self.stdout.write(f'📥 Fetched {len(parties)} current parties')
+                return parties
+            
+        except Exception as e:
+            self.stdout.write(f'⚠️  Warning: Could not fetch current parties: {e}')
+        
+        return []
+
+    def fetch_historical_parties(self):
+        """Fetch historical party data from nedjqrnlavrvcycue API"""
+        url = "https://open.assembly.go.kr/portal/openapi/nedjqrnlavrvcycue"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "ORD_NO": "제21대",
+            "Type": "json"
+        }
+        
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            if 'nedjqrnlavrvcycue' in data and len(data['nedjqrnlavrvcycue']) > 1:
+                parties = data['nedjqrnlavrvcycue'][1].get('row', [])
+                self.stdout.write(f'📥 Fetched {len(parties)} historical parties (21st assembly)')
+                return parties
+            
+        except Exception as e:
+            self.stdout.write(f'⚠️  Warning: Could not fetch historical parties: {e}')
+        
+        return []
