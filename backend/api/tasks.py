@@ -15,20 +15,25 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 def with_db_retry(func, max_retries=3):
     """Wrapper to retry database operations with connection management"""
+
     def wrapper(*args, **kwargs):
         from django.db import connection
         from django.db.utils import OperationalError, InterfaceError
-        
+
         for attempt in range(max_retries):
             try:
                 # Ensure fresh connection
                 connection.ensure_connection()
                 return func(*args, **kwargs)
             except (OperationalError, InterfaceError) as e:
-                if 'connection already closed' in str(e) or 'server closed the connection' in str(e):
-                    logger.warning(f"Database connection issue on attempt {attempt + 1}: {e}")
+                if 'connection already closed' in str(
+                        e) or 'server closed the connection' in str(e):
+                    logger.warning(
+                        f"Database connection issue on attempt {attempt + 1}: {e}"
+                    )
                     if attempt < max_retries - 1:
                         connection.close()
                         time.sleep(1)  # Brief pause before retry
@@ -38,7 +43,9 @@ def with_db_retry(func, max_retries=3):
                 # For non-connection errors, don't retry
                 raise e
         return None
+
     return wrapper
+
 
 # Configure logger to actually show output if not already configured by Django
 if not logger.handlers or not any(
@@ -610,7 +617,7 @@ def process_sessions_data(sessions_data, force=False, debug=False):
     for confer_num, items_for_session in sessions_by_confer_num.items():
         # Ensure connection is still alive for each session
         connection.ensure_connection()
-        
+
         # Use the first item for primary session details, assuming they are consistent for the same CONFER_NUM
         main_item = items_for_session[0]
         try:
@@ -683,7 +690,7 @@ def process_sessions_data(sessions_data, force=False, debug=False):
 
             # Ensure database connection before creating/updating
             connection.ensure_connection()
-            
+
             session_obj, created = Session.objects.update_or_create(
                 conf_id=confer_num, defaults=session_defaults)
 
@@ -1301,13 +1308,15 @@ def extract_statements_for_bill_segment(bill_text_segment,
                 continue
 
             # Validate indices are within text bounds
-            if start_idx < 0 or end_idx > len(bill_text_segment) or start_idx >= end_idx:
+            if start_idx < 0 or end_idx > len(
+                    bill_text_segment) or start_idx >= end_idx:
                 logger.warning(
                     f"Invalid indices for speaker '{clean_name}' in bill '{bill_name}': start={start_idx}, end={end_idx}, text_length={len(bill_text_segment)}. Skipping."
                 )
                 continue
 
-            current_speech_content = bill_text_segment[start_idx:end_idx].strip()
+            current_speech_content = bill_text_segment[
+                start_idx:end_idx].strip()
             # Clean the extracted content
             current_speech_content = clean_pdf_text(current_speech_content)
 
@@ -1499,7 +1508,7 @@ def extract_statements_without_bill_separation(full_text,
             f"Failed to initialize speaker detection model ({speaker_detection_model_name}): {e_model}"
         )
         return []
-    
+
     # Split text into manageable chunks
     MAX_CHUNK_LENGTH = 40000  # Smaller chunks to ensure reliable processing
     text_chunks = split_text_into_chunks(full_text, MAX_CHUNK_LENGTH)
@@ -1507,10 +1516,12 @@ def extract_statements_without_bill_separation(full_text,
 
     all_analyzed_statements = []
     global_character_offset = 0  # Track position across chunks
-    
+
     for chunk_idx, text_chunk in enumerate(text_chunks):
-        logger.info(f"Processing chunk {chunk_idx + 1}/{len(text_chunks)} for session {session_id}")
-        
+        logger.info(
+            f"Processing chunk {chunk_idx + 1}/{len(text_chunks)} for session {session_id}"
+        )
+
         speaker_detection_prompt = f"""
 당신은 기록자입니다. 당신의 기록은 미래에 사람들을 살릴 것입니다. 국회 회의록 텍스트 일부에서 국회의원들의 개별 발언을 식별해주세요.
 회의에서 논의된 주요 의안 목록: {bills_context_str if bills_context_str else "제공되지 않음"}
@@ -1559,7 +1570,7 @@ def extract_statements_without_bill_separation(full_text,
                 f"Chunk {chunk_idx + 1} speaker detection for session {session_id}: Found {len(detected_speeches_info)} potential speech segments."
             )
 
-        if not detected_speeches_info:
+            if not detected_speeches_info:
                 global_character_offset += len(text_chunk)
                 continue
 
@@ -1569,14 +1580,18 @@ def extract_statements_without_bill_separation(full_text,
                 start_idx = speech_info.get('speech_start_index')
                 end_idx = speech_info.get('speech_end_index')
                 is_real_person = speech_info.get('is_real_person_guess', False)
-                is_substantial = speech_info.get('is_substantial_discussion_guess', False)
+                is_substantial = speech_info.get(
+                    'is_substantial_discussion_guess', False)
 
                 if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial:
                     continue  # Skip if basic filters fail
 
                 # Validate indices are within chunk bounds
-                if start_idx < 0 or end_idx > len(text_chunk) or start_idx >= end_idx:
-                    logger.warning(f"Invalid indices for speaker '{clean_name}' in chunk {chunk_idx + 1}: start={start_idx}, end={end_idx}, chunk_length={len(text_chunk)}")
+                if start_idx < 0 or end_idx > len(
+                        text_chunk) or start_idx >= end_idx:
+                    logger.warning(
+                        f"Invalid indices for speaker '{clean_name}' in chunk {chunk_idx + 1}: start={start_idx}, end={end_idx}, chunk_length={len(text_chunk)}"
+                    )
                     continue
 
                 current_speech_content = text_chunk[start_idx:end_idx].strip()
@@ -1589,7 +1604,8 @@ def extract_statements_without_bill_separation(full_text,
                     current_speech_content = current_speech_content[
                         len(speech_info.get('speaker_name_raw', '')):].strip()
 
-                if not current_speech_content or len(current_speech_content) < 50:
+                if not current_speech_content or len(
+                        current_speech_content) < 50:
                     continue
 
                 # For chunked text extraction, bill context is more general. We use `analyze_single_statement` (no bill_name)
@@ -1614,12 +1630,13 @@ def extract_statements_without_bill_separation(full_text,
             logger.error(
                 f"❌ Error in chunk {chunk_idx + 1} statement extraction (session {session_id}): {e}"
             )
-            logger.exception(f"Full traceback for chunk {chunk_idx + 1} extraction error:")
+            logger.exception(
+                f"Full traceback for chunk {chunk_idx + 1} extraction error:")
 
         # Update global offset for next chunk
         global_character_offset += len(text_chunk)
-        
-        if not debug: 
+
+        if not debug:
             time.sleep(1)  # Brief pause between chunks
 
     logger.info(
@@ -1891,20 +1908,20 @@ def split_text_into_chunks(text, max_chunk_size):
     """Split text into chunks, trying to break at speaker markers (◯) when possible."""
     if len(text) <= max_chunk_size:
         return [text]
-    
+
     chunks = []
     current_pos = 0
-    
+
     while current_pos < len(text):
         # Define the end position for this chunk
         chunk_end = min(current_pos + max_chunk_size, len(text))
-        
+
         # If we're not at the end of the text, try to find a good break point
         if chunk_end < len(text):
             # Look for speaker markers (◯) within the last 2000 characters of the chunk
             search_start = max(current_pos, chunk_end - 2000)
             last_speaker_pos = text.rfind('◯', search_start, chunk_end)
-            
+
             if last_speaker_pos != -1 and last_speaker_pos > current_pos:
                 # Found a speaker marker, break there
                 chunk_end = last_speaker_pos
@@ -1913,17 +1930,17 @@ def split_text_into_chunks(text, max_chunk_size):
                 last_newline = text.rfind('\n', search_start, chunk_end)
                 if last_newline != -1 and last_newline > current_pos:
                     chunk_end = last_newline
-        
+
         chunk = text[current_pos:chunk_end]
         if chunk.strip():  # Only add non-empty chunks
             chunks.append(chunk)
-        
+
         current_pos = chunk_end
-        
+
         # Skip any whitespace at the beginning of the next chunk
         while current_pos < len(text) and text[current_pos].isspace():
             current_pos += 1
-    
+
     return chunks
 
 
@@ -2003,7 +2020,7 @@ def process_pdf_text_for_statements(full_text,
         logger.info(
             f"🔍 Stage 0 (Bill Segment): Attempting to segment transcript by bills for session {session_id}"
         )
-        
+
         # Limit text for segmentation to prevent prompt overflow
         MAX_SEGMENTATION_LENGTH = 100000  # 100k characters for segmentation
         segmentation_text = full_text
@@ -2012,7 +2029,7 @@ def process_pdf_text_for_statements(full_text,
                 f"Text too long for segmentation ({len(full_text)} chars), truncating to {MAX_SEGMENTATION_LENGTH}"
             )
             segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
-        
+
         bill_segmentation_prompt = f"""
 국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
 다음은 이 회의에서 논의된 의안 목록입니다: {", ".join(bill_names_list)}
@@ -2076,7 +2093,8 @@ def process_pdf_text_for_statements(full_text,
         valid_segments_for_sort = []
         for seg_info in bill_segments_from_llm:
             start_idx = seg_info.get("discussion_start_idx")
-            if start_idx is not None and isinstance(start_idx, int) and 0 <= start_idx < len(full_text):
+            if start_idx is not None and isinstance(
+                    start_idx, int) and 0 <= start_idx < len(full_text):
                 seg_info['start_index'] = start_idx
                 valid_segments_for_sort.append(seg_info)
 
@@ -2088,16 +2106,24 @@ def process_pdf_text_for_statements(full_text,
             segment_text_start_index = current_seg_info['start_index']
             segment_text_end_index = len(full_text)  # Default to end
 
-            if i + 1 < len(valid_segments_for_sort):  # If there's a next segment
-                next_segment_start_index = valid_segments_for_sort[i + 1]['start_index']
+            if i + 1 < len(
+                    valid_segments_for_sort):  # If there's a next segment
+                next_segment_start_index = valid_segments_for_sort[
+                    i + 1]['start_index']
                 segment_text_end_index = next_segment_start_index
 
-            segment_actual_text = full_text[segment_text_start_index:segment_text_end_index]
+            segment_actual_text = full_text[
+                segment_text_start_index:segment_text_end_index]
             sorted_segments_with_text.append({
-                "bill_name": current_seg_info.get("bill_name_identified", "Unknown Bill Segment"),
-                "text": segment_actual_text
+                "bill_name":
+                current_seg_info.get("bill_name_identified",
+                                     "Unknown Bill Segment"),
+                "text":
+                segment_actual_text
             })
-        logger.info(f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance.")
+        logger.info(
+            f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance."
+        )
 
     if sorted_segments_with_text:
         logger.info(
@@ -2673,7 +2699,7 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
     try:
         from django.db import connection  # Ensure connection for long tasks
         connection.ensure_connection()
-        
+
         # Close any stale connections before critical operations
         if connection.connection and connection.connection.closed:
             connection.close()
@@ -2896,15 +2922,19 @@ def fetch_additional_data_nepjpxkkabqiqpbvk(self,
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
     """Fetch voting data for a specific bill using nojepdqqaweusdfbi API."""
-    logger.info(f"🗳️ Fetching voting data for bill: {bill_id} (force={force}, debug={debug})")
-    
+    logger.info(
+        f"🗳️ Fetching voting data for bill: {bill_id} (force={force}, debug={debug})"
+    )
+
     if debug:
         logger.debug(f"🐛 DEBUG: Skipping voting data fetch for bill {bill_id}")
         return
-    
+
     try:
-        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
-            logger.error("ASSEMBLY_API_KEY not configured for voting data fetch.")
+        if not hasattr(settings,
+                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error(
+                "ASSEMBLY_API_KEY not configured for voting data fetch.")
             return
 
         # Get the bill object
@@ -2928,17 +2958,25 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
         data = response.json()
 
         if debug:
-            logger.debug(f"🐛 DEBUG: Voting API response for {bill_id}: {json.dumps(data, indent=2, ensure_ascii=False)}")
+            logger.debug(
+                f"🐛 DEBUG: Voting API response for {bill_id}: {json.dumps(data, indent=2, ensure_ascii=False)}"
+            )
 
         voting_data = []
         api_key_name = 'nojepdqqaweusdfbi'
-        if data and api_key_name in data and isinstance(data[api_key_name], list):
-            if len(data[api_key_name]) > 1 and isinstance(data[api_key_name][1], dict):
+        if data and api_key_name in data and isinstance(
+                data[api_key_name], list):
+            if len(data[api_key_name]) > 1 and isinstance(
+                    data[api_key_name][1], dict):
                 voting_data = data[api_key_name][1].get('row', [])
-            elif len(data[api_key_name]) > 0 and isinstance(data[api_key_name][0], dict):
+            elif len(data[api_key_name]) > 0 and isinstance(
+                    data[api_key_name][0], dict):
                 head_info = data[api_key_name][0].get('head')
-                if head_info and head_info[0].get('RESULT', {}).get('CODE', '').startswith("INFO-200"):
-                    logger.info(f"API result for voting data ({bill_id}) indicates no data.")
+                if head_info and head_info[0].get('RESULT', {}).get(
+                        'CODE', '').startswith("INFO-200"):
+                    logger.info(
+                        f"API result for voting data ({bill_id}) indicates no data."
+                    )
                 elif 'row' in data[api_key_name][0]:
                     voting_data = data[api_key_name][0].get('row', [])
 
@@ -2954,7 +2992,7 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
                 member_name = vote_item.get('HG_NM', '').strip()
                 vote_result = vote_item.get('RESULT_VOTE_MOD', '').strip()
                 vote_date_str = vote_item.get('VOTE_DATE', '')
-                
+
                 if not member_name or not vote_result:
                     continue
 
@@ -2962,14 +3000,17 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
                 vote_date = None
                 if vote_date_str:
                     try:
-                        vote_date = datetime.strptime(vote_date_str, '%Y%m%d %H%M%S')
+                        vote_date = datetime.strptime(vote_date_str,
+                                                      '%Y%m%d %H%M%S')
                     except ValueError:
-                        logger.warning(f"Could not parse vote date: {vote_date_str}")
+                        logger.warning(
+                            f"Could not parse vote date: {vote_date_str}")
                         vote_date = datetime.now()
 
                 # Find the speaker by name
                 speaker = None
-                speakers = Speaker.objects.filter(naas_nm__icontains=member_name)
+                speakers = Speaker.objects.filter(
+                    naas_nm__icontains=member_name)
                 if speakers.count() == 1:
                     speaker = speakers.first()
                 elif speakers.count() > 1:
@@ -2979,10 +3020,13 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
                         speaker = exact_match
                     else:
                         speaker = speakers.first()
-                        logger.warning(f"Multiple speakers found for {member_name}, using first match")
+                        logger.warning(
+                            f"Multiple speakers found for {member_name}, using first match"
+                        )
 
                 if not speaker:
-                    logger.warning(f"Speaker not found for voting record: {member_name}")
+                    logger.warning(
+                        f"Speaker not found for voting record: {member_name}")
                     continue
 
                 # Create or update voting record
@@ -2993,24 +3037,32 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
                         'vote_result': vote_result,
                         'vote_date': vote_date,
                         'session': bill.session
-                    }
-                )
+                    })
 
                 if created:
                     created_count += 1
-                    logger.info(f"✨ Created voting record: {member_name} - {vote_result} for {bill.bill_nm[:30]}...")
+                    logger.info(
+                        f"✨ Created voting record: {member_name} - {vote_result} for {bill.bill_nm[:30]}..."
+                    )
                 else:
                     updated_count += 1
-                    logger.info(f"🔄 Updated voting record: {member_name} - {vote_result} for {bill.bill_nm[:30]}...")
+                    logger.info(
+                        f"🔄 Updated voting record: {member_name} - {vote_result} for {bill.bill_nm[:30]}..."
+                    )
 
             except Exception as e_vote:
-                logger.error(f"❌ Error processing vote item for {bill_id}: {e_vote}. Item: {vote_item}")
+                logger.error(
+                    f"❌ Error processing vote item for {bill_id}: {e_vote}. Item: {vote_item}"
+                )
                 continue
 
-        logger.info(f"🎉 Voting data processed for bill {bill_id}: {created_count} created, {updated_count} updated.")
+        logger.info(
+            f"🎉 Voting data processed for bill {bill_id}: {created_count} created, {updated_count} updated."
+        )
 
     except RequestException as re_exc:
-        logger.error(f"Request error fetching voting data for {bill_id}: {re_exc}")
+        logger.error(
+            f"Request error fetching voting data for {bill_id}: {re_exc}")
         try:
             self.retry(exc=re_exc)
         except MaxRetriesExceededError:
@@ -3018,9 +3070,12 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
     except json.JSONDecodeError as json_e:
         logger.error(f"JSON decode error for voting data {bill_id}: {json_e}")
     except Exception as e:
-        logger.error(f"❌ Unexpected error fetching voting data for {bill_id}: {e}")
+        logger.error(
+            f"❌ Unexpected error fetching voting data for {bill_id}: {e}")
         logger.exception(f"Full traceback for voting data {bill_id}:")
         try:
             self.retry(exc=e)
         except MaxRetriesExceededError:
-            logger.error(f"Max retries after unexpected error for voting data {bill_id}.")
+            logger.error(
+                f"Max retries after unexpected error for voting data {bill_id}."
+            )
