@@ -976,9 +976,17 @@ def get_session_bills_list(session_id):
     except Exception as e:
         logger.error(f"Error getting bills for session {session_id}: {e}")
         return []
+
+
+def get_session_bill_names(session_id):
     """Get list of bill names for a specific session."""
     try:
         session = Session.objects.get(conf_id=session_id)
+        bills = Bill.objects.filter(session=session)
+        return [bill.bill_nm for bill in bills if bill.bill_nm]
+    except Exception as e:
+        logger.error(f"❌ Error fetching bills for session {session_id}: {e}")
+        return []
         bills = Bill.objects.filter(session=session)
         return [bill.bill_nm for bill in bills if bill.bill_nm]
     except Exception as e:
