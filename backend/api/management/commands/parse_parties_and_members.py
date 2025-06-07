@@ -107,40 +107,58 @@ class Command(BaseCommand):
         # Process and save members
         created_count = 0
         updated_count = 0
+        batch_size = 50  # Process in smaller batches
+        total_members = len(all_members)
         
-        for member_data in all_members:
-            try:
-                naas_cd = member_data.get('NAAS_CD')
-                if not naas_cd:
-                    continue
-                
-                speaker, created = Speaker.objects.update_or_create(
-                    naas_cd=naas_cd,
-                    defaults={
-                        'naas_nm': member_data.get('NAAS_NM', ''),
-                        'naas_ch_nm': member_data.get('NAAS_CH_NM', ''),
-                        'plpt_nm': member_data.get('PLPT_NM', '정당정보없음'),
-                        'elecd_nm': member_data.get('ELECD_NM') or None,
-                        'elecd_div_nm': member_data.get('ELECD_DIV_NM') or None,
-                        'cmit_nm': member_data.get('CMIT_NM') or None,
-                        'blng_cmit_nm': member_data.get('BLNG_CMIT_NM', ''),
-                        'rlct_div_nm': member_data.get('RLCT_DIV_NM', ''),
-                        'gtelt_eraco': member_data.get('GTELT_ERACO', ''),
-                        'ntr_div': member_data.get('NTR_DIV', ''),
-                        'naas_pic': member_data.get('NAAS_PIC', '')
-                    }
-                )
-                
-                if created:
-                    created_count += 1
-                else:
-                    updated_count += 1
+        self.stdout.write(f'📝 Processing {total_members} members in batches of {batch_size}...')
+        
+        for i in range(0, total_members, batch_size):
+            batch = all_members[i:i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (total_members + batch_size - 1) // batch_size
+            
+            self.stdout.write(f'⚙️  Processing batch {batch_num}/{total_batches} ({len(batch)} members)...')
+            
+            for member_data in batch:
+                try:
+                    naas_cd = member_data.get('NAAS_CD')
+                    if not naas_cd:
+                        continue
                     
-            except Exception as e:
-                self.stdout.write(
-                    self.style.ERROR(f'❌ Error processing member {member_data.get("NAAS_NM", "Unknown")}: {e}')
-                )
-                continue
+                    speaker, created = Speaker.objects.update_or_create(
+                        naas_cd=naas_cd,
+                        defaults={
+                            'naas_nm': member_data.get('NAAS_NM', ''),
+                            'naas_ch_nm': member_data.get('NAAS_CH_NM', ''),
+                            'plpt_nm': member_data.get('PLPT_NM', '정당정보없음'),
+                            'elecd_nm': member_data.get('ELECD_NM') or None,
+                            'elecd_div_nm': member_data.get('ELECD_DIV_NM') or None,
+                            'cmit_nm': member_data.get('CMIT_NM') or None,
+                            'blng_cmit_nm': member_data.get('BLNG_CMIT_NM', ''),
+                            'rlct_div_nm': member_data.get('RLCT_DIV_NM', ''),
+                            'gtelt_eraco': member_data.get('GTELT_ERACO', ''),
+                            'ntr_div': member_data.get('NTR_DIV', ''),
+                            'naas_pic': member_data.get('NAAS_PIC', '')
+                        }
+                    )
+                    
+                    if created:
+                        created_count += 1
+                    else:
+                        updated_count += 1
+                        
+                except Exception as e:
+                    self.stdout.write(
+                        self.style.ERROR(f'❌ Error processing member {member_data.get("NAAS_NM", "Unknown")}: {e}')
+                    )
+                    continue
+            
+            # Show progress after each batch
+            self.stdout.write(f'✅ Batch {batch_num} complete. Progress: {created_count} created, {updated_count} updated')
+            
+            # Small delay to prevent database overload
+            import time
+            time.sleep(0.1)
         
         self.stdout.write(
             self.style.SUCCESS(f'✅ Members processed: {created_count} created, {updated_count} updated')
