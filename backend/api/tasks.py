@@ -1230,9 +1230,9 @@ def get_all_assembly_members():
     """Fetch and cache all assembly member names from ALLNAMEMBER API."""
     global _assembly_members_cache, _cache_timestamp
     
-    # Use cache if it's less than 1 hour old
+    # Use cache if it's less than 1 week old
     if (_assembly_members_cache is not None and _cache_timestamp is not None and 
-        time.time() - _cache_timestamp < 3600):
+        time.time() - _cache_timestamp < 604800):
         logger.info(f"Using cached assembly members ({len(_assembly_members_cache)} members)")
         return _assembly_members_cache
     
