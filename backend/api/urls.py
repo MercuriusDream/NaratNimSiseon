@@ -15,6 +15,7 @@ urlpatterns = [
     path('', include(router.urls)),
 
     # Additional custom endpoints
+    path('stats/', views.data_status, name='stats'),
     path('data-status/', views.data_status, name='data-status'),
     path('refresh-data/', views.refresh_all_data, name='refresh-data'),
     path('statements/', views.statement_list, name='statement-list'),
