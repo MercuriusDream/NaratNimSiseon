@@ -948,6 +948,21 @@ def fetch_session_details(self=None,
                                     force=force,
                                     debug=debug)
 
+    except Exception as e:
+        if isinstance(e, RequestException):
+            if self:
+                try:
+                    self.retry(exc=e)
+                except MaxRetriesExceededError:
+                    logger.error(
+                        f"Max retries exceeded for session {session_id}")
+                    raise
+            else:
+                logger.error("Sync execution failed, no retry available")
+                raise
+        logger.error(f"❌ Error fetching session details for {session_id}: {e}")
+        raise
+
 
 def get_session_bills_list(session_id):
     """Get list of bills for a specific session"""
@@ -982,11 +997,6 @@ def get_session_bill_names(session_id):
     """Get list of bill names for a specific session."""
     try:
         session = Session.objects.get(conf_id=session_id)
-        bills = Bill.objects.filter(session=session)
-        return [bill.bill_nm for bill in bills if bill.bill_nm]
-    except Exception as e:
-        logger.error(f"❌ Error fetching bills for session {session_id}: {e}")
-        return []
         bills = Bill.objects.filter(session=session)
         return [bill.bill_nm for bill in bills if bill.bill_nm]
     except Exception as e:
@@ -1296,26 +1306,7 @@ JSON 형식으로 응답해주세요:
     except Exception as e:
         logger.error(f"❌ Error in standard extraction: {e}")
         return []
-
-
-
-    except Exception as e:
-        if isinstance(e, RequestException):
-            if self:
-                try:
-                    self.retry(exc=e)
-                except MaxRetriesExceededError:
-                    logger.error(
-                        f"Max retries exceeded for session {session_id}")
-                    raise
-            else:
-                logger.error("Sync execution failed, no retry available")
-                raise
-        logger.error(f"❌ Error fetching session details for {session_id}: {e}")
-        raise
-
-
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+        @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_session_bills(self=None, session_id=None, force=False, debug=False):
     """Fetch bills for a specific session using VCONFBILLLIST API."""
     try:
@@ -1607,17 +1598,6 @@ def analyze_statement_categories(self=None, statement_id=None):
             f"❌ Failed to parse LLM JSON response for statement {statement_id}: {e}"
         )
         logger.error(f"❌ Response parsing failed - check LLM output format")
-    except Exception as e:
-        logger.error(f"❌ Error analyzing statement {statement_id}: {e}")
-        if self:
-            try:
-                self.retry(exc=e)
-            except MaxRetriesExceededError:
-                logger.error(
-                    f"Max retries exceeded for statement analysis {statement_id}"
-                )
-                raise
-
     except Exception as e:
         logger.error(f"❌ Error analyzing statement {statement_id}: {e}")
         if self:
