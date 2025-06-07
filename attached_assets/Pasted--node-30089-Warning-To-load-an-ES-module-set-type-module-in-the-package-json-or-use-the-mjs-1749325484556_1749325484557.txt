@@ -1,0 +1,333 @@
+(node:30089) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/App.test.js:1
+import { render, screen } from '@testing-library/react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30096) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/SessionCard.js:1
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30111) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/Layout.js:1
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30124) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/ChangeArticle.js:1
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30141) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/TopNavigation.js:1
+import React, { useState } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30158) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/DataMetrics.js:2
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30176) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/NavigationHeader.js:2
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30194) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/HeroSection.js:2
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30211) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/ContentSection.js:2
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30229) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/Footer.js:2
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30246) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/BillCard.js:1
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30265) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/CategoryChart.js:2
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30283) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/CategoryFilter.js:2
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30302) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/RecentChanges.js:1
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30320) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/StatementList.js:2
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30336) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/DataRefreshButton.js:2
+import React, { useState } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30354) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/BillList.js:1
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30370) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/PartyCard.js:2
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30388) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/MeetingCard.js:1
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30407) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/components/SentimentChart.js:1
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30459) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/index.js:1
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30478) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/SpeakerDetail.js:1
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30496) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/BillList.js:1
+import React, { useState } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30513) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/SpeakerList.js:2
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30531) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/StatementList.js:2
+import React, { useState } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30549) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/SessionList.js:1
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30572) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/SessionDetail.js:1
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30591) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/PartyDetail.js:1
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30609) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/PartyList.js:1
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30628) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/Home.js:1
+import React, { useEffect, useState } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30644) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/SentimentAnalysis.js:2
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30661) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/pages/BillDetail.js:2
+import React, { useState, useEffect } from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30680) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/reportWebVitals.js:13
+export default reportWebVitals;
+^^^^^^
+SyntaxError: Unexpected token 'export'
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30698) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/setupTests.js:5
+import '@testing-library/jest-dom';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30716) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/api.js:1
+import axios from 'axios';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30732) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/apiConfig.js:2
+export const API_BASE_URL = window.location.origin;
+^^^^^^
+SyntaxError: Unexpected token 'export'
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
+(node:30749) Warning: To load an ES module, set "type": "module" in the package.json or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/home/runner/workspace/frontend/src/App.js:1
+import React from 'react';
+^^^^^^
+SyntaxError: Cannot use import statement outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1378:20)
+    at checkSyntax (node:internal/main/check_syntax:78:3)
+Node.js v20.18.1
