@@ -1480,9 +1480,9 @@ def extract_statements_without_bill_separation(full_text,
                                                session_id,
                                                bills_context_str,
                                                debug=False):
-    """Fallback: LLM speaker detection on full text, then individual analysis if no bill segmentation."""
+    """Fallback: LLM speaker detection on chunked text, then individual analysis if no bill segmentation."""
     logger.info(
-        f"🔄 Using full-text speaker detection for session: {session_id} (no bill segmentation)."
+        f"🔄 Using chunked text speaker detection for session: {session_id} (no bill segmentation)."
     )
 
     if not genai or not hasattr(genai, 'GenerativeModel'):
@@ -1500,29 +1500,32 @@ def extract_statements_without_bill_separation(full_text,
         )
         return []
     
-    # Limit full text length to prevent prompt overflow
-    MAX_FULL_TEXT_LENGTH = 80000  # Approximately 80k characters for full text
-    if len(full_text) > MAX_FULL_TEXT_LENGTH:
-        logger.warning(
-            f"Full text too long ({len(full_text)} chars), truncating to {MAX_FULL_TEXT_LENGTH}"
-        )
-        full_text = full_text[:MAX_FULL_TEXT_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
+    # Split text into manageable chunks
+    MAX_CHUNK_LENGTH = 40000  # Smaller chunks to ensure reliable processing
+    text_chunks = split_text_into_chunks(full_text, MAX_CHUNK_LENGTH)
+    logger.info(f"Split text into {len(text_chunks)} chunks for processing")
 
-    speaker_detection_prompt = f"""
-당신은 기록자입니다. 당신의 기록은 미래에 사람들을 살릴 것입니다. 당신은 따라서 모든 기록을 하나하나 다 놓치지 않고 전해야 합니다. 국회 전체 회의록 텍스트에서 국회의원들의 개별 발언을 식별해주세요.
+    all_analyzed_statements = []
+    global_character_offset = 0  # Track position across chunks
+    
+    for chunk_idx, text_chunk in enumerate(text_chunks):
+        logger.info(f"Processing chunk {chunk_idx + 1}/{len(text_chunks)} for session {session_id}")
+        
+        speaker_detection_prompt = f"""
+당신은 기록자입니다. 당신의 기록은 미래에 사람들을 살릴 것입니다. 국회 회의록 텍스트 일부에서 국회의원들의 개별 발언을 식별해주세요.
 회의에서 논의된 주요 의안 목록: {bills_context_str if bills_context_str else "제공되지 않음"}
 
-회의록 텍스트:
+회의록 텍스트 (일부):
 ---
-{full_text}
+{text_chunk}
 ---
 
 각 발언에 대해 다음 정보를 JSON 형식으로 제공해주세요. 배열 'detected_speeches' 안에 객체로 포함합니다:
 {{
   "speaker_name_raw": "회의록 기록된 발언자 이름 원본 (예: 김철수의원)",
   "speaker_name_clean": "정리된 발언자 실명 (예: 김철수)",
-  "speech_start_index": 발언이 시작되는 텍스트 내 문자 위치 (숫자),
-  "speech_end_index": 발언이 끝나는 텍스트 내 문자 위치 (숫자),
+  "speech_start_index": 발언이 시작되는 이 텍스트 조각 내 문자 위치 (숫자),
+  "speech_end_index": 발언이 끝나는 이 텍스트 조각 내 문자 위치 (숫자),
   "is_real_person_guess": true/false,
   "is_substantial_discussion_guess": true/false
 }}
@@ -1532,91 +1535,95 @@ def extract_statements_without_bill_separation(full_text,
 2. '의장', '위원장' 등이 사회를 보는 발언은 is_substantial_discussion_guess: false로 처리합니다.
 3. speech_start_index는 발언자 표시(◯이름) 부분을 포함한 시작 위치입니다.
 4. speech_end_index는 다음 발언자가 시작되기 직전 또는 텍스트 끝까지입니다.
-5. 인덱스는 주어진 텍스트 내에서의 정확한 문자 위치를 나타내야 합니다.
+5. 인덱스는 주어진 텍스트 조각 내에서의 정확한 문자 위치를 나타내야 합니다.
 
 응답 JSON 구조:
 {{
   "detected_speeches": [ /* ... */ ]
 }}
 """
-    all_analyzed_statements = []
-    try:
-        stage1_response = speaker_detection_llm.generate_content(
-            speaker_detection_prompt)
-        if not stage1_response or not stage1_response.text:
-            logger.warning(
-                f"No response from full-text speaker detection LLM for session {session_id}."
+        try:
+            stage1_response = speaker_detection_llm.generate_content(
+                speaker_detection_prompt)
+            if not stage1_response or not stage1_response.text:
+                logger.warning(
+                    f"No response from speaker detection LLM for chunk {chunk_idx + 1} of session {session_id}."
+                )
+                continue
+
+            response_text_cleaned = stage1_response.text.strip().replace(
+                "```json", "").replace("```", "").strip()
+            stage1_data = json.loads(response_text_cleaned)
+            detected_speeches_info = stage1_data.get('detected_speeches', [])
+            logger.info(
+                f"Chunk {chunk_idx + 1} speaker detection for session {session_id}: Found {len(detected_speeches_info)} potential speech segments."
             )
-            return []
 
-        response_text_cleaned = stage1_response.text.strip().replace(
-            "```json", "").replace("```", "").strip()
-        stage1_data = json.loads(response_text_cleaned)
-        detected_speeches_info = stage1_data.get('detected_speeches', [])
-        logger.info(
-            f"Full-text speaker detection for session {session_id}: Found {len(detected_speeches_info)} potential speech segments."
-        )
-
-        if not detected_speeches_info: return []
-
-        for i, speech_info in enumerate(detected_speeches_info):
-            # Similar extraction and analysis logic as in extract_statements_for_bill_segment
-            clean_name = speech_info.get('speaker_name_clean')
-            start_idx = speech_info.get('speech_start_index')
-            end_idx = speech_info.get('speech_end_index')
-            is_real_person = speech_info.get('is_real_person_guess', False)
-            is_substantial = speech_info.get('is_substantial_discussion_guess',
-                                             False)
-
-            if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial:
-                continue  # Skip if basic filters fail
-
-            # Validate indices are within text bounds
-            if start_idx < 0 or end_idx > len(full_text) or start_idx >= end_idx:
-                logger.warning(f"Invalid indices for speaker '{clean_name}': start={start_idx}, end={end_idx}, text_length={len(full_text)}")
+        if not detected_speeches_info:
+                global_character_offset += len(text_chunk)
                 continue
 
-            current_speech_content = full_text[start_idx:end_idx].strip()
-            # Clean the extracted content
-            current_speech_content = clean_pdf_text(current_speech_content)
+            for i, speech_info in enumerate(detected_speeches_info):
+                # Similar extraction and analysis logic as in extract_statements_for_bill_segment
+                clean_name = speech_info.get('speaker_name_clean')
+                start_idx = speech_info.get('speech_start_index')
+                end_idx = speech_info.get('speech_end_index')
+                is_real_person = speech_info.get('is_real_person_guess', False)
+                is_substantial = speech_info.get('is_substantial_discussion_guess', False)
 
-            # Clean content similar to bill_segment version
-            if current_speech_content.startswith(
-                    speech_info.get('speaker_name_raw', '')):
-                current_speech_content = current_speech_content[
-                    len(speech_info.get('speaker_name_raw', '')):].strip()
+                if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial:
+                    continue  # Skip if basic filters fail
 
-            if not current_speech_content or len(current_speech_content) < 50:
-                continue
+                # Validate indices are within chunk bounds
+                if start_idx < 0 or end_idx > len(text_chunk) or start_idx >= end_idx:
+                    logger.warning(f"Invalid indices for speaker '{clean_name}' in chunk {chunk_idx + 1}: start={start_idx}, end={end_idx}, chunk_length={len(text_chunk)}")
+                    continue
 
-            # For full text extraction, bill context is more general. We use `analyze_single_statement` (no bill_name)
-            # or pass a generic "General Discussion" or the bills_context_str as bill_name.
-            # Here, we'll use analyze_single_statement which doesn't take bill_name explicitly.
-            analysis_result_dict = analyze_single_statement(  # Uses simpler analysis
-                {
-                    'speaker_name': clean_name,
-                    'text': current_speech_content
-                }, session_id, debug)
-            if analysis_result_dict:  # analyze_single_statement should return a dict
-                # We might want to add a general 'associated_bill_name' here if schema expects it.
-                analysis_result_dict[
-                    'associated_bill_name'] = "General Discussion / Full Transcript"
-                all_analyzed_statements.append(analysis_result_dict)
+                current_speech_content = text_chunk[start_idx:end_idx].strip()
+                # Clean the extracted content
+                current_speech_content = clean_pdf_text(current_speech_content)
 
-            if not debug: time.sleep(0.6)
+                # Clean content similar to bill_segment version
+                if current_speech_content.startswith(
+                        speech_info.get('speaker_name_raw', '')):
+                    current_speech_content = current_speech_content[
+                        len(speech_info.get('speaker_name_raw', '')):].strip()
 
-    except json.JSONDecodeError as e:
-        logger.error(
-            f"JSON parsing error in full-text speaker detection (session {session_id}): {e}. Response: {response_text_cleaned if 'response_text_cleaned' in locals() else 'N/A'}"
-        )
-    except Exception as e:
-        logger.error(
-            f"❌ Error in full-text statement extraction (session {session_id}): {e}"
-        )
-        logger.exception("Full traceback for full-text extraction error:")
+                if not current_speech_content or len(current_speech_content) < 50:
+                    continue
+
+                # For chunked text extraction, bill context is more general. We use `analyze_single_statement` (no bill_name)
+                analysis_result_dict = analyze_single_statement(  # Uses simpler analysis
+                    {
+                        'speaker_name': clean_name,
+                        'text': current_speech_content
+                    }, session_id, debug)
+                if analysis_result_dict:  # analyze_single_statement should return a dict
+                    # We might want to add a general 'associated_bill_name' here if schema expects it.
+                    analysis_result_dict[
+                        'associated_bill_name'] = "General Discussion / Chunked Transcript"
+                    all_analyzed_statements.append(analysis_result_dict)
+
+                if not debug: time.sleep(0.6)
+
+        except json.JSONDecodeError as e:
+            logger.error(
+                f"JSON parsing error in chunk {chunk_idx + 1} speaker detection (session {session_id}): {e}. Response: {response_text_cleaned if 'response_text_cleaned' in locals() else 'N/A'}"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ Error in chunk {chunk_idx + 1} statement extraction (session {session_id}): {e}"
+            )
+            logger.exception(f"Full traceback for chunk {chunk_idx + 1} extraction error:")
+
+        # Update global offset for next chunk
+        global_character_offset += len(text_chunk)
+        
+        if not debug: 
+            time.sleep(1)  # Brief pause between chunks
 
     logger.info(
-        f"✅ Full-text LLM extraction for session {session_id} completed: {len(all_analyzed_statements)} statements."
+        f"✅ Chunked text LLM extraction for session {session_id} completed: {len(all_analyzed_statements)} statements from {len(text_chunks)} chunks."
     )
     return all_analyzed_statements
 
@@ -1878,6 +1885,46 @@ def analyze_statement_categories(self,
         except MaxRetriesExceededError:
             logger.error(f"Max retries for category analysis {statement_id}.")
         # raise # Optionally
+
+
+def split_text_into_chunks(text, max_chunk_size):
+    """Split text into chunks, trying to break at speaker markers (◯) when possible."""
+    if len(text) <= max_chunk_size:
+        return [text]
+    
+    chunks = []
+    current_pos = 0
+    
+    while current_pos < len(text):
+        # Define the end position for this chunk
+        chunk_end = min(current_pos + max_chunk_size, len(text))
+        
+        # If we're not at the end of the text, try to find a good break point
+        if chunk_end < len(text):
+            # Look for speaker markers (◯) within the last 2000 characters of the chunk
+            search_start = max(current_pos, chunk_end - 2000)
+            last_speaker_pos = text.rfind('◯', search_start, chunk_end)
+            
+            if last_speaker_pos != -1 and last_speaker_pos > current_pos:
+                # Found a speaker marker, break there
+                chunk_end = last_speaker_pos
+            else:
+                # No speaker marker found, try to break at a line break
+                last_newline = text.rfind('\n', search_start, chunk_end)
+                if last_newline != -1 and last_newline > current_pos:
+                    chunk_end = last_newline
+        
+        chunk = text[current_pos:chunk_end]
+        if chunk.strip():  # Only add non-empty chunks
+            chunks.append(chunk)
+        
+        current_pos = chunk_end
+        
+        # Skip any whitespace at the beginning of the next chunk
+        while current_pos < len(text) and text[current_pos].isspace():
+            current_pos += 1
+    
+    return chunks
 
 
 def clean_pdf_text(text):
