@@ -143,3 +143,54 @@ function SessionDetail() {
 }
 
 export default SessionDetail;
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import api from '../api';
+import NavigationHeader from '../components/NavigationHeader';
+import Footer from '../components/Footer';
+
+const SessionDetail = () => {
+  const { id } = useParams();
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchSession();
+  }, [id]);
+
+  const fetchSession = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/api/sessions/${id}/`);
+      setSession(response.data);
+    } catch (err) {
+      setError('세션 정보를 불러오는 중 오류가 발생했습니다.');
+      console.error('Error fetching session:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+  if (!session) return <div>Session not found</div>;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <NavigationHeader />
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-8">{session.era_co} {session.sess} {session.dgr}</h1>
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <p className="mb-4"><strong>회의일:</strong> {session.conf_dt}</p>
+          <p className="mb-4"><strong>회의번호:</strong> {session.conf_id}</p>
+          <p className="mb-4"><strong>시작시간:</strong> {session.bg_ptm}</p>
+          <p className="mb-4"><strong>종료시간:</strong> {session.ed_ptm}</p>
+        </div>
+      </div>
+      <Footer />
+    </div>
+  );
+};
+
+export default SessionDetail;

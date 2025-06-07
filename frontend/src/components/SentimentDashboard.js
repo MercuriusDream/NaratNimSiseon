@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { api } from '../api';
+import api from '../api';
 
 const SentimentDashboard = ({ billId = null }) => {
   const [sentimentData, setSentimentData] = useState(null);
