@@ -1264,13 +1264,80 @@ def extract_statements_for_bill_segment(bill_text_segment,
         )
         return []
 
-    # Limit text length to prevent prompt length issues
-    MAX_SEGMENT_LENGTH = 50000  # Approximately 50k characters
+    # Use batch processing for long text segments
+    MAX_SEGMENT_LENGTH = 20000  # 20K characters for speaker detection
     if len(bill_text_segment) > MAX_SEGMENT_LENGTH:
-        logger.warning(
-            f"Bill text segment too long ({len(bill_text_segment)} chars), truncating to {MAX_SEGMENT_LENGTH}"
+        logger.info(
+            f"Bill text segment too long ({len(bill_text_segment)} chars), processing in batches of {MAX_SEGMENT_LENGTH}"
         )
-        bill_text_segment = bill_text_segment[:MAX_SEGMENT_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
+        # Process in batches
+        batches = []
+        for i in range(0, len(bill_text_segment), MAX_SEGMENT_LENGTH):
+            batch = bill_text_segment[i:i + MAX_SEGMENT_LENGTH]
+            batches.append(batch)
+        
+        logger.info(f"Processing {len(batches)} batches for bill '{bill_name}'")
+        
+        all_batch_statements = []
+        for batch_idx, batch_text in enumerate(batches):
+            logger.info(f"Processing batch {batch_idx + 1}/{len(batches)} for bill '{bill_name}'")
+            batch_statements = process_single_segment_for_statements(batch_text, session_id, bill_name, debug)
+            all_batch_statements.extend(batch_statements)
+            if not debug:
+                time.sleep(0.5)  # Brief pause between batches
+        
+        return all_batch_statements
+    
+    # Process single segment if under limit
+    return process_single_segment_for_statements(bill_text_segment, session_id, bill_name, debug)
+
+
+def process_single_segment_for_statements(bill_text_segment, session_id, bill_name, debug=False):
+    """Process a single text segment (under 20K chars) for speaker detection and analysis."""
+    if not bill_text_segment: 
+        return []
+
+    logger.info(
+        f"🔍 Stage 1 (Speaker Detect): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
+    )
+
+    if not genai or not hasattr(genai, 'GenerativeModel'):
+        logger.warning(
+            "❌ Gemini API not configured. Cannot perform speaker detection for bill segment."
+        )
+        return []
+
+    # Filter to ignore non-의원 speakers - only 의원 can vote legally
+    IGNORED_SPEAKERS = [
+        '우원식',  # Current 국회의장
+        '이학영',  # 부의장
+        '정우택',  # 부의장  
+        '의장',
+        '부의장',
+        '위원장',
+        '국무총리',
+        '장관',
+        '차관',
+        '실장',
+        '청장',
+        '원장',
+        '대변인',
+        '비서관',
+        '수석',
+        '정무위원',
+        '간사'
+    ]
+
+    try:
+        # Use a lighter/cheaper model for speaker detection stage if appropriate
+        speaker_detection_model_name = 'gemini-2.0-flash-lite'  # Or 'gemini-2.0-flash-lite' if still available & preferred
+        speaker_detection_llm = genai.GenerativeModel(
+            speaker_detection_model_name)
+    except Exception as e_model:
+        logger.error(
+            f"Failed to initialize speaker detection model ({speaker_detection_model_name}): {e_model}"
+        )
+        return []
 
     speaker_detection_prompt = f"""
 다음은 국회 회의록의 일부이며, "{bill_name}" 의안과 관련된 부분으로 추정됩니다.
@@ -1469,14 +1536,15 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
         )
         return statement_data_dict
 
-    # Limit statement text length for analysis
+    # Use batch processing for very long statements
     MAX_STATEMENT_LENGTH = 8000  # 8k characters for individual statement analysis
-    text_for_prompt = text_to_analyze
     if len(text_to_analyze) > MAX_STATEMENT_LENGTH:
         logger.info(
-            f"Statement text too long ({len(text_to_analyze)} chars), truncating to {MAX_STATEMENT_LENGTH}"
+            f"Statement text too long ({len(text_to_analyze)} chars), processing first {MAX_STATEMENT_LENGTH} chars"
         )
         text_for_prompt = text_to_analyze[:MAX_STATEMENT_LENGTH] + "... [발언이 길이 제한으로 잘렸습니다]"
+    else:
+        text_for_prompt = text_to_analyze
 
     prompt = f"""
 국회 발언 분석 요청:
@@ -1594,14 +1662,15 @@ def extract_statements_with_bill_based_chunking(full_text,
         logger.info(
             f"🔍 Step 1: Identifying bill segments for session {session_id}")
 
-        # Limit text for segmentation to prevent prompt overflow
+        # Use batch processing for bill segmentation on very long texts
         MAX_SEGMENTATION_LENGTH = 100000
-        segmentation_text = full_text
         if len(full_text) > MAX_SEGMENTATION_LENGTH:
-            logger.warning(
-                f"Text too long for segmentation ({len(full_text)} chars), truncating to {MAX_SEGMENTATION_LENGTH}"
+            logger.info(
+                f"Text too long for segmentation ({len(full_text)} chars), using first {MAX_SEGMENTATION_LENGTH} chars for bill identification"
             )
             segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
+        else:
+            segmentation_text = full_text
 
         bill_segmentation_prompt = f"""
 국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
@@ -1712,7 +1781,7 @@ def extract_statements_with_bill_based_chunking(full_text,
         )
 
         # If bill segment is small enough, process directly
-        MAX_CHUNK_LENGTH = 40000
+        MAX_CHUNK_LENGTH = 20000  # Use 20K chunks to match speaker detection limit
         if len(bill_segment_text) <= MAX_CHUNK_LENGTH:
             # Process as single chunk
             statements_in_segment = extract_statements_for_bill_segment(
