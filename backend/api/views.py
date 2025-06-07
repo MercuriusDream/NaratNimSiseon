@@ -240,44 +240,17 @@ class PartyViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         """Custom list method to return parties sorted by assembly era"""
         try:
-            # Get basic party statistics organized by assembly era
-            party_data_by_era = {}
-            parties = Party.objects.all()
+            parties = Party.objects.all().order_by('-assembly_era', 'name')
+            party_data = []
 
             for party in parties:
-                # Get all speakers for this party with their assembly info
+                # Get speakers for this party
                 all_speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
-
-                # Determine the highest assembly era for this party
-                highest_era = 0
-                member_count = 0
-
-                for speaker in all_speakers:
-                    # Extract assembly era from gtelt_eraco field (e.g., "제22대" -> 22)
-                    era_text = speaker.gtelt_eraco or ""
-                    era_numbers = [int(s) for s in era_text.split() if s.isdigit()]
-                    if era_numbers:
-                        era = max(era_numbers)
-                        if era > highest_era:
-                            highest_era = era
-
-                # Count members (prioritize current era if available)
-                current_speakers = Speaker.objects.filter(
-                    plpt_nm__icontains=party.name, 
-                    gtelt_eraco__icontains='22'
-                )
-                member_count = current_speakers.count() if current_speakers.exists() else all_speakers.count()
+                member_count = all_speakers.count()
 
                 # Skip if no members found
                 if member_count == 0:
                     continue
-
-                # Debug logging for era detection
-                if party.name in ['더불어민주당', '국민의힘', '조국혁신당']:
-                    logger.info(f"Party {party.name}: highest_era={highest_era}, member_count={member_count}")
-                    sample_speakers = all_speakers[:3]
-                    for sp in sample_speakers:
-                        logger.info(f"  Speaker {sp.naas_nm}: gtelt_eraco='{sp.gtelt_eraco}'")
 
                 # Get statements and sentiment analysis
                 statements = Statement.objects.filter(speaker__plpt_nm__icontains=party.name)
@@ -302,21 +275,9 @@ class PartyViewSet(viewsets.ModelViewSet):
                     'total_bills': total_bills,
                     'created_at': party.created_at,
                     'updated_at': party.updated_at,
-                    'assembly_era': highest_era
+                    'assembly_era': party.assembly_era
                 }
-
-                # Group by assembly era
-                if highest_era not in party_data_by_era:
-                    party_data_by_era[highest_era] = []
-                party_data_by_era[highest_era].append(party_info)
-
-            # Sort parties: first by assembly era (descending: 22, 21, 20...), then by name within each era
-            party_data = []
-            for era in sorted(party_data_by_era.keys(), reverse=True):
-                era_parties = party_data_by_era[era]
-                # Sort by member count (descending) within each era
-                era_parties.sort(key=lambda x: (-x['member_count'], x['name']))
-                party_data.extend(era_parties)
+                party_data.append(party_info)
 
             # Apply pagination manually
             page = self.paginate_queryset(party_data)
@@ -919,54 +880,9 @@ def parties_list(request):
         party_data_by_era = {}
 
         for party in parties:
-            # Get all speakers for this party with their assembly info
+            # Get speakers for this party
             all_speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
-
-            # Determine the highest assembly era for this party
-            highest_era = 0
-            member_count = 0
-
-            # Check if this is a current party (from nepjpxkkabqiqpbvk API)
-            current_era_speakers = all_speakers.filter(
-                Q(gtelt_eraco__icontains='22') | Q(gtelt_eraco__icontains='제22대')
-            )
-
-            if current_era_speakers.exists():
-                highest_era = 22
-            else:
-                # For historical parties, extract era from gtelt_eraco field
-                for speaker in all_speakers:
-                    era_text = speaker.gtelt_eraco or ""
-
-                    import re
-                    era_match = re.search(r'(\d+)대', era_text)
-                    if era_match:
-                        era = int(era_match.group(1))
-                        if era > highest_era:
-                            highest_era = era
-                    else:
-                        era_numbers = re.findall(r'\d+', era_text)
-                        for num_str in era_numbers:
-                            num = int(num_str)
-                            if 15 <= num <= 25:
-                                if num > highest_era:
-                                    highest_era = num
-
-                # If still no era detected but party has many members, likely current
-                if highest_era == 0 and all_speakers.count() > 10:
-                    major_current_parties = ['더불어민주당', '국민의힘', '조국혁신당', '개혁신당', '진보당', '기본소득당']
-                    if any(current_party in party.name for current_party in major_current_parties):
-                        highest_era = 22
-
-            # Count members based on era
-            if highest_era == 22:
-                member_count = all_speakers.count()
-            else:
-                era_specific_speakers = all_speakers.filter(
-                    Q(gtelt_eraco__icontains=f'{highest_era}') | 
-                    Q(gtelt_eraco__icontains=f'제{highest_era}대')
-                )
-                member_count = era_specific_speakers.count() if era_specific_speakers.exists() else all_speakers.count()
+            member_count = all_speakers.count()
 
             # Skip if no members found
             if member_count == 0:
@@ -995,13 +911,13 @@ def parties_list(request):
                 'total_bills': total_bills,
                 'created_at': party.created_at,
                 'updated_at': party.updated_at,
-                'assembly_era': highest_era
+                'assembly_era': party.assembly_era
             }
 
             # Group by assembly era
-            if highest_era not in party_data_by_era:
-                party_data_by_era[highest_era] = []
-            party_data_by_era[highest_era].append(party_info)
+            if party.assembly_era not in party_data_by_era:
+                party_data_by_era[party.assembly_era] = []
+            party_data_by_era[party.assembly_era].append(party_info)
 
         # Sort parties: first by assembly era (descending: 22, 21, 20...), then by name within each era
         party_data = []

@@ -46,6 +46,7 @@ class Party(models.Model):
     logo_url = models.URLField(blank=True, null=True, help_text=_("정당 로고 이미지 URL"), verbose_name=_("정당 로고 URL"))
     slogan = models.CharField(max_length=255, blank=True, help_text=_("정당 슬로건"), verbose_name=_("정당 슬로건"))
     description = models.TextField(blank=True, help_text=_("정당 설명"), verbose_name=_("정당 설명"))
+    assembly_era = models.PositiveIntegerField(default=22, help_text=_("국회 대수 (예: 22)"), verbose_name=_("국회 대수"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
 
