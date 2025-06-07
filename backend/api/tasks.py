@@ -1379,12 +1379,12 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
                                                         session_id,
                                                         bill_name,
                                                         debug=False):
-    """Process a single text segment by splitting it into four sections by speaker markers to avoid JSON parsing errors."""
+    """Process a single text segment by splitting it into eight sections by speaker markers to avoid JSON parsing errors."""
     if not bill_text_segment:
         return []
 
     logger.info(
-        f"🔍 Stage 1 (Speaker Detect with Four-Section Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
+        f"🔍 Stage 1 (Speaker Detect with Eight-Section Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
     )
 
     # Find speaker markers (◯) to determine split points
@@ -1393,31 +1393,33 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
         if char == '◯':
             speaker_markers.append(i)
     
-    if len(speaker_markers) < 4:
-        # If less than 4 speakers, process as single segment
+    if len(speaker_markers) < 8:
+        # If less than 8 speakers, process as single segment
         logger.info(f"Only {len(speaker_markers)} speaker markers found, processing as single segment")
         return process_single_segment_for_statements(bill_text_segment, session_id, bill_name, debug)
     
-    # Find split points at 1/4, 1/2, and 3/4 positions
-    quarter_1_idx = len(speaker_markers) // 4
-    half_idx = len(speaker_markers) // 2
-    quarter_3_idx = (len(speaker_markers) * 3) // 4
+    # Find split points at 1/8, 2/8, 3/8, 4/8, 5/8, 6/8, and 7/8 positions
+    split_indices = []
+    for i in range(1, 8):  # positions 1/8 through 7/8
+        split_idx = (len(speaker_markers) * i) // 8
+        split_indices.append(split_idx)
     
-    split_positions = [
-        speaker_markers[quarter_1_idx],
-        speaker_markers[half_idx],
-        speaker_markers[quarter_3_idx]
-    ]
+    split_positions = [speaker_markers[idx] for idx in split_indices]
     
-    # Create four segments
+    # Create eight segments
     segments = []
-    segments.append(bill_text_segment[:split_positions[0]].strip())  # First quarter
-    segments.append(bill_text_segment[split_positions[0]:split_positions[1]].strip())  # Second quarter
-    segments.append(bill_text_segment[split_positions[1]:split_positions[2]].strip())  # Third quarter
-    segments.append(bill_text_segment[split_positions[2]:].strip())  # Fourth quarter
+    # First segment: from start to first split
+    segments.append(bill_text_segment[:split_positions[0]].strip())
+    
+    # Middle segments: from each split to the next
+    for i in range(len(split_positions) - 1):
+        segments.append(bill_text_segment[split_positions[i]:split_positions[i + 1]].strip())
+    
+    # Last segment: from last split to end
+    segments.append(bill_text_segment[split_positions[-1]:].strip())
     
     logger.info(
-        f"Splitting text into 4 sections at speaker markers {quarter_1_idx + 1}, {half_idx + 1}, {quarter_3_idx + 1} "
+        f"Splitting text into 8 sections at speaker markers {[idx + 1 for idx in split_indices]} "
         f"out of {len(speaker_markers)} total markers. Segment sizes: "
         f"{[len(seg) for seg in segments]} chars"
     )
@@ -1427,7 +1429,7 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
     # Process each segment
     for i, segment in enumerate(segments):
         if segment:
-            logger.info(f"Processing segment {i + 1}/4 for bill '{bill_name}' ({len(segment)} chars)")
+            logger.info(f"Processing segment {i + 1}/8 for bill '{bill_name}' ({len(segment)} chars)")
             segment_statements = process_single_segment_for_statements(segment, session_id, bill_name, debug)
             all_statements.extend(segment_statements)
             
@@ -1436,7 +1438,7 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
     
     logger.info(
         f"✅ Combined processing for '{bill_name}' resulted in {len(all_statements)} statements "
-        f"from 4 segments with sizes: {[len(seg) for seg in segments]} chars"
+        f"from 8 segments with sizes: {[len(seg) for seg in segments]} chars"
     )
     
     return all_statements
