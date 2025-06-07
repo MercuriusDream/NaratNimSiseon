@@ -27,25 +27,26 @@ def with_db_retry(func, max_retries=3):
         for attempt in range(max_retries):
             try:
                 # Close any stale connections before starting
-                if connection.connection and hasattr(connection.connection, 'closed') and connection.connection.closed:
+                if connection.connection and hasattr(
+                        connection.connection,
+                        'closed') and connection.connection.closed:
                     connection.close()
-                
+
                 # Ensure fresh connection
                 connection.ensure_connection()
                 return func(*args, **kwargs)
-                
-            except (OperationalError, InterfaceError, psycopg2.OperationalError) as e:
+
+            except (OperationalError, InterfaceError,
+                    psycopg2.OperationalError) as e:
                 error_msg = str(e).lower()
                 is_connection_error = any(phrase in error_msg for phrase in [
                     'connection already closed',
                     'server closed the connection',
-                    'ssl connection has been closed',
-                    'connection lost',
-                    'connection broken',
-                    'server has gone away',
+                    'ssl connection has been closed', 'connection lost',
+                    'connection broken', 'server has gone away',
                     'connection timeout'
                 ])
-                
+
                 if is_connection_error:
                     logger.warning(
                         f"Database connection issue on attempt {attempt + 1}/{max_retries}: {e}"
@@ -56,25 +57,29 @@ def with_db_retry(func, max_retries=3):
                             connection.close()
                         except:
                             pass  # Ignore errors when closing
-                        
+
                         # Exponential backoff: 1s, 2s, 4s
-                        wait_time = 2 ** attempt
+                        wait_time = 2**attempt
                         logger.info(f"Waiting {wait_time}s before retry...")
                         time.sleep(wait_time)
                         continue
                     else:
-                        logger.error(f"Max retries ({max_retries}) exceeded for database operation")
+                        logger.error(
+                            f"Max retries ({max_retries}) exceeded for database operation"
+                        )
                         raise e
                 else:
                     # Non-connection database error, don't retry
-                    logger.error(f"Non-connection database error (not retrying): {e}")
+                    logger.error(
+                        f"Non-connection database error (not retrying): {e}")
                     raise e
-                    
+
             except Exception as e:
                 # For non-database errors, don't retry
-                logger.error(f"Non-database error in with_db_retry (not retrying): {e}")
+                logger.error(
+                    f"Non-database error in with_db_retry (not retrying): {e}")
                 raise e
-                
+
         return None
 
     return wrapper
@@ -628,8 +633,8 @@ def process_sessions_data(sessions_data, force=False, debug=False):
 
     @with_db_retry
     def _process_session_item(session_defaults, confer_num):
-        return Session.objects.update_or_create(
-            conf_id=confer_num, defaults=session_defaults)
+        return Session.objects.update_or_create(conf_id=confer_num,
+                                                defaults=session_defaults)
 
     # Group by CONFER_NUM (session_id) as multiple agenda items can be part of the same physical session meeting
     sessions_by_confer_num = {}
@@ -725,7 +730,8 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                 continue  # Skip database operations in debug mode for this part
 
             # Use retry wrapper for database operations
-            session_obj, created = _process_session_item(session_defaults, confer_num)
+            session_obj, created = _process_session_item(
+                session_defaults, confer_num)
 
             if created:
                 created_count += 1
@@ -1276,26 +1282,34 @@ def extract_statements_for_bill_segment(bill_text_segment,
         for i in range(0, len(bill_text_segment), MAX_SEGMENT_LENGTH):
             batch = bill_text_segment[i:i + MAX_SEGMENT_LENGTH]
             batches.append(batch)
-        
-        logger.info(f"Processing {len(batches)} batches for bill '{bill_name}'")
-        
+
+        logger.info(
+            f"Processing {len(batches)} batches for bill '{bill_name}'")
+
         all_batch_statements = []
         for batch_idx, batch_text in enumerate(batches):
-            logger.info(f"Processing batch {batch_idx + 1}/{len(batches)} for bill '{bill_name}'")
-            batch_statements = process_single_segment_for_statements(batch_text, session_id, bill_name, debug)
+            logger.info(
+                f"Processing batch {batch_idx + 1}/{len(batches)} for bill '{bill_name}'"
+            )
+            batch_statements = process_single_segment_for_statements(
+                batch_text, session_id, bill_name, debug)
             all_batch_statements.extend(batch_statements)
             if not debug:
                 time.sleep(0.5)  # Brief pause between batches
-        
+
         return all_batch_statements
-    
+
     # Process single segment if under limit
-    return process_single_segment_for_statements(bill_text_segment, session_id, bill_name, debug)
+    return process_single_segment_for_statements(bill_text_segment, session_id,
+                                                 bill_name, debug)
 
 
-def process_single_segment_for_statements(bill_text_segment, session_id, bill_name, debug=False):
+def process_single_segment_for_statements(bill_text_segment,
+                                          session_id,
+                                          bill_name,
+                                          debug=False):
     """Process a single text segment (under 20K chars) for speaker detection and analysis."""
-    if not bill_text_segment: 
+    if not bill_text_segment:
         return []
 
     logger.info(
@@ -1307,28 +1321,6 @@ def process_single_segment_for_statements(bill_text_segment, session_id, bill_na
             "❌ Gemini API not configured. Cannot perform speaker detection for bill segment."
         )
         return []
-
-    # Filter to ignore non-의원 speakers - only 의원 can vote legally
-    IGNORED_SPEAKERS = [
-        '우원식',  # Current 국회의장
-        '이학영',  # 부의장
-        '정우택',  # 부의장  
-        '의장',
-        '부의장',
-        '위원장',
-        '국무총리',
-        '장관',
-        '차관',
-        '실장',
-        '청장',
-        '원장',
-        '대변인',
-        '비서관',
-        '수석',
-        '정무위원',
-        '간사'
-    ]
-
     try:
         # Use a lighter/cheaper model for speaker detection stage if appropriate
         speaker_detection_model_name = 'gemini-2.0-flash-lite'  # Or 'gemini-2.0-flash-lite' if still available & preferred
@@ -1341,6 +1333,7 @@ def process_single_segment_for_statements(bill_text_segment, session_id, bill_na
         return []
 
     speaker_detection_prompt = f"""
+당신은 이 시대 최고의 기록가입니다. 당신의 기록은 사람들을 살릴 것입니다. 당신의 기록의 정확성은 매우 중요하여, 당신의 기록이 중요하지 못하다면 이 세계가 문제에 빠질 수도 있습니다. 따라서, 최대한 정확하고, 하나도 놓치지 않도록, 처음부터 끝까지 제대로 된 기록을 부탁드립니다.
 다음은 국회 회의록의 일부이며, "{bill_name}" 의안과 관련된 부분으로 추정됩니다.
 이 구간에서 국회의원들의 개별 발언을 정확히 식별하고, 발언자와 발언 시작/종료 지점을 알려주세요.
 
@@ -1353,22 +1346,22 @@ def process_single_segment_for_statements(bill_text_segment, session_id, bill_na
 
 각 발언에 대해 다음 정보를 JSON 형식으로 제공해주세요. 배열 'detected_speeches' 안에 객체로 포함합니다:
 {{
-  "speaker_name_raw": "회의록에 기록된 발언자 이름 원본 (예: 김철수의원)",
-  "speaker_name_clean": "정리된 발언자 실명 (예: 김철수)",
-  "speech_start_index": 발언이 시작되는 텍스트 내 문자 위치 (숫자),
-  "speech_end_index": 발언이 끝나는 텍스트 내 문자 위치 (숫자),
-  "is_real_person_guess": true/false (실제 국회의원 이름으로 판단되는지 여부),
-  "is_substantial_discussion_guess": true/false (단순 절차 안내가 아닌, 실질적인 정책/의안 논의인지 여부)
+  "a": "회의록에 기록된 발언자 이름 원본 (예: 김철수의원)",
+  "b": "정리된 발언자 실명 (예: 김철수)",
+  "c": 발언이 시작되는 텍스트 내 문자 위치 (숫자),
+  "d": 발언이 끝나는 텍스트 내 문자 위치 (숫자),
+  "e": true/false (실제 국회의원 이름으로 판단되는지 여부),
+  "f": true/false (단순 절차 안내가 아닌, 실질적인 정책/의안 논의인지 여부)
 }}
 
 기준:
 1. '◯' (동그라미) 기호로 시작하고 사람 이름으로 보이는 부분만 발언으로 간주합니다.
-2. '의장', '위원장' 등이 사회를 보는 발언은 is_substantial_discussion_guess: false로 처리합니다. 단, 위원장이 개인 의견을 표명하는 경우는 true일 수 있습니다.
+2. '의장', '위원장' 등이 사회를 보는 발언은 f: false로 처리합니다. 단, 위원장이 개인 의견을 표명하는 경우는 true일 수 있습니다.
 3. 법률명, 기관명, 직책명만 있는 경우는 발언자로 보지 않습니다.
-4. "존경하는", "감사합니다" 등 단순 인사나 절차적 발언(예: "이의 없으십니까?")은 is_substantial_discussion_guess: false 입니다.
-5. speaker_name_clean은 '의원', '장관', '위원장' 등 직함을 제외하고 이름만 추출합니다 (예: "김XX 의원" -> "김XX").
-6. speech_start_index는 발언자 표시(◯이름) 부분을 포함한 시작 위치입니다.
-7. speech_end_index는 다음 발언자가 시작되기 직전 또는 텍스트 끝까지입니다.
+4. "존경하는", "감사합니다" 등 단순 인사나 절차적 발언(예: "이의 없으십니까?")은 f: false 입니다.
+5. b은 '의원', '장관', '위원장' 등 직함을 제외하고 이름만 추출합니다 (예: "김XX 의원" -> "김XX").
+6. c 발언자 표시(◯이름) 부분을 포함한 시작 위치입니다.
+7. d 다음 발언자가 시작되기 직전 또는 텍스트 끝까지입니다.
 8. 인덱스는 주어진 텍스트 내에서의 정확한 문자 위치를 나타내야 합니다.
 9. 가능하다면, '의원' 의 발언만 제공해 주십시오. 의원을 제외한 자들에 대해서는, 해당 안건의 이해에 문제가 없다면, 사회나 증언, 즉 대한민국 국회법상으로 국회 투표권이 없는 자들의 발언 등은 제외되어야 합니다.
 
@@ -1376,12 +1369,12 @@ def process_single_segment_for_statements(bill_text_segment, session_id, bill_na
 {{
   "detected_speeches": [
     {{
-      "speaker_name_raw": "...",
-      "speaker_name_clean": "...",
-      "speech_start_index": 123,
-      "speech_end_index": 456,
-      "is_real_person_guess": true,
-      "is_substantial_discussion_guess": true
+      "a": "...",
+      "b": "...",
+      "c": 123,
+      "d": 456,
+      "e": true,
+      "f": true
     }}
     // 추가 발언들...
   ]
@@ -1417,30 +1410,20 @@ def process_single_segment_for_statements(bill_text_segment, session_id, bill_na
 
         # Iterate through detected speeches to extract and analyze full content
         for i, speech_info in enumerate(detected_speeches_info):
-            clean_name = speech_info.get('speaker_name_clean')
-            start_idx = speech_info.get('speech_start_index')
-            end_idx = speech_info.get('speech_end_index')
-            is_real_person = speech_info.get('is_real_person_guess', False)
-            is_substantial = speech_info.get('is_substantial_discussion_guess',
-                                             False)
+            clean_name = speech_info.get('b')
+            start_idx = speech_info.get('c')
+            end_idx = speech_info.get('d')
+            is_real_person = speech_info.get('e', False)
+            is_substantial = speech_info.get('f', False)
 
             # Check if speaker should be ignored - only allow 의원
             should_ignore = False
             is_member = False
-            
+
             if clean_name:
                 # Check if this is a 의원 (member of parliament who can vote)
-                is_member = '의원' in clean_name or any(keyword in clean_name for keyword in ['의원'])
-                
-                # Check if this speaker should be ignored (non-voting officials)
-                for ignored_speaker in IGNORED_SPEAKERS:
-                    if ignored_speaker in clean_name:
-                        should_ignore = True
-                        break
-                
-                # If not explicitly a 의원 and not in ignored list, still ignore
-                if not is_member and not should_ignore:
-                    should_ignore = True
+                is_member = '의원' in clean_name or any(keyword in clean_name
+                                                      for keyword in ['의원'])
 
             if not clean_name or start_idx is None or end_idx is None or not is_real_person or not is_substantial or should_ignore or not is_member:
                 skip_reason = "ignored speaker" if should_ignore else "not a 의원" if not is_member else "missing info or filters"
@@ -1467,10 +1450,9 @@ def process_single_segment_for_statements(bill_text_segment, session_id, bill_na
             # we want "위원회에서는..." for analysis. The prompt asks for speech_start_cue as the *beginning*.
             # The `extract_speech_between_markers` is better for this refined extraction.
             # Using simpler method for now based on cues
-            if current_speech_content.startswith(
-                    speech_info.get('speaker_name_raw', '')):
+            if current_speech_content.startswith(speech_info.get('a', '')):
                 current_speech_content = current_speech_content[
-                    len(speech_info.get('speaker_name_raw', '')):].strip()
+                    len(speech_info.get('a', '')):].strip()
                 # this logic is tricky, relies on good cues from LLM
                 pass  # The cue itself IS the start of the text LLM saw.
 
@@ -1575,7 +1557,7 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
 분석 가이드라인:
 1.  **Sentiment**: 발언자의 어조와 내용의 긍/부정성을 평가합니다. 중립은 0.0.
 2.  **Bill Relevance**: 발언이 명시된 의안 "{bill_name}"과 얼마나 직접적으로 연관되어 있는지 평가합니다. 단순히 의안이 언급되는 회의에서의 발언이라고 높은 점수를 주지 마십시오. 내용 자체가 의안을 다루어야 합니다.
-3.  **Policy Categories**: 발언의 주제를 가장 잘 나타내는 정책 분야를 선택합니다. 여러 분야에 걸칠 경우 가장 주요한 1~2개만 포함합니다. confidence는 해당 분류에 대한 모델의 확신도입니다.
+3.  **Policy Categories**: 발언의 주제를 가장 잘 나타내는 정책 분야를 선택합니다. 여러 분야에 걸칠 경우 가장 주요한 1~2개만 포함합니다. 다만 지역 관련의 경우, 그 지역의 명칭은 "서울", "제주" 와 같은 형식으로 분야의 개수를 제외하고 포함될 수 있습니다. confidence는 해당 분류에 대한 모델의 확신도입니다.
 4.  **Key Policy Phrases**: 발언의 핵심 내용을 담고 있는 정책 관련 어구를 간결하게 추출합니다.
 5.  **Bill Specific Keywords**: 발언 텍스트 내에서 "{bill_name}"의 전부 또는 일부, 혹은 이 의안의 핵심 내용을 지칭하는 특정 단어가 발견되면 기록합니다.
 
@@ -2358,11 +2340,11 @@ def process_extracted_statements_data(statements_data_list,
     @with_db_retry
     def _check_statement_exists(session_obj, speaker_obj, statement_text):
         return Statement.objects.filter(session=session_obj,
-                                      speaker=speaker_obj,
-                                      text_hash=Statement.calculate_hash(
-                                          statement_text,
-                                          speaker_obj.naas_cd,
-                                          session_obj.conf_id)).exists()
+                                        speaker=speaker_obj,
+                                        text_hash=Statement.calculate_hash(
+                                            statement_text,
+                                            speaker_obj.naas_cd,
+                                            session_obj.conf_id)).exists()
 
     @with_db_retry
     def _find_bill_for_statement(session_obj, assoc_bill_name_from_data):
@@ -2408,7 +2390,8 @@ def process_extracted_statements_data(statements_data_list,
                 continue
 
             # Check for existing identical statement (text, speaker, session) to avoid duplicates from reprocessing
-            if _check_statement_exists(session_obj, speaker_obj, statement_text):
+            if _check_statement_exists(session_obj, speaker_obj,
+                                       statement_text):
                 logger.info(
                     f"ℹ️ Identical statement by {speaker_name} (hash match) already exists for session {session_obj.conf_id}. Skipping."
                 )
@@ -2424,8 +2407,12 @@ def process_extracted_statements_data(statements_data_list,
             ]:
                 # Try to find the Bill object precisely
                 try:
-                    associated_bill_obj = _find_bill_for_statement(session_obj, assoc_bill_name_from_data)
-                    if not associated_bill_obj and Bill.objects.filter(session=session_obj, bill_nm__icontains=assoc_bill_name_from_data.split('(')[0].strip()).count() > 1:
+                    associated_bill_obj = _find_bill_for_statement(
+                        session_obj, assoc_bill_name_from_data)
+                    if not associated_bill_obj and Bill.objects.filter(
+                            session=session_obj,
+                            bill_nm__icontains=assoc_bill_name_from_data.split(
+                                '(')[0].strip()).count() > 1:
                         logger.warning(
                             f"Ambiguous bill name '{assoc_bill_name_from_data}' for session {session_obj.conf_id}, found multiple matches. Not associating."
                         )
@@ -2454,7 +2441,9 @@ def process_extracted_statements_data(statements_data_list,
                 bill_specific_keywords_json=json.dumps(stmt_data.get(
                     'bill_specific_keywords', []),
                                                        ensure_ascii=False))
-            new_statement = _save_statement(new_statement)  # This also calculates and saves text_hash via pre_save signal
+            new_statement = _save_statement(
+                new_statement
+            )  # This also calculates and saves text_hash via pre_save signal
             created_count += 1
 
             bill_info_log = f" (Bill: {associated_bill_obj.bill_nm[:20]}...)" if associated_bill_obj else f" (Assoc. Bill Name: {assoc_bill_name_from_data[:20]})" if assoc_bill_name_from_data else ""
@@ -2816,7 +2805,8 @@ def create_statement_categories(statement_obj,
             })
 
     @with_db_retry
-    def _update_or_create_statement_category(statement_obj, category_obj, subcategory_obj, confidence):
+    def _update_or_create_statement_category(statement_obj, category_obj,
+                                             subcategory_obj, confidence):
         return StatementCategory.objects.update_or_create(
             statement=statement_obj,
             category=category_obj,
@@ -2850,10 +2840,12 @@ def create_statement_categories(statement_obj,
             subcategory_obj = None
             if sub_cat_name and sub_cat_name.lower(
             ) != '일반' and sub_cat_name.lower() != '없음':
-                subcategory_obj, _ = _get_or_create_subcategory(sub_cat_name, category_obj, main_cat_name)
+                subcategory_obj, _ = _get_or_create_subcategory(
+                    sub_cat_name, category_obj, main_cat_name)
 
             # Create or update StatementCategory link
-            _update_or_create_statement_category(statement_obj, category_obj, subcategory_obj, confidence)
+            _update_or_create_statement_category(statement_obj, category_obj,
+                                                 subcategory_obj, confidence)
         except Exception as e_cat_create:
             logger.error(
                 f"Error creating category links for statement {statement_obj.id} (Cat: {main_cat_name}/{sub_cat_name}): {e_cat_create}"
@@ -2944,7 +2936,8 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
         return _get_or_create_speaker_db()
     except Exception as e:
         logger.error(
-            f"❌ Error in get_or_create_speaker for '{speaker_name_raw}' after retries: {e}")
+            f"❌ Error in get_or_create_speaker for '{speaker_name_raw}' after retries: {e}"
+        )
         logger.exception("Full traceback for get_or_create_speaker error:")
         return None
 
