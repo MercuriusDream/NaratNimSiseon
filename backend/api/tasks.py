@@ -1288,7 +1288,7 @@ def extract_statements_for_bill_segment(bill_text_segment,
                 start_idx:end_idx].strip()
             # Clean the extracted content
             current_speech_content = clean_pdf_text(current_speech_content)
-            
+
             # Clean the extracted content a bit (remove the speaker part from the beginning if it was included by start_cue)
             # Example: if start_cue was "◯홍길동 의원 위원회에서는..." and speech is "◯홍길동 의원 위원회에서는..."
             # we want "위원회에서는..." for analysis. The prompt asks for speech_start_cue as the *beginning*.
@@ -1480,7 +1480,7 @@ def extract_statements_without_bill_separation(full_text,
             f"Failed to initialize speaker detection model ({speaker_detection_model_name}): {e_model}"
         )
         return []
-
+    '''
     prompt_text_limit = 7500
     if len(full_text) > prompt_text_limit:
         logger.warning(
@@ -1489,14 +1489,15 @@ def extract_statements_without_bill_separation(full_text,
         text_for_prompt = full_text[:prompt_text_limit]
     else:
         text_for_prompt = full_text
+    '''
 
     speaker_detection_prompt = f"""
-국회 전체 회의록 텍스트에서 국회의원들의 개별 발언을 식별해주세요.
+당신은 기록자입니다. 당신의 기록은 미래에 사람들을 살릴 것입니다. 당신은 따라서 모든 기록을 하나하나 다 놓치지 않고 전해야 합니다. 국회 전체 회의록 텍스트에서 국회의원들의 개별 발언을 식별해주세요.
 회의에서 논의된 주요 의안 목록: {bills_context_str if bills_context_str else "제공되지 않음"}
 
 회의록 텍스트 일부:
 ---
-{text_for_prompt}
+{full_text}
 ---
 
 각 발언에 대해 다음 정보를 JSON 형식으로 제공해주세요. 배열 'detected_speeches' 안에 객체로 포함합니다:
@@ -1560,7 +1561,7 @@ def extract_statements_without_bill_separation(full_text,
             current_speech_content = full_text[start_idx:end_idx].strip()
             # Clean the extracted content
             current_speech_content = clean_pdf_text(current_speech_content)
-            
+
             # Clean content similar to bill_segment version
             if current_speech_content.startswith(
                     speech_info.get('speaker_name_raw', '')):
@@ -1868,15 +1869,15 @@ def analyze_statement_categories(self,
 def clean_pdf_text(text):
     """Clean PDF text by removing session identifiers and normalizing line breaks."""
     import re
-    
+
     if not text:
         return text
-    
+
     # Remove session identifier patterns like "제424회-제6차(2025년4월24일)"
     session_pattern = r'^제\d+회-제\d+차\(\d{4}년\d{1,2}월\d{1,2}일\)$'
     lines = text.split('\n')
     cleaned_lines = []
-    
+
     for line in lines:
         line = line.strip()
         if line and not re.match(session_pattern, line):
@@ -1886,7 +1887,7 @@ def clean_pdf_text(text):
             line = re.sub(r'\s+', ' ', line).strip()
             if line:  # Only add non-empty lines
                 cleaned_lines.append(line)
-    
+
     return '\n'.join(cleaned_lines)
 
 
@@ -2134,7 +2135,9 @@ def process_extracted_statements_data(statements_data_list,
             if Statement.objects.filter(session=session_obj,
                                         speaker=speaker_obj,
                                         text_hash=Statement.calculate_hash(
-                                            statement_text, speaker_obj.naas_cd, session_obj.conf_id)).exists():
+                                            statement_text,
+                                            speaker_obj.naas_cd,
+                                            session_obj.conf_id)).exists():
                 logger.info(
                     f"ℹ️ Identical statement by {speaker_name} (hash match) already exists for session {session_obj.conf_id}. Skipping."
                 )
