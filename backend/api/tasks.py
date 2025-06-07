@@ -1286,6 +1286,9 @@ def extract_statements_for_bill_segment(bill_text_segment,
 
             current_speech_content = bill_text_segment[
                 start_idx:end_idx].strip()
+            # Clean the extracted content
+            current_speech_content = clean_pdf_text(current_speech_content)
+            
             # Clean the extracted content a bit (remove the speaker part from the beginning if it was included by start_cue)
             # Example: if start_cue was "◯홍길동 의원 위원회에서는..." and speech is "◯홍길동 의원 위원회에서는..."
             # we want "위원회에서는..." for analysis. The prompt asks for speech_start_cue as the *beginning*.
@@ -1555,6 +1558,9 @@ def extract_statements_without_bill_separation(full_text,
                     if found_next_cue_at != -1: end_idx = found_next_cue_at
 
             current_speech_content = full_text[start_idx:end_idx].strip()
+            # Clean the extracted content
+            current_speech_content = clean_pdf_text(current_speech_content)
+            
             # Clean content similar to bill_segment version
             if current_speech_content.startswith(
                     speech_info.get('speaker_name_raw', '')):
@@ -1859,6 +1865,31 @@ def analyze_statement_categories(self,
         # raise # Optionally
 
 
+def clean_pdf_text(text):
+    """Clean PDF text by removing session identifiers and normalizing line breaks."""
+    import re
+    
+    if not text:
+        return text
+    
+    # Remove session identifier patterns like "제424회-제6차(2025년4월24일)"
+    session_pattern = r'^제\d+회-제\d+차\(\d{4}년\d{1,2}월\d{1,2}일\)$'
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if line and not re.match(session_pattern, line):
+            # Replace all \n with spaces within the line content
+            line = line.replace('\n', ' ')
+            # Normalize multiple spaces to single space
+            line = re.sub(r'\s+', ' ', line).strip()
+            if line:  # Only add non-empty lines
+                cleaned_lines.append(line)
+    
+    return '\n'.join(cleaned_lines)
+
+
 def process_pdf_text_for_statements(full_text,
                                     session_id,
                                     session_obj,
@@ -1880,6 +1911,11 @@ def process_pdf_text_for_statements(full_text,
         # statements_data_fallback = extract_statements_with_regex_fallback(full_text, session_id, debug)
         # process_extracted_statements_data(statements_data_fallback, session_obj, debug, associated_bill_name="Regex Fallback")
         return
+
+    # Clean the full text before processing
+    logger.info(f"🧹 Cleaning PDF text for session {session_id}")
+    full_text = clean_pdf_text(full_text)
+    logger.info(f"📄 Cleaned text length: ~{len(full_text)} chars")
 
     logger.info(
         f"🤖 Starting LLM-based statement processing for session PDF {session_id}."
