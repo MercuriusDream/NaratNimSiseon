@@ -112,6 +112,9 @@ class Command(BaseCommand):
         
         self.stdout.write(f'📝 Processing {total_members} members in batches of {batch_size}...')
         
+        # Track unique parties to create Party objects
+        unique_parties = set()
+        
         for i in range(0, total_members, batch_size):
             batch = all_members[i:i + batch_size]
             batch_num = (i // batch_size) + 1
@@ -125,12 +128,16 @@ class Command(BaseCommand):
                     if not naas_cd:
                         continue
                     
+                    party_name = member_data.get('PLPT_NM', '정당정보없음').strip()
+                    if party_name and party_name != '정당정보없음':
+                        unique_parties.add(party_name)
+                    
                     speaker, created = Speaker.objects.update_or_create(
                         naas_cd=naas_cd,
                         defaults={
                             'naas_nm': member_data.get('NAAS_NM', ''),
                             'naas_ch_nm': member_data.get('NAAS_CH_NM', ''),
-                            'plpt_nm': member_data.get('PLPT_NM', '정당정보없음'),
+                            'plpt_nm': party_name,
                             'elecd_nm': member_data.get('ELECD_NM') or None,
                             'elecd_div_nm': member_data.get('ELECD_DIV_NM') or None,
                             'cmit_nm': member_data.get('CMIT_NM') or None,
@@ -162,4 +169,32 @@ class Command(BaseCommand):
         
         self.stdout.write(
             self.style.SUCCESS(f'✅ Members processed: {created_count} created, {updated_count} updated')
+        )
+        
+        # Create Party objects from unique party names
+        from api.models import Party
+        party_created_count = 0
+        self.stdout.write(f'📝 Creating Party objects for {len(unique_parties)} unique parties...')
+        
+        for party_name in unique_parties:
+            try:
+                party, party_created = Party.objects.get_or_create(
+                    name=party_name,
+                    defaults={
+                        'description': f'{party_name} 정당',
+                        'slogan': '',
+                        'logo_url': ''
+                    }
+                )
+                if party_created:
+                    party_created_count += 1
+                    self.stdout.write(f'✨ Created party: {party_name}')
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f'❌ Error creating party {party_name}: {e}')
+                )
+                continue
+        
+        self.stdout.write(
+            self.style.SUCCESS(f'✅ Parties processed: {party_created_count} created')
         )
