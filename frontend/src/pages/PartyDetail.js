@@ -18,13 +18,25 @@ function PartyDetail() {
     fetchPartyData();
   }, [id, timeRange, sortBy, fetchPartyData]);
 
-  const fetchPartyData = async () => {
+  const fetchPartyData = async (fetchAdditional = false) => {
     try {
       setLoading(true);
+      const params = new URLSearchParams({
+        time_range: timeRange,
+        sort_by: sortBy
+      });
+      if (fetchAdditional) {
+        params.append('fetch_additional', 'true');
+      }
+      
       const response = await api.get(
-        `/api/parties/${id}/?time_range=${timeRange}&sort_by=${sortBy}`
+        `/api/parties/${id}/?${params.toString()}`
       );
       setParty(response.data);
+      
+      if (response.data.additional_data_fetched) {
+        console.log('Additional data fetch triggered for party');
+      }
     } catch (err) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
       console.error('Error fetching party data:', err);
@@ -64,7 +76,16 @@ function PartyDetail() {
         <div className="container mx-auto px-4 py-8">
       {/* Party Header */}
       <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h1 className="text-3xl font-bold mb-4">{party.name}</h1>
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-3xl font-bold">{party.name}</h1>
+          <button
+            onClick={() => fetchPartyData(true)}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+          >
+            {loading ? '데이터 새로고침 중...' : '최신 데이터 가져오기'}
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <p className="text-gray-600">

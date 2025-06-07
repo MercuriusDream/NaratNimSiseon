@@ -21,12 +21,17 @@ function PartyList() {
     fetchCategoryData();
   }, [timeRange, selectedCategories]);
 
-  const fetchParties = async () => {
+  const fetchParties = async (fetchAdditional = false) => {
     try {
       setLoading(true);
+      setError(null);
+
       const params = new URLSearchParams({ time_range: timeRange });
       if (selectedCategories.length > 0) {
         params.append('categories', selectedCategories.join(','));
+      }
+      if (fetchAdditional) {
+        params.append('fetch_additional', 'true');
       }
 
       const response = await api.get(`/api/parties/?${params.toString()}`);
@@ -48,8 +53,11 @@ function PartyList() {
         console.warn('Parties data is not an array:', partiesData);
         partiesData = [];
       }
-
       setParties(partiesData);
+
+      if (response.data.additional_data_fetched) {
+        console.log('Additional data fetch triggered');
+      }
     } catch (err) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
       console.error('Error fetching parties:', err);
@@ -111,7 +119,16 @@ function PartyList() {
       <NavigationHeader />
       <main className="flex flex-col w-full">
         <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">정당 목록</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">정당 목록</h1>
+          <button
+            onClick={() => fetchParties(true)}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+          >
+            {loading ? '데이터 새로고침 중...' : '최신 데이터 가져오기'}
+          </button>
+        </div>
 
       {/* Filters */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
