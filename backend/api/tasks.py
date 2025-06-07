@@ -1379,59 +1379,64 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
                                                         session_id,
                                                         bill_name,
                                                         debug=False):
-    """Process a single text segment by splitting it in half by speaker markers to avoid JSON parsing errors."""
+    """Process a single text segment by splitting it into four sections by speaker markers to avoid JSON parsing errors."""
     if not bill_text_segment:
         return []
 
     logger.info(
-        f"🔍 Stage 1 (Speaker Detect with Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
+        f"🔍 Stage 1 (Speaker Detect with Four-Section Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
     )
 
-    # Find speaker markers (◯) to determine the middle point
+    # Find speaker markers (◯) to determine split points
     speaker_markers = []
     for i, char in enumerate(bill_text_segment):
         if char == '◯':
             speaker_markers.append(i)
     
-    if len(speaker_markers) < 2:
-        # If less than 2 speakers, process as single segment
+    if len(speaker_markers) < 4:
+        # If less than 4 speakers, process as single segment
         logger.info(f"Only {len(speaker_markers)} speaker markers found, processing as single segment")
         return process_single_segment_for_statements(bill_text_segment, session_id, bill_name, debug)
     
-    # Find the middle speaker marker (not middle character)
-    middle_marker_idx = len(speaker_markers) // 2
-    split_position = speaker_markers[middle_marker_idx]
+    # Find split points at 1/4, 1/2, and 3/4 positions
+    quarter_1_idx = len(speaker_markers) // 4
+    half_idx = len(speaker_markers) // 2
+    quarter_3_idx = (len(speaker_markers) * 3) // 4
     
-    # Split the text at the middle speaker marker
-    first_half = bill_text_segment[:split_position].strip()
-    second_half = bill_text_segment[split_position:].strip()
+    split_positions = [
+        speaker_markers[quarter_1_idx],
+        speaker_markers[half_idx],
+        speaker_markers[quarter_3_idx]
+    ]
+    
+    # Create four segments
+    segments = []
+    segments.append(bill_text_segment[:split_positions[0]].strip())  # First quarter
+    segments.append(bill_text_segment[split_positions[0]:split_positions[1]].strip())  # Second quarter
+    segments.append(bill_text_segment[split_positions[1]:split_positions[2]].strip())  # Third quarter
+    segments.append(bill_text_segment[split_positions[2]:].strip())  # Fourth quarter
     
     logger.info(
-        f"Splitting text at speaker marker {middle_marker_idx + 1}/{len(speaker_markers)}: "
-        f"First half: {len(first_half)} chars, Second half: {len(second_half)} chars"
+        f"Splitting text into 4 sections at speaker markers {quarter_1_idx + 1}, {half_idx + 1}, {quarter_3_idx + 1} "
+        f"out of {len(speaker_markers)} total markers. Segment sizes: "
+        f"{[len(seg) for seg in segments]} chars"
     )
     
     all_statements = []
     
-    # Process first half
-    if first_half:
-        logger.info(f"Processing first half for bill '{bill_name}'")
-        first_half_statements = process_single_segment_for_statements(first_half, session_id, bill_name, debug)
-        all_statements.extend(first_half_statements)
-        
-        if not debug:
-            time.sleep(0.5)  # Brief pause between halves
-    
-    # Process second half
-    if second_half:
-        logger.info(f"Processing second half for bill '{bill_name}'")
-        second_half_statements = process_single_segment_for_statements(second_half, session_id, bill_name, debug)
-        all_statements.extend(second_half_statements)
+    # Process each segment
+    for i, segment in enumerate(segments):
+        if segment:
+            logger.info(f"Processing segment {i + 1}/4 for bill '{bill_name}' ({len(segment)} chars)")
+            segment_statements = process_single_segment_for_statements(segment, session_id, bill_name, debug)
+            all_statements.extend(segment_statements)
+            
+            if not debug:
+                time.sleep(0.5)  # Brief pause between segments
     
     logger.info(
         f"✅ Combined processing for '{bill_name}' resulted in {len(all_statements)} statements "
-        f"({len(first_half_statements) if first_half else 0} from first half, "
-        f"{len(second_half_statements) if second_half else 0} from second half)"
+        f"from 4 segments with sizes: {[len(seg) for seg in segments]} chars"
     )
     
     return all_statements
