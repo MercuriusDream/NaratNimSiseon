@@ -948,6 +948,323 @@ def fetch_session_details(self=None,
                                     force=force,
                                     debug=debug)
 
+
+def get_session_bills_list(session_id):
+    """Get list of bill names for a specific session."""
+    try:
+        session = Session.objects.get(conf_id=session_id)
+        bills = Bill.objects.filter(session=session)
+        return [bill.bill_nm for bill in bills if bill.bill_nm]
+    except Exception as e:
+        logger.error(f"❌ Error fetching bills for session {session_id}: {e}")
+        return []
+
+
+def extract_text_segment(text, start_marker, end_marker):
+    """Extract text segment between start and end markers."""
+    try:
+        if not start_marker:
+            return ""
+        
+        start_pos = text.find(start_marker)
+        if start_pos == -1:
+            return ""
+        
+        if end_marker:
+            end_pos = text.find(end_marker, start_pos + len(start_marker))
+            if end_pos == -1:
+                end_pos = len(text)
+        else:
+            end_pos = len(text)
+        
+        segment = text[start_pos:end_pos].strip()
+        return segment
+        
+    except Exception as e:
+        logger.error(f"❌ Error extracting text segment: {e}")
+        return ""
+
+
+def extract_statements_for_bill_segment(bill_text, session_id, bill_name, debug=False):
+    """Extract and analyze statements for a specific bill segment."""
+    try:
+        logger.info(f"🔍 Stage 1: Speaker detection for {bill_name} (session: {session_id})")
+        
+        # Configure lighter model for speaker detection
+        speaker_detection_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+
+        speaker_detection_prompt = f"""
+다음은 "{bill_name}" 의안에 대한 국회 회의록 구간입니다. 이 구간에서 실제 국회의원들의 발언을 정확히 식별해주세요.
+
+논의 중인 의안: {bill_name}
+
+회의록 텍스트:
+{bill_text}
+
+다음 기준으로 발언을 식별해주세요:
+1. ◯ 기호로 시작하는 발언만 추출
+2. 발언자가 실제 사람 이름인지 판단 (한국 성씨로 시작하는 2-4글자 이름)
+3. 법률명, 기관명, 직책명만 있는 경우는 제외
+4. {bill_name}과 관련된 실질적 정책 토론만 포함
+5. 단순 절차적 발언은 제외
+
+발언자 이름 정리 규칙:
+- "김철수의원" → "김철수"
+- "이영희위원장" → "이영희" 
+- "박민수장관" → "박민수"
+- 괄호 안 정보는 제거
+- 직책명은 제거하되 실제 인명은 보존
+
+JSON 형식으로 응답해주세요:
+{{
+    "speakers_detected": [
+        {{
+            "speaker_name": "정리된 발언자 실명",
+            "original_speaker_text": "원본 발언자 텍스트",
+            "start_marker": "발언 시작 부분 텍스트 (20자)",
+            "end_marker": "발언 종료 부분 텍스트 (20자)",
+            "is_substantial": true/false,
+            "is_real_person": true/false,
+            "speech_type": "policy_discussion/procedural/other",
+            "bill_relevance": 0.0-1.0,
+            "filtering_reason": "판단 근거"
+        }}
+    ]
+}}
+"""
+
+        stage1_response = speaker_detection_model.generate_content(speaker_detection_prompt)
+
+        if not stage1_response.text:
+            logger.warning(f"❌ No speaker detection response for {bill_name}")
+            return []
+
+        # Parse Stage 1 response
+        stage1_text = stage1_response.text.strip()
+        if stage1_text.startswith('```json'):
+            stage1_text = stage1_text[7:-3].strip()
+        elif stage1_text.startswith('```'):
+            stage1_text = stage1_text[3:-3].strip()
+
+        import json as json_module
+        stage1_data = json_module.loads(stage1_text)
+        speakers_detected = stage1_data.get('speakers_detected', [])
+
+        logger.info(f"✅ Speaker detection for {bill_name}: Found {len(speakers_detected)} potential speakers")
+
+        # Stage 2: Extract and analyze substantial policy discussions
+        analyzed_statements = []
+
+        for i, speaker_info in enumerate(speakers_detected, 1):
+            speaker_name = speaker_info.get('speaker_name', 'Unknown')
+            is_substantial = speaker_info.get('is_substantial', False)
+            is_real_person = speaker_info.get('is_real_person', False)
+            speech_type = speaker_info.get('speech_type', 'unknown')
+            bill_relevance = speaker_info.get('bill_relevance', 0.0)
+
+            # Enhanced filtering for bill-specific content
+            if not is_real_person or not is_substantial or speech_type != 'policy_discussion' or bill_relevance < 0.4:
+                logger.info(f"⚠️ Skipping speaker {speaker_name} for {bill_name} - filters failed")
+                continue
+
+            # Extract speech content
+            start_marker = speaker_info.get('start_marker', '')
+            end_marker = speaker_info.get('end_marker', '')
+            
+            speech_content = extract_speech_between_markers(
+                bill_text, start_marker, end_marker, speaker_name)
+
+            if not speech_content or len(speech_content) < 10:
+                continue
+
+            # Stage 2: Analyze the extracted speech with bill context
+            analysis_result = analyze_single_statement_with_bill_context(
+                {
+                    'speaker_name': speaker_name,
+                    'text': speech_content
+                }, session_id, bill_name, debug)
+
+            analyzed_statements.append(analysis_result)
+
+            # Brief pause between API calls
+            if not debug:
+                time.sleep(0.5)
+
+        logger.info(f"✅ {bill_name} analysis completed: {len(analyzed_statements)} statements")
+        return analyzed_statements
+
+    except Exception as e:
+        logger.error(f"❌ Error processing bill segment {bill_name}: {e}")
+        return []
+
+
+def analyze_single_statement_with_bill_context(statement_data, session_id, bill_name, debug=False):
+    """Analyze a single statement with specific bill context."""
+    if not model:
+        logger.warning("❌ LLM model not available for statement analysis")
+        return statement_data
+
+    speaker_name = statement_data.get('speaker_name', '')
+    text = statement_data.get('text', '')
+
+    prompt = f"""
+다음 국회 발언을 분석하여 감성 분석과 정책 분류를 수행해주세요.
+
+발언자: {speaker_name}
+관련 의안: {bill_name}
+발언 내용: {text}
+
+다음 JSON 형식으로 분석 결과를 제공해주세요:
+{{
+    "sentiment_score": -1부터 1까지의 감성 점수 (숫자),
+    "sentiment_reason": "감성 분석 근거",
+    "bill_relevance_score": 0부터 1까지의 의안 관련성 점수 (숫자),
+    "policy_categories": [
+        {{
+            "main_category": "주요 정책 분야 (경제, 사회복지, 교육, 외교안보, 환경, 법무, 과학기술, 문화체육, 농림축산, 국정감사 중 하나)",
+            "sub_category": "세부 분야",
+            "confidence": 0부터 1까지의 확신도 (숫자)
+        }}
+    ],
+    "policy_keywords": ["정책 관련 주요 키워드들"],
+    "bill_specific_keywords": ["{bill_name}과 관련된 특정 키워드들"]
+}}
+
+분석 기준:
+1. 감성 분석: -1(매우 부정적) ~ 1(매우 긍정적)
+2. 의안 관련성: 0(무관) ~ 1(직접적 관련)
+3. 정책 분류: 발언 내용과 의안을 종합적으로 고려
+4. 키워드: 정책 일반 키워드와 의안별 특수 키워드 구분
+
+응답은 반드시 유효한 JSON 형식이어야 합니다.
+"""
+
+    try:
+        response = model.generate_content(prompt)
+
+        if not response.text:
+            logger.warning(f"❌ No LLM response for statement from {speaker_name}")
+            return statement_data
+
+        # Clean response
+        response_text = response.text.strip()
+        if response_text.startswith('```json'):
+            response_text = response_text[7:].strip()
+        elif response_text.startswith('```'):
+            response_text = response_text[3:].strip()
+        if response_text.endswith('```'):
+            response_text = response_text[:-3].strip()
+
+        # Parse JSON
+        import json as json_module
+        analysis_data = json_module.loads(response_text)
+
+        # Merge analysis data with original statement
+        statement_data.update({
+            'sentiment_score': analysis_data.get('sentiment_score', 0.0),
+            'sentiment_reason': analysis_data.get('sentiment_reason', 'LLM 분석 완료'),
+            'bill_relevance_score': analysis_data.get('bill_relevance_score', 0.0),
+            'policy_categories': analysis_data.get('policy_categories', []),
+            'policy_keywords': analysis_data.get('policy_keywords', []),
+            'bill_specific_keywords': analysis_data.get('bill_specific_keywords', [])
+        })
+
+        if debug:
+            logger.info(f"🐛 DEBUG: Analyzed statement from {speaker_name} for {bill_name} - Sentiment: {statement_data.get('sentiment_score', 0)}, Bill relevance: {statement_data.get('bill_relevance_score', 0)}")
+
+        return statement_data
+
+    except Exception as e:
+        logger.error(f"❌ Error analyzing statement from {speaker_name} for {bill_name}: {e}")
+        return statement_data
+
+
+def extract_statements_without_bill_separation(text, session_id, bills_context, debug=False):
+    """Fallback to original extraction method when bill separation fails."""
+    logger.info(f"🔄 Using standard extraction without bill separation for session: {session_id}")
+    
+    # Configure model for speaker detection
+    speaker_detection_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+
+    speaker_detection_prompt = f"""
+당신은 기록가입니다. 다음은 국회 회의록 텍스트입니다. 이 텍스트에서 실제 국회의원들의 발언 구간을 정확히 식별해주세요.
+
+회의 관련 의안:
+{bills_context}
+
+회의록 텍스트:
+{text}
+
+다음 기준으로 발언을 식별해주세요:
+1. ◯ 기호로 시작하는 발언만 추출
+2. 발언자가 실제 사람 이름인지 판단 (한국 성씨로 시작하는 2-4글자 이름)
+3. 법률명, 기관명, 직책명만 있는 경우는 제외
+4. 절차적 발언과 정책 토론을 구분하여 분류
+5. 발언 내용의 실질성 판단
+
+JSON 형식으로 응답해주세요:
+{{
+    "speakers_detected": [
+        {{
+            "speaker_name": "정리된 발언자 실명",
+            "original_speaker_text": "원본 발언자 텍스트",
+            "start_marker": "발언 시작 부분 텍스트 (20자)",
+            "end_marker": "발언 종료 부분 텍스트 (20자)",
+            "is_substantial": true/false,
+            "is_real_person": true/false,
+            "speech_type": "policy_discussion/procedural/other",
+            "filtering_reason": "판단 근거"
+        }}
+    ]
+}}
+"""
+
+    try:
+        stage1_response = speaker_detection_model.generate_content(speaker_detection_prompt)
+        
+        if not stage1_response.text:
+            return []
+
+        # Parse and process similar to the bill-separated version
+        stage1_text = stage1_response.text.strip()
+        if stage1_text.startswith('```json'):
+            stage1_text = stage1_text[7:-3].strip()
+        elif stage1_text.startswith('```'):
+            stage1_text = stage1_text[3:-3].strip()
+
+        import json as json_module
+        stage1_data = json_module.loads(stage1_text)
+        speakers_detected = stage1_data.get('speakers_detected', [])
+
+        analyzed_statements = []
+        for speaker_info in speakers_detected:
+            if (speaker_info.get('is_real_person') and 
+                speaker_info.get('is_substantial') and 
+                speaker_info.get('speech_type') == 'policy_discussion'):
+                
+                speech_content = extract_speech_between_markers(
+                    text, 
+                    speaker_info.get('start_marker', ''), 
+                    speaker_info.get('end_marker', ''), 
+                    speaker_info.get('speaker_name', '')
+                )
+                
+                if speech_content and len(speech_content) > 10:
+                    analysis_result = analyze_single_statement(
+                        {
+                            'speaker_name': speaker_info.get('speaker_name', ''),
+                            'text': speech_content
+                        }, session_id, debug)
+                    analyzed_statements.append(analysis_result)
+
+        return analyzed_statements
+
+    except Exception as e:
+        logger.error(f"❌ Error in standard extraction: {e}")
+        return []
+
+
+
     except Exception as e:
         if isinstance(e, RequestException):
             if self:
@@ -1334,25 +1651,45 @@ def process_pdf_statements(full_text,
                         f"ℹ️ Statement already exists for {speaker_name}")
                     continue
 
+                # Find associated bill if specified
+                associated_bill = None
+                associated_bill_name = statement_data.get('associated_bill', '')
+                if associated_bill_name and associated_bill_name != "General Discussion":
+                    try:
+                        associated_bill = Bill.objects.filter(
+                            session=session,
+                            bill_nm__icontains=associated_bill_name[:50]  # Partial match
+                        ).first()
+                    except Exception as e:
+                        logger.warning(f"⚠️ Could not find bill '{associated_bill_name}': {e}")
+
+                # Prepare bill-specific keywords
+                bill_keywords = statement_data.get('bill_specific_keywords', [])
+                bill_relevance = statement_data.get('bill_relevance_score', 0.0)
+
+                # Combine policy keywords with bill-specific keywords
+                all_keywords = policy_keywords + bill_keywords if bill_keywords else policy_keywords
+
                 # Create statement with retry logic
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
                         statement = Statement.objects.create(
                             session=session,
+                            bill=associated_bill,  # Associate with specific bill if found
                             speaker=speaker,
                             text=statement_text,
                             sentiment_score=sentiment_score,
                             sentiment_reason=sentiment_reason,
-                            policy_keywords=', '.join(policy_keywords)
-                            if policy_keywords else '',
+                            policy_keywords=', '.join(all_keywords) if all_keywords else '',
                             category_analysis=json.dumps(policy_categories,
                                                          ensure_ascii=False)
                             if policy_categories else '')
 
                         created_count += 1
+                        bill_info = f" (Bill: {associated_bill.bill_nm[:30]}...)" if associated_bill else ""
                         logger.info(
-                            f"✨ Created statement for {speaker_name} with sentiment {sentiment_score}: {statement_text[:50]}..."
+                            f"✨ Created statement for {speaker_name} with sentiment {sentiment_score}{bill_info}: {statement_text[:50]}..."
                         )
 
                         # Create category associations if available
@@ -1393,7 +1730,7 @@ def extract_statements_with_llm_validation(text,
                                            session_id,
                                            bills_context,
                                            debug=False):
-    """Extract statements using two-stage LLM approach: speaker detection + content analysis."""
+    """Extract statements using bill-separated two-stage LLM approach: bill segmentation + speaker detection + content analysis."""
 
     if not model:
         logger.warning(
@@ -1401,175 +1738,141 @@ def extract_statements_with_llm_validation(text,
         return extract_statements_with_regex_fallback(text, session_id, debug)
 
     logger.info(
-        f"🤖 Starting two-stage LLM extraction for session: {session_id}")
+        f"🤖 Starting bill-separated three-stage LLM extraction for session: {session_id}")
 
     try:
-        # Configure lighter model for speaker detection
-        speaker_detection_model = genai.GenerativeModel(
-            'gemini-2.0-flash-lite')
+        # Configure lighter model for segmentation and speaker detection
+        segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
 
-        # Stage 1: Speaker Detection and Boundary Identification
+        # Stage 0: Bill Segmentation
         logger.info(
-            f"🔍 Stage 1: Detecting speakers and speech boundaries (session: {session_id})"
+            f"🔍 Stage 0: Segmenting transcript by bills (session: {session_id})"
         )
 
-        speaker_detection_prompt = f"""
-당신은 기록가입니다. 당신의 기록은 미래에 사람들을 살릴 것이므로, 발언 구간을 하나도 빠뜨리면 안 됩니다. 다음은 국회 회의록 텍스트입니다. 이 텍스트에서 실제 국회의원들의 발언 구간을 정확히 식별해주세요.
+        # Get actual bills for this session
+        session_bills = get_session_bills_list(session_id)
+        
+        if not session_bills:
+            logger.info(f"ℹ️ No bills found for session {session_id}, processing as single segment")
+            return extract_statements_without_bill_separation(text, session_id, bills_context, debug)
 
-회의 관련 의안:
-{bills_context}
+        bill_segmentation_prompt = f"""
+다음은 국회 회의록 텍스트입니다. 이 회의에서 논의된 의안들을 기준으로 텍스트를 구간별로 나누어주세요.
+
+회의 관련 의안들:
+{', '.join(session_bills)}
 
 회의록 텍스트:
-{text}
+{text[:8000]}...  # Limit for initial segmentation
 
-다음 기준으로 발언을 식별해주세요:
-1. ◯ 기호로 시작하는 발언만 추출
-2. 발언자가 실제 사람 이름인지 판단 (한국 성씨로 시작하는 2-4글자 이름)
-3. 법률명, 기관명, 직책명만 있는 경우는 제외 (예: "탄소소재법", "기획재정부", "위원장" 등)
-4. 절차적 발언과 정책 토론을 구분하여 분류
-5. 발언 내용의 실질성 판단 (단순 절차 vs 의미있는 정책 논의)
-
-발언자 이름 정리 규칙:
-- "김철수의원" → "김철수"
-- "이영희위원장" → "이영희" 
-- "박민수장관" → "박민수"
-- 괄호 안 정보는 제거
-- 직책명은 제거하되 실제 인명은 보존
+다음 기준으로 의안별 구간을 식별해주세요:
+1. 의안명이 명시적으로 언급되는 부분 찾기
+2. "○○법안", "○○안건", "○○에 관한 법률" 등의 패턴 식별
+3. 각 의안에 대한 토론 시작과 종료 지점 파악
+4. 일반적인 개회/폐회 발언은 제외
 
 JSON 형식으로 응답해주세요:
 {{
-    "speakers_detected": [
+    "bill_segments": [
         {{
-            "speaker_name": "정리된 발언자 실명",
-            "original_speaker_text": "원본 발언자 텍스트",
-            "start_marker": "발언 시작 부분 텍스트 (20자)",
-            "end_marker": "발언 종료 부분 텍스트 (20자)",
-            "is_substantial": true/false,
-            "is_real_person": true/false,
-            "speech_type": "policy_discussion/procedural/other",
-            "filtering_reason": "판단 근거"
+            "bill_name": "의안명",
+            "start_marker": "해당 의안 토론 시작 부분 텍스트 (30자)",
+            "end_marker": "해당 의안 토론 종료 부분 텍스트 (30자)",
+            "estimated_relevance": 0.0-1.0
         }}
-    ]
+    ],
+    "general_discussion": {{
+        "start_marker": "일반 토론 시작 부분 (30자)",
+        "end_marker": "일반 토론 종료 부분 (30자)"
+    }}
 }}
 """
 
-        stage1_response = speaker_detection_model.generate_content(
-            speaker_detection_prompt)
+        segmentation_response = segmentation_model.generate_content(bill_segmentation_prompt)
+        
+        if not segmentation_response.text:
+            logger.warning("❌ No response from bill segmentation, processing as single segment")
+            return extract_statements_without_bill_separation(text, session_id, bills_context, debug)
 
-        if not stage1_response.text:
-            logger.warning(
-                "❌ No response from Stage 1 LLM, falling back to regex")
-            return extract_statements_with_regex_fallback(
-                text, session_id, debug)
-
-        # Parse Stage 1 response
-        stage1_text = stage1_response.text.strip()
-        logger.info(f"🔍 Raw Stage 1 response: {stage1_text[:500]}...")
-
-        if stage1_text.startswith('```json'):
-            stage1_text = stage1_text[7:-3].strip()
-        elif stage1_text.startswith('```'):
-            stage1_text = stage1_text[3:-3].strip()
-
-        logger.info(f"🔍 Cleaned Stage 1 response: {stage1_text[:500]}...")
+        # Parse segmentation response
+        segmentation_text = segmentation_response.text.strip()
+        if segmentation_text.startswith('```json'):
+            segmentation_text = segmentation_text[7:-3].strip()
+        elif segmentation_text.startswith('```'):
+            segmentation_text = segmentation_text[3:-3].strip()
 
         import json as json_module
-        stage1_data = json_module.loads(stage1_text)
-        speakers_detected = stage1_data.get('speakers_detected', [])
+        segmentation_data = json_module.loads(segmentation_text)
+        bill_segments = segmentation_data.get('bill_segments', [])
+        general_discussion = segmentation_data.get('general_discussion', {})
 
-        logger.info(f"🔍 Parsed speakers_detected: {speakers_detected}")
+        logger.info(f"✅ Bill segmentation completed: Found {len(bill_segments)} bill segments")
 
-        for i, speaker in enumerate(speakers_detected):
-            logger.info(f"🔍 Speaker {i+1} details: {speaker}")
+        all_analyzed_statements = []
 
-        logger.info(
-            f"✅ Stage 1 completed: Found {len(speakers_detected)} potential speakers"
-        )
+        # Process each bill segment separately
+        for segment_info in bill_segments:
+            bill_name = segment_info.get('bill_name', 'Unknown Bill')
+            start_marker = segment_info.get('start_marker', '')
+            end_marker = segment_info.get('end_marker', '')
+            relevance = segment_info.get('estimated_relevance', 0.0)
 
-        # Stage 2: Extract and analyze substantial policy discussions
-        logger.info(
-            f"🔍 Stage 2: Extracting and analyzing policy content (session: {session_id})"
-        )
-
-        analyzed_statements = []
-
-        for i, speaker_info in enumerate(speakers_detected, 1):
-            speaker_name = speaker_info.get('speaker_name', 'Unknown')
-            is_substantial = speaker_info.get('is_substantial', False)
-            is_real_person = speaker_info.get('is_real_person', False)
-            speech_type = speaker_info.get('speech_type', 'unknown')
-            filtering_reason = speaker_info.get('filtering_reason', '')
-
-            logger.info(f"🔍 Processing speaker {i}: {speaker_name}")
-            logger.info(f"   - is_substantial: {is_substantial}")
-            logger.info(f"   - is_real_person: {is_real_person}")
-            logger.info(f"   - speech_type: {speech_type}")
-            logger.info(f"   - filtering_reason: {filtering_reason}")
-
-            # Trust LLM's judgment on person validation and content substance
-            if not is_real_person:
-                logger.info(
-                    f"⚠️ Skipping non-person speaker {speaker_name} - {filtering_reason}"
-                )
+            if relevance < 0.3:  # Skip low-relevance segments
+                logger.info(f"⚠️ Skipping low-relevance segment for {bill_name} (relevance: {relevance})")
                 continue
 
-            if not is_substantial or speech_type != 'policy_discussion':
-                logger.info(
-                    f"⚠️ Skipping speaker {speaker_name} - substantial: {is_substantial}, type: {speech_type}"
-                )
+            logger.info(f"🔍 Processing bill segment: {bill_name}")
+
+            # Extract bill-specific text segment
+            bill_text = extract_text_segment(text, start_marker, end_marker)
+            
+            if not bill_text or len(bill_text) < 100:
+                logger.info(f"⚠️ Skipping {bill_name} - insufficient content")
                 continue
 
-            # Extract the actual speech content using markers
-            start_marker = speaker_info.get('start_marker', '')
-            end_marker = speaker_info.get('end_marker', '')
-
-            logger.info(f"🔍 Extracting speech for {speaker_name}")
-            logger.info(f"   - start_marker: '{start_marker[:50]}...'")
-            logger.info(f"   - end_marker: '{end_marker[:50]}...'")
-
-            # Find speech content between markers
-            speech_content = extract_speech_between_markers(
-                text, start_marker, end_marker, speaker_name)
-
-            logger.info(
-                f"   - extracted length: {len(speech_content) if speech_content else 0}"
-            )
-            if speech_content:
-                logger.info(
-                    f"   - content preview: '{speech_content[:100]}...'")
-
-            if not speech_content or len(speech_content) < 10:
-                logger.info(
-                    f"⚠️ Skipping {speaker_name} - insufficient content (length: {len(speech_content) if speech_content else 0})"
-                )
-                continue
-
-            logger.info(
-                f"🤖 Analyzing statement {i}/{len(speakers_detected)} from {speaker_name} (session: {session_id})"
+            # Process this bill segment with speaker detection
+            bill_statements = extract_statements_for_bill_segment(
+                bill_text, session_id, bill_name, debug
             )
 
-            # Stage 2: Analyze the extracted speech
-            analysis_result = analyze_single_statement(
-                {
-                    'speaker_name': speaker_name,
-                    'text': speech_content
-                }, session_id, debug)
+            # Associate statements with the specific bill
+            for statement in bill_statements:
+                statement['associated_bill'] = bill_name
 
-            analyzed_statements.append(analysis_result)
+            all_analyzed_statements.extend(bill_statements)
 
-            # Brief pause between API calls
+            # Brief pause between bill segments
             if not debug:
-                time.sleep(0.5)
+                time.sleep(1)
+
+        # Process general discussion if present
+        if general_discussion.get('start_marker'):
+            logger.info(f"🔍 Processing general discussion segment")
+            general_text = extract_text_segment(
+                text, 
+                general_discussion.get('start_marker', ''), 
+                general_discussion.get('end_marker', '')
+            )
+            
+            if general_text and len(general_text) > 100:
+                general_statements = extract_statements_for_bill_segment(
+                    general_text, session_id, "General Discussion", debug
+                )
+                
+                for statement in general_statements:
+                    statement['associated_bill'] = "General Discussion"
+                
+                all_analyzed_statements.extend(general_statements)
 
         logger.info(
-            f"✅ Two-stage LLM extraction completed: {len(analyzed_statements)} statements (session: {session_id})"
+            f"✅ Bill-separated LLM extraction completed: {len(all_analyzed_statements)} statements across {len(bill_segments)} bills (session: {session_id})"
         )
-        return analyzed_statements
+        return all_analyzed_statements
 
     except Exception as e:
-        logger.error(f"❌ Error in two-stage LLM extraction: {e}")
-        logger.info("⚠️  Falling back to regex extraction")
-        return extract_statements_with_regex_fallback(text, session_id, debug)
+        logger.error(f"❌ Error in bill-separated LLM extraction: {e}")
+        logger.info("⚠️ Falling back to standard extraction")
+        return extract_statements_without_bill_separation(text, session_id, bills_context, debug)
 
 
 def extract_speech_between_markers(text, start_marker, end_marker,
