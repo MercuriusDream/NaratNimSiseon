@@ -1278,29 +1278,19 @@ def extract_statements_for_bill_segment(bill_text_segment,
             # Clean the extracted content
             current_speech_content = clean_pdf_text(current_speech_content)
 
-            # Clean the extracted content a bit (remove the speaker part from the beginning if it was included)
-            # The LLM provides start_idx and end_idx, so we extract based on those indices
-            # If the extracted content starts with the speaker name, remove it for cleaner analysis
+            # Clean the extracted content a bit (remove the speaker part from the beginning if it was included by start_cue)
+            # Example: if start_cue was "◯홍길동 의원 위원회에서는..." and speech is "◯홍길동 의원 위원회에서는..."
+            # we want "위원회에서는..." for analysis. The prompt asks for speech_start_cue as the *beginning*.
+            # The `extract_speech_between_markers` is better for this refined extraction.
+            # Using simpler method for now based on cues
             if current_speech_content.startswith(
                     speech_info.get('speaker_name_raw', '')):
                 current_speech_content = current_speech_content[
                     len(speech_info.get('speaker_name_raw', '')):].strip()
-            
-            # Additional cleaning: remove common speaker markers like ◯ if they appear at the start
-            if current_speech_content.startswith('◯'):
-                # Find where the actual speech content starts (after the speaker identification)
-                lines = current_speech_content.split('\n')
-                if len(lines) > 1:
-                    # Take everything after the first line (which contains the speaker marker)
-                    current_speech_content = '\n'.join(lines[1:]).strip()
-                else:
-                    # If it's all on one line, try to find where speech starts after the name
-                    import re
-                    # Pattern to match ◯Name (possibly with title) and capture the rest
-                    pattern = r'◯[^◯\n]*?(?:의원|위원장|장관|의장)?\s*(.*)'
-                    match = re.match(pattern, current_speech_content)
-                    if match and match.group(1):
-                        current_speech_content = match.group(1).strip()
+            elif current_speech_content.startswith(
+                    start_cue):  # if start_cue includes the name
+                # this logic is tricky, relies on good cues from LLM
+                pass  # The cue itself IS the start of the text LLM saw.
 
             if not current_speech_content or len(
                     current_speech_content
@@ -1567,22 +1557,6 @@ def extract_statements_without_bill_separation(full_text,
                     speech_info.get('speaker_name_raw', '')):
                 current_speech_content = current_speech_content[
                     len(speech_info.get('speaker_name_raw', '')):].strip()
-            
-            # Additional cleaning: remove common speaker markers like ◯ if they appear at the start
-            if current_speech_content.startswith('◯'):
-                # Find where the actual speech content starts (after the speaker identification)
-                lines = current_speech_content.split('\n')
-                if len(lines) > 1:
-                    # Take everything after the first line (which contains the speaker marker)
-                    current_speech_content = '\n'.join(lines[1:]).strip()
-                else:
-                    # If it's all on one line, try to find where speech starts after the name
-                    import re
-                    # Pattern to match ◯Name (possibly with title) and capture the rest
-                    pattern = r'◯[^◯\n]*?(?:의원|위원장|장관|의장)?\s*(.*)'
-                    match = re.match(pattern, current_speech_content)
-                    if match and match.group(1):
-                        current_speech_content = match.group(1).strip()
 
             if not current_speech_content or len(current_speech_content) < 50:
                 continue
