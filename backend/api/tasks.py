@@ -118,14 +118,20 @@ def with_db_retry(func, max_retries=3):
                 return func(*args, **kwargs)
 
             except (OperationalError, InterfaceError,
-                    psycopg2.OperationalError) as e:
+                    psycopg2.OperationalError, psycopg2.DatabaseError) as e:
                 error_msg = str(e).lower()
                 is_connection_error = any(phrase in error_msg for phrase in [
                     'connection already closed',
                     'server closed the connection',
-                    'ssl connection has been closed', 'connection lost',
-                    'connection broken', 'server has gone away',
-                    'connection timeout'
+                    'ssl connection has been closed unexpectedly',
+                    'ssl connection has been closed', 
+                    'connection lost',
+                    'connection broken', 
+                    'server has gone away',
+                    'connection timeout',
+                    'connection was lost',
+                    'database connection was lost',
+                    'server closed the connection unexpectedly'
                 ])
 
                 if is_connection_error:
