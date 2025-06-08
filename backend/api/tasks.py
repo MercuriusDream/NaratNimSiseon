@@ -3231,7 +3231,7 @@ def split_text_into_chunks(text, max_chunk_size):
 
 
 def clean_pdf_text(text):
-    """Clean PDF text by removing session identifiers and normalizing line breaks."""
+    """Clean PDF text by removing session identifiers, bill agendas, and normalizing line breaks."""
     import re
 
     if not text:
@@ -3239,20 +3239,56 @@ def clean_pdf_text(text):
 
     # Remove session identifier patterns like "제424회-제6차(2025년4월24일)"
     session_pattern = r'^제\d+회-제\d+차\(\d{4}년\d{1,2}월\d{1,2}일\)$'
+    
+    # Remove bill agenda headers with timing like "(14시09분 개의)"
+    timing_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
+    
+    # Remove numbered bill agenda items like "1. 검사징계법 일부개정법률안(김용민 의원 대표발의)(의안번호 2208456)"
+    bill_agenda_pattern = r'^\d+\.\s*[^◯]*?법률안[^◯]*?\)\s*$'
+    
     lines = text.split('\n')
     cleaned_lines = []
+    skip_until_discussion = False
 
     for line in lines:
         line = line.strip()
-        if line and not re.match(session_pattern, line):
-            # Replace all \n with spaces within the line content
-            line = line.replace('\n', ' ')
-            # Normalize multiple spaces to single space
-            line = re.sub(r'\s+', ' ', line).strip()
-            if line:  # Only add non-empty lines
-                cleaned_lines.append(line)
+        if not line:
+            continue
+            
+        # Skip session identifiers
+        if re.match(session_pattern, line):
+            continue
+            
+        # Remove timing markers
+        line = re.sub(timing_pattern, '', line).strip()
+        if not line:
+            continue
+            
+        # Check for bill agenda items (numbered list of bills)
+        if re.match(bill_agenda_pattern, line):
+            skip_until_discussion = True
+            logger.info(f"🧹 Removing bill agenda item: {line[:50]}...")
+            continue
+            
+        # Check if we've reached actual discussion content (starts with ◯)
+        if skip_until_discussion and line.startswith('◯'):
+            skip_until_discussion = False
+            logger.info(f"✅ Found start of actual discussion: {line[:50]}...")
+        
+        # Skip lines while we're in the agenda section
+        if skip_until_discussion:
+            continue
 
-    return '\n'.join(cleaned_lines)
+        # Replace all \n with spaces within the line content
+        line = line.replace('\n', ' ')
+        # Normalize multiple spaces to single space
+        line = re.sub(r'\s+', ' ', line).strip()
+        if line:  # Only add non-empty lines
+            cleaned_lines.append(line)
+
+    cleaned_text = '\n'.join(cleaned_lines)
+    logger.info(f"🧹 Text cleaning: {len(text)} -> {len(cleaned_text)} chars")
+    return cleaned_text
 
 
 def process_pdf_text_for_statements(full_text,
@@ -3617,7 +3653,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
 
 핵심 키워드: {keywords_str}
 
-회의록 텍스트:
+회의록 텍스트 (이미 의안 목록과 의사진행 부분은 제거됨):
 ---
 {text_chunk}
 ---
@@ -3636,11 +3672,12 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
 
 중요한 조건:
 - 법안명은 위 목록에서 정확히 선택
-- start_index와 end_index는 반드시 포함 (논의 구간의 시작과 끝)
-- 실제 토론/발언이 있는 구간만 포함
-- 단순 언급이나 목록은 제외
+- ◯로 시작하는 실제 발언 구간에서만 찾기
+- start_index는 해당 법안 논의가 시작되는 ◯ 위치
+- end_index는 다음 법안 논의 시작 전까지 또는 구간 끝까지
+- 실제 토론/발언이 있는 구간만 포함 (단순 언급 제외)
 - confidence 0.6 이상만 포함
-- end_index는 다음 법안 논의 시작 전까지 또는 구간 끝까지"""
+- 의안 목록이나 의사진행 발언은 이미 제거되었으므로 ◯ 발언만 분석"""
         
         response = segmentation_llm.generate_content(prompt)
         gemini_rate_limiter.record_request(estimated_tokens)
