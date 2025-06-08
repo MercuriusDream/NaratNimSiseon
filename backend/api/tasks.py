@@ -1427,7 +1427,7 @@ def process_speech_segments_multithreaded(speech_segments, session_id, bill_name
         """Wrapper for analyze_speech_segment_with_llm with rate limiting."""
         try:
             # Wait for rate limit permission
-            rate_limit_queue.get(timeout=30)  # 30 second timeout
+            rate_limit_queue.get(timeout=2)  # 2 second timeout
             
             logger.info(f"Processing speech segment {segment_index + 1}/{len(speech_segments)} for bill '{bill_name}' ({len(segment)} chars)")
             
