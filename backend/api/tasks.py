@@ -1992,7 +1992,9 @@ def _process_text_chunk_for_segmentation(model, text_chunk, bill_name, chunk_off
         # Validate bill_name
         safe_bill_name = str(bill_name)[:100] if bill_name else "알 수 없는 의안"
 
-        prompt = f"""한국 국회 회의록에서 개별 발언자의 발언 구간을 찾아주세요.
+        prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+한국 국회 회의록에서 개별 발언자의 발언 구간을 찾아주세요.
 
 의안: {safe_bill_name}
 
@@ -2059,6 +2061,7 @@ def _process_text_chunk_for_segmentation(model, text_chunk, bill_name, chunk_off
         logger.error(f"Error in chunk speech segmentation: {e}")
         return []
 
+
     if not bill_names_list:
         logger.warning("No bill names provided for segmentation")
         return []
@@ -2119,32 +2122,46 @@ def _process_text_chunk_for_segmentation(model, text_chunk, bill_name, chunk_off
     return all_segments
 
 def _process_single_bill_segmentation_batch(segmentation_llm, text_batch, bill_names, batch_offset):
-    """Process a single batch for bill segmentation."""
+    """Process a single batch for bill segmentation and extract bill-level metadata."""
     try:
-        bill_segmentation_prompt = f"""국회 회의록에서 각 의안의 논의 시작점을 찾아주세요.
+        bill_segmentation_prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+국회 회의록 텍스트 배치에서 논의된 주요 의안(법안)별로 구간을 나누고, 각 의안별로 정책 카테고리, 핵심 정책 어구, 의안 관련 키워드를 추출해 주세요.
 
 의안 목록:
-{chr(10).join([f"- {bill}" for bill in bill_names[:15]])}
+{chr(10).join([f"- {bill}" for bill in bill_names])}
 
-회의록 텍스트:
-{text_batch[:60000]}
+회의록 텍스트 배치 (전체 문서의 {batch_offset}-{batch_offset+len(text_batch)} 구간):
+---
+{text_batch}
+---
 
-JSON 형식으로 응답:
+이 배치에서 각 의안에 대한 논의 시작 지점 및 정책 정보를 알려주세요. JSON 형식 응답:
 {{
-  "bill_segments": [
+  "bill_discussion_segments": [
     {{
-      "bill_name": "의안명",
-      "start_position": 위치숫자,
-      "confidence": 0.8
+      "bill_name_identified": "제공된 목록에서 정확히 일치하는 의안명",
+      "discussion_start_idx": 해당 의안 논의가 시작되는 배치 내 문자 위치 (숫자),
+      "confidence": 0.0-1.0 (매칭 확신도),
+      "policy_categories": [
+        {{
+          "main_category": "주요 정책 분야 (경제, 복지, 교육, 외교안보, 환경, 법제, 과학기술, 문화, 농림, 국토교통, 행정, 기타 중 택1)",
+          "sub_category": "세부 정책 분야 (예: '저출생 대응', '부동산 안정', 'AI 육성 등, 없으면 '일반')",
+          "confidence": 0.0 부터 1.0 사이의 분류 확신도 (숫자)
+        }}
+      ],
+      "key_policy_phrases": ["발언의 핵심 정책 관련 어구 (최대 5개 배열)"],
+      "bill_specific_keywords_found": ["발언 내용 중 해당 의안 또는 이와 관련된 직접적인 키워드가 있다면 배열로 제공 (최대 3개)"]
     }}
   ]
 }}
 
-규칙:
-- 의안명은 위 목록에서 정확히 선택
-- 회의록에서 의안 논의 시작 위치 찾기
-- 신뢰도 0.7 이상만 포함
-- JSON만 응답"""
+중요한 규칙:
+- "bill_name_identified"는 반드시 제공된 의안 목록에서 정확히 선택해야 합니다
+- discussion_start_idx는 이 배치 내에서의 상대적 위치입니다 (0부터 시작)
+- confidence가 0.7 미만인 경우는 포함하지 마세요
+- 배치 경계에서 잘린 논의는 다음 배치에서 처리됩니다
+"""
 
         response = segmentation_llm.generate_content(bill_segmentation_prompt)
 
@@ -2152,28 +2169,27 @@ JSON 형식으로 응답:
             logger.warning("No response from LLM for bill segmentation batch")
             return []
 
-        response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-
-        if not response_text or not ("{" in response_text and "}" in response_text):
-            logger.warning(f"Invalid response format: {response_text[:100]}...")
-            return []
+        response_text_cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
 
         try:
-            data = json.loads(response_text)
-            segments = data.get("bill_segments", [])
+            data = json.loads(response_text_cleaned)
+            segments = data.get("bill_discussion_segments", [])
 
             valid_segments = []
             for segment in segments:
                 if (isinstance(segment, dict) and 
                     segment.get('confidence', 0) >= 0.7 and
-                    segment.get('bill_name', '').strip() and
-                    isinstance(segment.get('start_position', -1), (int, float)) and
-                    segment.get('start_position', -1) >= 0):
+                    segment.get('bill_name_identified', '').strip() and
+                    isinstance(segment.get('discussion_start_idx', -1), (int, float)) and
+                    segment.get('discussion_start_idx', -1) >= 0):
 
                     valid_segments.append({
-                        'a': segment['bill_name'].strip(),
-                        'b': int(segment['start_position']),
-                        'c': float(segment['confidence'])
+                        'a': segment['bill_name_identified'].strip(),
+                        'b': int(segment['discussion_start_idx']),
+                        'c': float(segment['confidence']),
+                        'policy_categories': segment.get('policy_categories', []),
+                        'key_policy_phrases': segment.get('key_policy_phrases', []),
+                        'bill_specific_keywords_found': segment.get('bill_specific_keywords_found', [])
                     })
 
             return valid_segments
@@ -2185,6 +2201,7 @@ JSON 형식으로 응답:
     except Exception as e:
         logger.error(f"Error in bill segmentation batch: {e}")
         return []
+
 
 def _deduplicate_speech_segments(all_indices):
     """Remove overlapping speech segments and return sorted unique segments."""
@@ -2355,7 +2372,9 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
             estimated_tokens, batch_start_index
         )
 
-    prompt = f"""국회 발언 분석 요청:
+    prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+국회 발언 분석 요청:
 
 의안: {safe_bill_name}
 
@@ -2544,19 +2563,14 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
                                                session_id,
                                                bill_name,
                                                debug=False):
-    """Analyze a single statement's text using LLM, with context of a specific bill."""
+    """Analyze a single statement's text using LLM, with context of a specific bill. Now only returns sentiment and bill relevance."""
     if not model:  # Global 'model' for detailed analysis (e.g., gemma-3)
         logger.warning(
-            "❌ Main LLM ('model') not available. Cannot analyze statement for bill context."
-        )
-        # Return basic structure with indication of failure
+            "❌ Main LLM ('model') not available. Cannot analyze statement for bill context.")
         statement_data_dict.update({
             'sentiment_score': 0.0,
             'sentiment_reason': 'LLM N/A',
-            'bill_relevance_score': 0.0,
-            'policy_categories': [],
-            'policy_keywords': [],
-            'bill_specific_keywords': []
+            'bill_relevance_score': 0.0
         })
         return statement_data_dict
 
@@ -2565,21 +2579,20 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
 
     if not text_to_analyze:
         logger.warning(
-            f"No text to analyze for speaker '{speaker_name}' regarding bill '{bill_name}'."
-        )
+            f"No text to analyze for speaker '{speaker_name}' regarding bill '{bill_name}'.")
         return statement_data_dict
 
-    # Use batch processing for very long statements
-    MAX_STATEMENT_LENGTH = 8000  # 8k characters for individual statement analysis
+    MAX_STATEMENT_LENGTH = 8000
     if len(text_to_analyze) > MAX_STATEMENT_LENGTH:
         logger.info(
-            f"Statement text too long ({len(text_to_analyze)} chars), processing first {MAX_STATEMENT_LENGTH} chars"
-        )
+            f"Statement text too long ({len(text_to_analyze)} chars), processing first {MAX_STATEMENT_LENGTH} chars")
         text_for_prompt = text_to_analyze[:MAX_STATEMENT_LENGTH] + "... [발언이 길이 제한으로 잘렸습니다]"
     else:
         text_for_prompt = text_to_analyze
 
     prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+
 국회 발언 분석 요청:
 발언자: {speaker_name}
 논의 중인 특정 의안: "{bill_name}"
@@ -2592,16 +2605,7 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
 {{
   "sentiment_score": -1.0 (매우 부정적) 부터 1.0 (매우 긍정적) 사이의 감성 점수 (숫자),
   "sentiment_reason": "감성 판단의 주요 근거 (간략히, 1-2 문장)",
-  "bill_relevance_score": 0.0 (의안과 무관) 부터 1.0 (의안과 매우 직접적 관련) 사이의 점수 (숫자). 이 발언이 구체적으로 "{bill_name}"에 대해 얼마나 논하고 있는지 판단해주세요.",
-  "policy_categories": [
-    {{
-      "main_category": "주요 정책 분야 (경제, 복지, 교육, 외교안보, 환경, 법제, 과학기술, 문화, 농림, 국토교통, 행정, 기타 중 택1)",
-      "sub_category": "세부 정책 분야 (예: '저출생 대응', '부동산 안정', 'AI 육성 등, 없으면 '일반')",
-      "confidence": 0.0 부터 1.0 사이의 분류 확신도 (숫자)
-    }}
-  ],
-  "key_policy_phrases": ["발언의 핵심 정책 관련 어구 (최대 5개 배열)"],
-  "bill_specific_keywords_found": ["발언 내용 중 '{bill_name}' 또는 이와 관련된 직접적인 키워드가 있다면 배열로 제공 (최대 3개)"]
+  "bill_relevance_score": 0.0 (의안과 무관) 부터 1.0 (의안과 매우 직접적 관련) 사이의 점수 (숫자). 이 발언이 구체적으로 "{bill_name}"에 대해 얼마나 논하고 있는지 판단해주세요."
 }}
 
 분석 가이드라인:
@@ -2712,9 +2716,10 @@ def extract_statements_with_bill_based_chunking(full_text,
                 logger.info(f"Processing segmentation batch: chars {batch_start}-{batch_end}")
 
                 batch_segmentation_prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
 국회 회의록 텍스트 배치에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
 
-제공된 의안 목록:
+의안 목록:
 {chr(10).join([f"- {bill}" for bill in bill_names_list])}
 
 회의록 텍스트 배치 (전체 문서의 {batch_start}-{batch_end} 구간):
@@ -2778,9 +2783,10 @@ def extract_statements_with_bill_based_chunking(full_text,
             segmentation_text = full_text
 
         bill_segmentation_prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
 국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
 
-제공된 의안 목록:
+의안 목록:
 {chr(10).join([f"- {bill}" for bill in bill_names_list])}
 
 회의록 텍스트:
@@ -2805,8 +2811,10 @@ def extract_statements_with_bill_based_chunking(full_text,
 - 회의록에서 해당 의안에 대한 실질적 논의가 시작되는 지점을 찾으세요
 - 순서는 회의록에 나타난 순서대로 정렬해주세요
 - confidence가 0.7 미만인 경우는 포함하지 마세요
-"""
+- 의안 목록이나 의사진행 발언은 이미 제거되었으므로 ◯ 발언만 분석
 
+예시:
+만약 논의 구간이 텍스트의 123번째 문자에서 시작해 456번째 문자에서 끝난다면, discussion_start_idx=123, end_idx=456로 표기해 주세요."""
         try:
             seg_response = segmentation_llm.generate_content(
                 bill_segmentation_prompt)
@@ -3117,6 +3125,8 @@ def analyze_statement_categories(self,
     # This function is more for re-analysis or if initial processing missed it.
     # The `analyze_single_statement_with_bill_context` is preferred during initial PDF processing.
     prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+
 국회 발언 분석 요청:
 발언자: {statement.speaker.naas_nm}
 발언 내용:
@@ -3140,7 +3150,6 @@ def analyze_statement_categories(self,
 (가이드라인은 analyze_single_statement_with_bill_context 와 유사하게 적용)
 응답은 반드시 유효한 JSON 형식이어야 합니다.
 """
-
     try:
         response = model.generate_content(prompt)
         if not response or not response.text:
@@ -3239,13 +3248,13 @@ def clean_pdf_text(text):
 
     # Remove session identifier patterns like "제424회-제6차(2025년4월24일)"
     session_pattern = r'^제\d+회-제\d+차\(\d{4}년\d{1,2}월\d{1,2}일\)$'
-    
+
     # Remove bill agenda headers with timing like "(14시09분 개의)"
     timing_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
-    
+
     # Remove numbered bill agenda items like "1. 검사징계법 일부개정법률안(김용민 의원 대표발의)(의안번호 2208456)"
     bill_agenda_pattern = r'^\d+\.\s*[^◯]*?법률안[^◯]*?\)\s*$'
-    
+
     lines = text.split('\n')
     cleaned_lines = []
     skip_until_discussion = False
@@ -3254,27 +3263,27 @@ def clean_pdf_text(text):
         line = line.strip()
         if not line:
             continue
-            
+
         # Skip session identifiers
         if re.match(session_pattern, line):
             continue
-            
+
         # Remove timing markers
         line = re.sub(timing_pattern, '', line).strip()
         if not line:
             continue
-            
+
         # Check for bill agenda items (numbered list of bills)
         if re.match(bill_agenda_pattern, line):
             skip_until_discussion = True
             logger.info(f"🧹 Removing bill agenda item: {line[:50]}...")
             continue
-            
+
         # Check if we've reached actual discussion content (starts with ◯)
         if skip_until_discussion and line.startswith('◯'):
             skip_until_discussion = False
             logger.info(f"✅ Found start of actual discussion: {line[:50]}...")
-        
+
         # Skip lines while we're in the agenda section
         if skip_until_discussion:
             continue
@@ -3327,7 +3336,7 @@ def process_pdf_text_for_statements(full_text,
     bill_segments_from_llm = []
     if segmentation_llm and bill_names_list and len(bill_names_list) > 0:
         logger.info(f"🔍 Getting bill segments with indices for session {session_id}")
-        
+
         try:
             bill_segments_from_llm = _process_bill_segmentation_with_batching(
                 segmentation_llm, full_text, bill_names_list
@@ -3358,19 +3367,19 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
         # First, try a single-pass approach for better context
         if len(segmentation_text) <= 15000:  # For smaller texts, process as one chunk
             return _process_single_segmentation_chunk(segmentation_llm, segmentation_text, bill_names_list, 0)
-        
+
         # For larger texts, use smarter chunking
         CHUNK_SIZE = 12000  # Larger chunks for better context
         OVERLAP_SIZE = 2000  # Larger overlap to catch bill transitions
         total_length = len(segmentation_text)
-        
+
         # Find natural break points (like ◯ markers) for better chunking
         chunks = []
         chunk_start = 0
-        
+
         while chunk_start < total_length:
             chunk_end = min(chunk_start + CHUNK_SIZE, total_length)
-            
+
             # If not at the end, try to find a natural break point
             if chunk_end < total_length:
                 # Look for ◯ markers within the last 2000 chars
@@ -3378,45 +3387,47 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                 last_marker = segmentation_text.rfind('◯', search_start, chunk_end)
                 if last_marker != -1 and last_marker > chunk_start + 1000:  # Ensure minimum chunk size
                     chunk_end = last_marker
-            
+
             chunk_text = segmentation_text[chunk_start:chunk_end]
-            
+
             # Only add chunk if it has meaningful content
             if len(chunk_text.strip()) > 1000:  # Increased minimum content threshold
                 chunks.append((chunk_start, chunk_end, chunk_text))
-            
+
             # Move to next chunk with overlap
             chunk_start = chunk_end - OVERLAP_SIZE
             if chunk_end >= total_length:
                 break
-        
+
         logger.info(f"[Segmentation LLM] Processing {len(chunks)} natural-break chunks with rate limiting")
-        
+
         def process_single_chunk_with_rate_limit(chunk_data):
             """Process a single chunk with LLM and rate limiting"""
             chunk_start, chunk_end, chunk_text = chunk_data
-            
+
             # Estimate tokens for this chunk
             estimated_tokens = len(chunk_text) // 3 + 800  # More conservative estimate
-            
+
             # Wait for rate limiter
             if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
                 logger.warning(f"[Segmentation LLM] Rate limit timeout for chunk {chunk_start}-{chunk_end}")
                 return []
-            
+
             # Create simplified bill names for better matching
             simplified_bills = []
             for bill in bill_names_list[:8]:  # Limit to 8 bills for better focus
                 # Extract core name (remove common suffixes)
-                core_name = bill.replace('법률안', '').replace('일부개정', '').replace('의안', '').strip()
+                core_name = bill.replace('법률안', '').replace('일부개정', '').strip()
                 if '(' in core_name:
                     core_name = core_name.split('(')[0].strip()
                 simplified_bills.append({'original': bill, 'core': core_name})
-            
+
             bill_names_str = '\n'.join([f"- {bill['original']}" for bill in simplified_bills])
-            
+
             # Improved prompt with fuzzy matching instructions
-            prompt = f"""국회 회의록에서 다음 법안들의 논의 구간을 찾아주세요.
+            prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+국회 회의록에서 다음 법안들의 논의 구간을 찾아주세요.
 
 법안 목록:
 {bill_names_str}
@@ -3440,69 +3451,69 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
 
 핵심 키워드 예시:
 {chr(10).join([f"- {bill['core']}" for bill in simplified_bills if len(bill['core']) > 3])}"""
-            
+
             try:
                 logger.info(f"[Segmentation LLM] Processing chunk {chunk_start}-{chunk_end} ({len(chunk_text)} chars)")
-                
+
                 response = segmentation_llm.generate_content(prompt)
-                
+
                 # Record the API usage
                 gemini_rate_limiter.record_request(estimated_tokens)
-                
+
                 if not response or not response.text:
                     logger.warning(f"[Segmentation LLM] Empty response for chunk {chunk_start}-{chunk_end}")
                     return []
-                
+
                 response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
-                
+
                 # Handle empty or error responses
                 if not response_text or response_text.lower() in ['[]', 'null', 'none']:
                     logger.info(f"[Segmentation LLM] No segments found in chunk {chunk_start}-{chunk_end}")
                     return []
-                
+
                 # Debug: Log the raw response
                 logger.debug(f"[Segmentation LLM DEBUG] Raw response for chunk {chunk_start}-{chunk_end}: {response_text[:1000]}...")
-                
+
                 try:
                     segments = json.loads(response_text)
                 except json.JSONDecodeError as e_json:
                     logger.error(f"[Segmentation LLM] JSON decode error in chunk {chunk_start}-{chunk_end}: {e_json}")
                     logger.debug(f"Raw response: {response_text[:200]}...")
                     return []
-                
+
                 if not isinstance(segments, list):
                     logger.warning(f"[Segmentation LLM] Expected list in chunk {chunk_start}-{chunk_end}, got {type(segments)}")
                     logger.debug(f"[Segmentation LLM DEBUG] Full response was: {response_text}")
                     return []
-                
+
                 # Validate and adjust segments with fuzzy matching
                 chunk_segments = []
                 for seg in segments:
                     if not isinstance(seg, dict):
                         continue
-                    
+
                     bill_name = seg.get('bill_name', '').strip()
                     confidence = float(seg.get('confidence', 0.5))
-                    
+
                     # Skip low confidence segments
                     if confidence < 0.6:
                         continue
-                    
+
                     # Find best matching bill with fuzzy logic
                     best_match = None
                     best_score = 0
-                    
+
                     for original_bill in bill_names_list:
                         # Check exact match first
                         if bill_name == original_bill:
                             best_match = original_bill
                             best_score = 1.0
                             break
-                        
+
                         # Check partial matches
                         bill_words = set(bill_name.lower().split())
                         original_words = set(original_bill.lower().split())
-                        
+
                         # Calculate similarity
                         common_words = bill_words.intersection(original_words)
                         if common_words:
@@ -3510,22 +3521,22 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                             if similarity > best_score and similarity > 0.4:  # 40% similarity threshold
                                 best_score = similarity
                                 best_match = original_bill
-                    
+
                     if not best_match:
                         logger.debug(f"No matching bill found for '{bill_name}', skipping")
                         continue
-                    
+
                     try:
                         start_pos_raw = seg.get('start_pos')
                         end_pos_raw = seg.get('end_pos')
-                        
+
                         # Handle None or invalid positions by using chunk boundaries
                         if start_pos_raw is None or start_pos_raw < 0:
                             logger.info(f"[Segmentation LLM] Bill '{best_match}' has None/invalid start_pos, using chunk start")
                             seg_b = chunk_start
                         else:
                             seg_b = int(start_pos_raw) + chunk_start
-                        
+
                         if end_pos_raw is None or end_pos_raw <= 0:
                             logger.info(f"[Segmentation LLM] Bill '{best_match}' has None/invalid end_pos, using fallback")
                             # Use a reasonable segment size based on bill name position in text
@@ -3536,18 +3547,18 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                                 seg_e = min(seg_b + 3000, total_length)  # Default 3k chars segment
                         else:
                             seg_e = int(end_pos_raw) + chunk_start
-                        
+
                         # Ensure end position is after start position
                         if seg_e <= seg_b:
                             seg_e = min(seg_b + 3000, total_length)  # Default 3k chars segment
-                            
+
                     except (ValueError, TypeError) as e:
                         logger.warning(f"Invalid indices in segment: {seg}, error: {e}")
                         # Force valid positions since we know the bill exists
                         seg_b = chunk_start
                         seg_e = min(chunk_start + 3000, total_length)
                         logger.info(f"[Segmentation LLM] Using forced positions for '{best_match}': {seg_b}-{seg_e}")
-                    
+
                     # Validate indices
                     if seg_b < seg_e and seg_b >= 0 and seg_e <= total_length and (seg_e - seg_b) > 200:
                         chunk_segments.append({
@@ -3559,42 +3570,42 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                         logger.debug(f"Matched '{bill_name}' -> '{best_match}' (score: {best_score:.2f}) at {seg_b}-{seg_e}")
                     else:
                         logger.debug(f"[Segmentation LLM DEBUG] Rejected segment '{best_match}': seg_b={seg_b}, seg_e={seg_e}, length={seg_e-seg_b}, total_length={total_length}")
-                
+
                 logger.info(f"[Segmentation LLM] Found {len(chunk_segments)} valid segments in chunk {chunk_start}-{chunk_end}")
                 if len(chunk_segments) == 0:
                     logger.debug(f"[Segmentation LLM DEBUG] No valid segments found. Processed {len([s for s in segments if isinstance(s, dict)])} potential segments from LLM response")
                 return chunk_segments
-                
+
             except Exception as e_chunk:
                 logger.error(f"[Segmentation LLM] Error processing chunk {chunk_start}-{chunk_end}: {e_chunk}")
                 return []
-        
+
         # Process chunks sequentially to respect rate limits better
         all_segments = []
-        
+
         for i, chunk_data in enumerate(chunks):
             try:
                 chunk_segments = process_single_chunk_with_rate_limit(chunk_data)
                 all_segments.extend(chunk_segments)
-                
+
                 chunk_start, chunk_end = chunk_data[0], chunk_data[1]
                 logger.info(f"[Segmentation LLM] Completed chunk {i+1}/{len(chunks)} ({chunk_start}-{chunk_end}): {len(chunk_segments)} segments")
-                
+
                 # Rate limiting pause between chunks
                 if i < len(chunks) - 1:  # Don't sleep after the last chunk
                     time.sleep(2)  # 2 second pause between chunks
-                    
+
             except Exception as exc:
                 logger.error(f"[Segmentation LLM] Chunk {chunk_data[0]}-{chunk_data[1]} generated exception: {exc}")
                 continue
-        
+
         # Remove overlapping segments from overlapping chunks
         unique_segments = {}
         for seg in all_segments:
             # Create a key based on bill name and approximate position
             bill_name = seg['a']
             start_pos = seg['b']
-            
+
             # Check for overlaps with existing segments for the same bill
             found_overlap = False
             for existing_key, existing_seg in unique_segments.items():
@@ -3605,20 +3616,20 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                         unique_segments[existing_key] = seg
                     found_overlap = True
                     break
-            
+
             if not found_overlap:
                 key = f"{bill_name}_{start_pos}"
                 unique_segments[key] = seg
-        
+
         valid_segments = list(unique_segments.values())
-        
+
         # Sort by position
         valid_segments.sort(key=lambda x: x['b'])
-        
+
         logger.info(f"[Segmentation LLM] Rate-limited processing complete: {len(valid_segments)} unique segments from {len(all_segments)} total")
-        
+
         return valid_segments
-        
+
     except Exception as e:
         logger.error(f"❌ Error in bill segmentation LLM: {e}")
         logger.exception("Traceback for bill segmentation LLM error:")
@@ -3630,11 +3641,11 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
     try:
         # Estimate tokens for rate limiting
         estimated_tokens = len(text_chunk) // 3 + 1000
-        
+
         if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
             logger.warning("Rate limit timeout for single segmentation chunk")
             return []
-        
+
         # Create simplified bill list for better matching
         bill_info = []
         for bill in bill_names_list[:10]:  # Limit for better focus
@@ -3642,11 +3653,13 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
             if '(' in core_name:
                 core_name = core_name.split('(')[0].strip()
             bill_info.append({'full': bill, 'core': core_name})
-        
+
         bill_list_str = '\n'.join([f"- {b['full']}" for b in bill_info])
         keywords_str = ', '.join([b['core'] for b in bill_info if len(b['core']) > 3])
-        
-        prompt = f"""국회 회의록에서 법안별 논의 구간을 정확히 식별해주세요.
+
+        prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+국회 회의록에서 법안별 논의 구간을 정확히 식별해주세요.
 
 대상 법안들:
 {bill_list_str}
@@ -3664,59 +3677,61 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
     {{
       "bill_name": "정확한_법안명",
       "start_index": 시작위치,
-      "end_index": 종료위치,
-      "confidence": 0.8
+      "end_index": 종료위치
     }}
   ]
 }}
 
 중요한 조건:
+- start_index와 end_index는 반드시 위 텍스트에서 해당 법안 논의가 시작되고 끝나는 구간의 '정확한 문자 인덱스(파이썬 문자열 인덱스, 0부터 시작, start_index는 포함, end_index는 포함하지 않음)'를 사용해야 합니다.
 - 법안명은 위 목록에서 정확히 선택
 - ◯로 시작하는 실제 발언 구간에서만 찾기
 - start_index는 해당 법안 논의가 시작되는 ◯ 위치
 - end_index는 다음 법안 논의 시작 전까지 또는 구간 끝까지
 - 실제 토론/발언이 있는 구간만 포함 (단순 언급 제외)
-- confidence 0.6 이상만 포함
-- 의안 목록이나 의사진행 발언은 이미 제거되었으므로 ◯ 발언만 분석"""
-        
+- 각 법안별로 반드시 하나의 구간만 반환
+- confidence 값은 포함하지 말 것
+- 의안 목록이나 의사진행 발언은 이미 제거되었으므로 ◯ 발언만 분석
+
+예시:
+만약 논의 구간이 텍스트의 123번째 문자에서 시작해 456번째 문자에서 끝난다면, start_index=123, end_index=456로 표기해 주세요."""
+
         response = segmentation_llm.generate_content(prompt)
         gemini_rate_limiter.record_request(estimated_tokens)
-        
+
         if not response or not response.text:
             return []
-        
+
         response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
-        
+
         try:
             data = json.loads(response_text)
             segments = data.get('segments', [])
-            
+
+            # NOTE: start_idx and end_idx below are expected to be precise Python string indices (0-based, inclusive start, exclusive end)
             valid_segments = []
+            seen_bills = set()
             for seg in segments:
-                if (seg.get('confidence', 0) >= 0.6 and 
-                    seg.get('bill_name') in bill_names_list):
-                    
+                bill_name = seg.get('bill_name')
+                if bill_name in seen_bills:
+                    continue  # Only allow one segment per bill
+                if bill_name in bill_names_list:
                     start_idx = int(seg.get('start_index', 0)) + offset
-                    end_idx = int(seg.get('end_index', len(text_chunk))) + offset
-                    
-                    # Ensure end_idx is valid and reasonable
-                    if end_idx <= start_idx:
-                        end_idx = min(start_idx + 5000, len(text_chunk) + offset)  # Default 5k chars
-                    
+                    end_idx = int(seg.get('end_index', 0)) + offset
+                    # These should be PRECISE indices in text_chunk (0-based, [start_idx:end_idx])
                     if start_idx < end_idx and (end_idx - start_idx) > 200:
                         valid_segments.append({
-                            'a': seg['bill_name'],
+                            'a': bill_name,
                             'b': start_idx,
-                            'e': end_idx,
-                            'c': seg['confidence']
+                            'e': end_idx
                         })
-            
+                        seen_bills.add(bill_name)
             return valid_segments
-            
+
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             logger.error(f"Error parsing segmentation response: {e}")
             return []
-            
+
     except Exception as e:
         logger.error(f"Error in single segmentation chunk: {e}")
         return []
@@ -3728,11 +3743,11 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
         for seg_info in bill_segments_from_llm:
             start_idx = seg_info.get("b")
             end_idx = seg_info.get("e")
-            
+
             # Validate indices
             if (start_idx is not None and isinstance(start_idx, int) and 
                 start_idx >= 0 and start_idx < len(full_text)):
-                
+
                 # If no end index, calculate it
                 if end_idx is None or not isinstance(end_idx, int):
                     # Find next segment's start or use text end
@@ -3743,7 +3758,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
                             other_start < next_start):
                             next_start = other_start
                     end_idx = next_start
-                
+
                 # Final validation
                 if end_idx > start_idx and end_idx <= len(full_text):
                     valid_segments.append({
@@ -3755,47 +3770,47 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
 
         # Sort by start index
         valid_segments.sort(key=lambda x: x['start_idx'])
-        
+
         logger.info(f"Processing {len(valid_segments)} bill segments using index-based slicing")
-        
+
         for seg_data in valid_segments:
             bill_name = seg_data["bill_name"]
             start_idx = seg_data["start_idx"]
             end_idx = seg_data["end_idx"]
-            
+
             # Slice text using the indices
             bill_text = full_text[start_idx:end_idx]
-            
+
             logger.info(f"--- Processing Bill: {bill_name} (chars {start_idx}-{end_idx}, {len(bill_text)} chars) ---")
-            
+
             # Extract statements from this bill's text segment
             statements_in_bill = extract_statements_for_bill_segment(
                 bill_text, session_id, bill_name, debug)
-            
+
             # Associate all statements with this bill
             for stmt_data in statements_in_bill:
                 stmt_data['associated_bill_name'] = bill_name
-            
+
             all_extracted_statements_data.extend(statements_in_bill)
             logger.info(f"✅ Extracted {len(statements_in_bill)} statements for {bill_name}")
-            
+
             if not debug:
                 time.sleep(1)  # Brief pause between bills
-    
+
     else:
         # Fallback: process entire text if no segments found
         logger.info("No bill segments identified. Processing entire text as general discussion.")
         statements_from_full_text = extract_statements_with_keyword_fallback(
             full_text, session_id, debug)
-        
+
         for stmt_data in statements_from_full_text:
             stmt_data['associated_bill_name'] = "General Discussion"
-        
+
         all_extracted_statements_data.extend(statements_from_full_text)
 
     # Final step: Save all statements to DB
     logger.info(f"Collected {len(all_extracted_statements_data)} statements for session {session_id}")
-    
+
     if not debug and all_extracted_statements_data:
         process_extracted_statements_data(all_extracted_statements_data, session_obj, debug)
     elif debug and all_extracted_statements_data:
@@ -3931,8 +3946,6 @@ def process_extracted_statements_data(statements_data_list,
                                 logger.warning(
                                     f"Multiple ambiguous bill matches for '{assoc_bill_name_from_data}' in session {session_obj.conf_id}. Not associating."
                                 )
-                        else:
-                            logger.warning(f"No bill found for '{assoc_bill_name_from_data}' in session {session_obj.conf_id}")
                     else:
                         logger.info(f"✅ Found exact bill match: '{assoc_bill_name_from_data}'")
 
@@ -4142,16 +4155,11 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
 
 
 def analyze_single_statement(statement_data_dict, session_id, debug=False):
-
     if not model:  # Global 'model'
-        logger.warning(
-            " Main LLM ('model') not available. Cannot analyze statement (generic)."
-        )
+        logger.warning(" Main LLM ('model') not available. Cannot analyze statement (generic).")
         statement_data_dict.update({
             'sentiment_score': 0.0,
-            'sentiment_reason': 'LLM N/A',
-            'policy_categories': [],
-            'policy_keywords': []
+            'sentiment_reason': 'LLM N/A'
         })
         return statement_data_dict
 
@@ -4159,15 +4167,13 @@ def analyze_single_statement(statement_data_dict, session_id, debug=False):
     text_to_analyze = statement_data_dict.get('text', '')
 
     if not text_to_analyze:
-        logger.warning(
-            f"No text to analyze for speaker '{speaker_name}' (generic analysis)."
-        )
+        logger.warning(f"No text to analyze for speaker '{speaker_name}' (generic analysis).")
         return statement_data_dict
 
     text_for_prompt = text_to_analyze
-
-    # This prompt is similar to analyze_single_statement_with_bill_context but WITHOUT explicit bill_name or bill_relevance.
     prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+
 국회 발언 분석 요청:
 발언자: {speaker_name}
 발언 내용:
@@ -4178,15 +4184,7 @@ def analyze_single_statement(statement_data_dict, session_id, debug=False):
 위 발언 내용을 분석하여 다음 JSON 형식으로 결과를 제공해주세요.
 {{
   "sentiment_score": -1.0 부터 1.0 사이의 감성 점수 (숫자),
-  "sentiment_reason": "감성 판단의 주요 근거 (간략히)",
-  "policy_categories": [
-    {{
-      "main_category": "주요 정책 분야 (경제, 복지, 교육, 외교안보, 환경, 법제, 과학기술, 문화, 농림, 국토교통, 행정, 기타 중 택1)",
-      "sub_category": "세부 정책 분야 (없으면 '일반')",
-      "confidence": 0.0 부터 1.0 사이의 분류 확신도 (숫자)
-    }}
-  ],
-  "key_policy_phrases": ["발언의 핵심 정책 관련 어구 (최대 5개 배열)"]
+  "sentiment_reason": "감성 판단의 주요 근거 (간략히)"
 }}
 (가이드라인은 이전 분석 함수들과 유사하게 적용)
 응답은 반드시 유효한 JSON 형식이어야 합니다.
@@ -4194,39 +4192,23 @@ def analyze_single_statement(statement_data_dict, session_id, debug=False):
     try:
         response = model.generate_content(prompt)
         if not response or not response.text:
-            logger.warning(
-                f"❌ No LLM generic analysis response for '{speaker_name}'.")
+            logger.warning(f"❌ No LLM generic analysis response for '{speaker_name}'.")
             return statement_data_dict
-
-        response_text_cleaned = response.text.strip().replace(
-            "```json", "").replace("```", "").strip()
-        analysis_json = json.loads(response_text_cleaned)
-
-        statement_data_dict.update({
-            'sentiment_score':
-            analysis_json.get('sentiment_score', 0.0),
-            'sentiment_reason':
-            analysis_json.get('sentiment_reason', 'LLM 분석 완료'),
-            'policy_categories':
-            analysis_json.get('policy_categories', []),
-            'policy_keywords':
-            analysis_json.get('key_policy_phrases', [])
-            # No bill_relevance_score or bill_specific_keywords here
-        })
+        response_text_cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
+        import json
+        try:
+            analysis_json = json.loads(response_text_cleaned)
+            statement_data_dict.update({
+                'sentiment_score': analysis_json.get('sentiment_score', 0.0),
+                'sentiment_reason': analysis_json.get('sentiment_reason', 'LLM 분석 완료')
+            })
+        except Exception as e:
+            logger.warning(f"❌ Error parsing LLM generic analysis response for '{speaker_name}': {e}")
         if debug:
-            logger.debug(
-                f"🐛 DEBUG: Generic analysis for '{speaker_name}' - Sentiment: {statement_data_dict['sentiment_score']}"
-            )
+            logger.debug(f"🐛 DEBUG: Generic analysis for '{speaker_name}' - Sentiment: {statement_data_dict['sentiment_score']}")
         return statement_data_dict
-    except json.JSONDecodeError as e:
-        logger.error(
-            f"❌ JSON parsing error for LLM generic analysis ('{speaker_name}'): {e}. Response: {response_text_cleaned if 'response_text_cleaned' in locals() else 'N/A'}"
-        )
-    except Exception as e:
-        logger.error(
-            f"❌ Error during LLM generic analysis of statement for '{speaker_name}': {e}"
-        )
-    return statement_data_dict
+    except:
+        return NULL
 
 
 def get_bills_context(session_id):
