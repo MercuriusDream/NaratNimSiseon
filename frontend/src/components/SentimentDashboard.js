@@ -1,19 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api';
 import SentimentChart from './SentimentChart';
 
 const SentimentDashboard = ({ billId = null }) => {
   const [sentimentData, setSentimentData] = useState(null);
-  const [overallData, setOverallData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('all');
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchSentimentData();
-  }, [billId, timeRange]);
-
-  const fetchSentimentData = async () => {
+  const fetchSentimentData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -32,7 +27,13 @@ const SentimentDashboard = ({ billId = null }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [billId, timeRange]);
+
+  useEffect(() => {
+    fetchSentimentData();
+  }, [fetchSentimentData]);
+
+  
 
   const getSentimentColor = (score) => {
     if (score > 0.3) return 'text-green-600 bg-green-50 border-green-200';

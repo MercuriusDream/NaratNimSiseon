@@ -6,6 +6,7 @@ import SentimentChart from '../components/SentimentChart';
 
 const Home = () => {
   const [homeData, setHomeData] = useState(null);
+  const [statsData, setStatsData] = useState(null);
   const [sentimentData, setSentimentData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -21,12 +22,12 @@ const Home = () => {
           const homeResponse = await api.get('/api/home-data/');
           console.log('Home data response:', homeResponse.data);
           setHomeData(homeResponse.data);
-          
+
           // Set sentiment data for chart if available
           if (homeResponse.data.overall_stats) {
             const stats = homeResponse.data.overall_stats;
             const totalStatements = stats.total_statements || 0;
-            
+
             if (totalStatements > 0) {
               setSentimentData({
                 total_statements: totalStatements,
@@ -80,17 +81,17 @@ const Home = () => {
         };
 
         setHomeData(combinedData);
-        
+
         // Set sentiment data for chart
         if (combinedData.overall_stats) {
           const stats = combinedData.overall_stats;
           const totalStatements = stats.total_statements || 0;
-          
+
           setSentimentData({
             total_statements: totalStatements,
             positive_count: stats.positive_count || 0,
             negative_count: stats.negative_count || 0,
-            neutral_count: stats.neutral_count || 0,
+            neutral_count: 0,
             average_sentiment: stats.average_sentiment || 0
           });
         }

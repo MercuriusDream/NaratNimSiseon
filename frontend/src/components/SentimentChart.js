@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
   // Transform and validate data
@@ -58,29 +58,6 @@ const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
     );
   }
 
-  // Function to calculate gradient color based on sentiment score
-  const getSentimentColor = (sentimentScore) => {
-    const normalizedScore = (sentimentScore + 1) / 2; // Normalize score to 0-1 range
-    const red = Math.round(255 * (1 - normalizedScore));
-    const green = Math.round(255 * normalizedScore);
-    const blue = 0;
-    return `rgb(${red}, ${green}, ${blue})`;
-  };
-
-  // Function to get fixed color for distribution categories
-  const getDistributionColor = (distributionType) => {
-    switch (distributionType) {
-      case 'positive':
-        return '#22C55E'; // Green
-      case 'neutral':
-        return '#6B7280'; // Grey
-      case 'negative':
-        return '#EF4444'; // Red
-      default:
-        return '#6B7280'; // Default grey
-    }
-  };
-
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -113,25 +90,19 @@ const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
     negative_count: item.negative_count
   }));
 
-  const BarChart = () => {
-    return (
+  return (
+    <div className="space-y-4">
+      <h2>{title}</h2>
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={barData} margin={{ top: 15, right: 30, left: 20, bottom: 5 }}>
+        <RechartsBarChart data={barData} margin={{ top: 15, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" />
           <YAxis />
           <Tooltip content={<CustomTooltip />} />
           <Legend />
           <Bar dataKey="value" fill="#8884d8" />
-        </BarChart>
+        </RechartsBarChart>
       </ResponsiveContainer>
-    );
-  };
-
-  return (
-    <div className="space-y-4">
-      <h2>{title}</h2>
-      <BarChart />
     </div>
   );
 };

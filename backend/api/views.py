@@ -1056,7 +1056,7 @@ def overall_sentiment_stats(request):
     try:
         time_range = request.query_params.get('time_range', 'all')
 
-        statements_qs = Statement.objects.all()
+        statements_qs = Statement.objects.filter(session__era_co__in=['22', '제22대'])
 
         # Apply time filter
         now = timezone.now()
@@ -1070,14 +1070,27 @@ def overall_sentiment_stats(request):
             statements_qs = statements_qs.filter(
                 session__conf_dt__gte=now.date() - timedelta(days=7))
 
-        if not statements_qs.exists():
+        # Get total statements count
+        total_statements = statements_qs.count()
+
+        if total_statements == 0:
             return Response({
-                'message': 'No statements found for the specified time range',
-                'stats': {}
+                'time_range': time_range,
+                'overall_stats': {
+                    'total_statements': 0,
+                    'average_sentiment': 0,
+                    'positive_count': 0,
+                    'neutral_count': 0,
+                    'negative_count': 0,
+                    'positive_percentage': 0,
+                    'negative_percentage': 0
+                },
+                'party_rankings': [],
+                'active_speakers': [],
+                'message': 'No statements found for the specified time range'
             })
 
         # Overall statistics
-        total_statements = statements_qs.count()
         avg_sentiment = statements_qs.aggregate(
             avg=Avg('sentiment_score'))['avg'] or 0
 
@@ -1086,39 +1099,36 @@ def overall_sentiment_stats(request):
         negative_count = statements_qs.filter(sentiment_score__lt=-0.3).count()
         neutral_count = total_statements - positive_count - negative_count
 
-        # Party sentiment ranking
-        party_stats = statements_qs.values('speaker__plpt_nm').annotate(
+        # Party sentiment ranking - filter out invalid party names
+        party_stats = statements_qs.exclude(
+            speaker__plpt_nm__in=['', ' ', '정보없음', '무소속']
+        ).values('speaker__plpt_nm').annotate(
             avg_sentiment=Avg('sentiment_score'),
             statement_count=Count('id'),
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-            negative_count=Count(
-                'id', filter=Q(sentiment_score__lt=-0.3))).filter(
-                    statement_count__gte=5).order_by('-avg_sentiment')
+            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+        ).filter(statement_count__gte=1).order_by('-avg_sentiment')[:10]
 
         # Most active speakers
-        speaker_stats = statements_qs.values(
-            'speaker__naas_nm', 'speaker__plpt_nm').annotate(
-                avg_sentiment=Avg('sentiment_score'),
-                statement_count=Count('id')).filter(
-                    statement_count__gte=3).order_by('-statement_count')[:20]
+        speaker_stats = statements_qs.exclude(
+            speaker__naas_nm__in=['', ' ', '정보없음']
+        ).values(
+            'speaker__naas_nm', 'speaker__plpt_nm'
+        ).annotate(
+            avg_sentiment=Avg('sentiment_score'),
+            statement_count=Count('id')
+        ).filter(statement_count__gte=1).order_by('-statement_count')[:20]
 
         return Response({
             'time_range': time_range,
             'overall_stats': {
-                'total_statements':
-                total_statements,
-                'average_sentiment':
-                round(avg_sentiment, 3),
-                'positive_count':
-                positive_count,
-                'neutral_count':
-                neutral_count,
-                'negative_count':
-                negative_count,
-                'positive_percentage':
-                round((positive_count / total_statements) * 100, 1),
-                'negative_percentage':
-                round((negative_count / total_statements) * 100, 1)
+                'total_statements': total_statements,
+                'average_sentiment': round(avg_sentiment, 3),
+                'positive_count': positive_count,
+                'neutral_count': neutral_count,
+                'negative_count': negative_count,
+                'positive_percentage': round((positive_count / total_statements) * 100, 1) if total_statements > 0 else 0,
+                'negative_percentage': round((negative_count / total_statements) * 100, 1) if total_statements > 0 else 0
             },
             'party_rankings': list(party_stats),
             'active_speakers': list(speaker_stats)
@@ -1126,8 +1136,21 @@ def overall_sentiment_stats(request):
 
     except Exception as e:
         logger.error(f"Error in overall sentiment stats: {e}")
-        return Response({'error': 'Failed to fetch sentiment statistics'},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({
+            'time_range': time_range,
+            'overall_stats': {
+                'total_statements': 0,
+                'average_sentiment': 0,
+                'positive_count': 0,
+                'neutral_count': 0,
+                'negative_count': 0,
+                'positive_percentage': 0,
+                'negative_percentage': 0
+            },
+            'party_rankings': [],
+            'active_speakers': [],
+            'error': 'Failed to fetch sentiment statistics'
+        }, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
