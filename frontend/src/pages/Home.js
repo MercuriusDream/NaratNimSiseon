@@ -1,175 +1,235 @@
-import React, { useEffect, useState } from 'react';
-import NavigationHeader from '../components/NavigationHeader';
-import HeroSection from '../components/HeroSection';
-import ContentSection from '../components/ContentSection';
-import Footer from '../components/Footer';
-import PartyCard from '../components/PartyCard';
-import MeetingCard from '../components/MeetingCard';
-import BillCard from '../components/BillCard';
-import api from '../api'; // Import the axios instance
-import { ENDPOINTS } from '../apiConfig'; // Import endpoint paths
+
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import api from '../api';
+import Layout from '../components/Layout';
+import SentimentChart from '../components/SentimentChart';
 
 const Home = () => {
-  const [parties, setParties] = useState([]);
-  const [meetings, setMeetings] = useState([]);
-  const [bills, setBills] = useState([]);
+  const [homeData, setHomeData] = useState({
+    recent_sessions: [],
+    recent_bills: [],
+    recent_statements: [],
+    overall_stats: {},
+    party_stats: [],
+    total_sessions: 0,
+    total_bills: 0,
+    total_speakers: 0
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null); // Clear previous errors
-
-        const [partyRes, meetingRes, billRes] = await Promise.all([
-          api.get(ENDPOINTS.PARTIES, { params: { page_size: 4 } }),
-          api.get(ENDPOINTS.SESSIONS, { params: { page_size: 3 } }),
-          api.get(ENDPOINTS.BILLS, { params: { page_size: 3 } }),
-        ]);
-
-        // Axios responses are in `response.data`
-        // DRF paginated responses have results in `response.data.results`
-        setParties(partyRes.data.results || partyRes.data || []);
-        setMeetings(meetingRes.data.results || meetingRes.data || []);
-        setBills(billRes.data.results || billRes.data || []);
-
-        // Note: Promise.all will fail if any request fails.
-        // The .ok check is not directly applicable here as Axios throws for non-2xx.
-        // The individual error state for partial data load is lost with Promise.all.
-        // If partial load is critical, separate try/catch for each api.get would be needed.
-
-      } catch (err) {
-        // Axios errors have a `response` object for API errors
-        const message = err.response?.data?.message || err.response?.data?.detail || err.message || '데이터를 불러오는 중 오류가 발생했습니다.';
-        setError(message);
-        console.error('Error fetching home data:', err);
-        // Set to empty arrays on error to prevent rendering issues
-        setParties([]);
-        setMeetings([]);
-        setBills([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    fetchHomeData();
   }, []);
+
+  const fetchHomeData = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/api/home/');
+      console.log('Home data response:', response.data);
+      setHomeData(response.data);
+      setError(null);
+    } catch (error) {
+      console.error('Error fetching home data:', error);
+      setError('데이터를 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getSentimentColor = (score) => {
+    if (score > 0.3) return 'text-green-600';
+    if (score < -0.3) return 'text-red-600';
+    return 'text-gray-600';
+  };
+
+  const getSentimentLabel = (score) => {
+    if (score > 0.3) return '긍정적';
+    if (score < -0.3) return '부정적';
+    return '중립적';
+  };
+
+  const formatScore = (score) => {
+    return (score || 0).toFixed(2);
+  };
 
   if (loading) {
     return (
-      <div className="flex overflow-hidden flex-col bg-white min-h-screen">
-        <NavigationHeader />
-        <main className="flex flex-col w-full">
-          <div className="flex items-center justify-center h-96 bg-gradient-to-b from-blue-50 to-white">
-            <div className="flex flex-col items-center gap-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
-              <p className="text-slate-600 font-medium">데이터를 불러오는 중...</p>
-            </div>
-          </div>
-        </main>
-        <Footer />
-      </div>
+      <Layout>
+        <div className="flex justify-center items-center min-h-screen">
+          <div className="text-lg">데이터를 불러오는 중...</div>
+        </div>
+      </Layout>
     );
   }
 
   if (error) {
     return (
-      <div className="flex overflow-hidden flex-col bg-white min-h-screen">
-        <NavigationHeader />
-        <main className="flex flex-col w-full">
-          <div className="flex items-center justify-center h-96 bg-gradient-to-b from-red-50 to-white">
-            <div className="text-center max-w-md">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-2">오류가 발생했습니다</h3>
-              <p className="text-red-600 mb-4">{error}</p>
-              <button 
-                onClick={() => window.location.reload()} 
-                className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors duration-200"
-              >
-                다시 시도
-              </button>
-            </div>
-          </div>
-        </main>
-        <Footer />
-      </div>
+      <Layout>
+        <div className="flex justify-center items-center min-h-screen">
+          <div className="text-red-600">{error}</div>
+        </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="flex overflow-hidden flex-col bg-white min-h-screen">
-      <NavigationHeader />
-      <main className="flex flex-col w-full">
-        <HeroSection />
-
-        {/* 주요 정당 소개 섹션 */}
-        <ContentSection
-          title="주요 정당 소개"
-          description="시민들이 알아야 할 정당들입니다."
-          buttonText="모든 정당 보기"
-          buttonLink="/parties"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
-            {parties.map((party) => (
-              <PartyCard
-                key={party.id}
-                id={party.id}
-                image={party.logo_url || '/logo192.png'}
-                title={party.name}
-                subtitle={party.slogan || ''}
-                description={party.description || ''}
-              />
-            ))}
+    <Layout>
+      <div className="space-y-8">
+        {/* Hero Section */}
+        <div className="bg-blue-600 text-white py-16">
+          <div className="max-w-7xl mx-auto px-4 text-center">
+            <h1 className="text-4xl font-bold mb-4">국회 발언 분석 시스템</h1>
+            <p className="text-xl">AI 기반 국회 발언 감성 분석 및 정책 동향 분석</p>
           </div>
-        </ContentSection>
+        </div>
 
-        {/* 최근 회의록 섹션 */}
-        <ContentSection
-          title="최근 회의록"
-          description="정치의 최신 동향을 확인하세요."
-          buttonText="모든 회의록 보기"
-          buttonLink="/sessions"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-            {meetings.map((meeting) => (
-              <MeetingCard
-                key={meeting.conf_id} // Use conf_id as key
-                id={meeting.conf_id}   // Pass conf_id as id
-                cmit_nm={meeting.cmit_nm} // Pass cmit_nm
-                conf_knd={meeting.conf_knd} // Pass conf_knd
-                conf_dt={meeting.conf_dt}   // Pass conf_dt
-                // description is removed as per MeetingCard changes
-              />
-            ))}
+        {/* Statistics Overview */}
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold text-gray-600">총 회의</h3>
+              <p className="text-3xl font-bold text-blue-600">{homeData.total_sessions}</p>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold text-gray-600">총 의안</h3>
+              <p className="text-3xl font-bold text-green-600">{homeData.total_bills}</p>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold text-gray-600">총 발언</h3>
+              <p className="text-3xl font-bold text-purple-600">{homeData.overall_stats.total_statements || 0}</p>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold text-gray-600">평균 감성</h3>
+              <p className={`text-3xl font-bold ${getSentimentColor(homeData.overall_stats.average_sentiment)}`}>
+                {formatScore(homeData.overall_stats.average_sentiment)}
+              </p>
+            </div>
           </div>
-        </ContentSection>
 
-        {/* 최근 의안 섹션 */}
-        <ContentSection
-          title="최근 의안"
-          description="주요 의안을 확인해보세요."
-          buttonText="모든 의안 보기"
-          buttonLink="/bills"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-            {bills.map((bill) => (
-              <BillCard
-                key={bill.bill_id}
-                id={bill.bill_id} // bill_id for navigation
-                title={bill.bill_nm}
-                // date prop removed from BillCard
-                description={''} // Pass empty string for description
-              />
-            ))}
+          {/* Sentiment Analysis Chart */}
+          {homeData.overall_stats.total_statements > 0 && (
+            <div className="bg-white p-6 rounded-lg shadow mb-8">
+              <h2 className="text-2xl font-bold mb-4">전체 감성 분석</h2>
+              <SentimentChart data={homeData.overall_stats} />
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Recent Statements with LLM Analysis */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h2 className="text-2xl font-bold mb-4">최근 발언 분석</h2>
+              {homeData.recent_statements && homeData.recent_statements.length > 0 ? (
+                <div className="space-y-4">
+                  {homeData.recent_statements.map((statement) => (
+                    <div key={statement.id} className="border-l-4 border-blue-500 pl-4 py-3 bg-gray-50 rounded">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 className="font-semibold text-blue-600">{statement.speaker_name}</h4>
+                          <p className="text-sm text-gray-600">{statement.speaker_party}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`font-semibold ${getSentimentColor(statement.sentiment_score)}`}>
+                            {getSentimentLabel(statement.sentiment_score)} ({formatScore(statement.sentiment_score)})
+                          </span>
+                          {statement.bill_relevance_score > 0 && (
+                            <p className="text-xs text-gray-500">
+                              의안 관련도: {formatScore(statement.bill_relevance_score)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-gray-700 text-sm mb-2">{statement.text}</p>
+                      {statement.bill_title && (
+                        <p className="text-xs text-blue-600">관련 의안: {statement.bill_title}</p>
+                      )}
+                      {statement.sentiment_reason && (
+                        <p className="text-xs text-gray-500 mt-1">분석: {statement.sentiment_reason}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500">아직 분석된 발언이 없습니다.</p>
+              )}
+            </div>
+
+            {/* Party Statistics */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h2 className="text-2xl font-bold mb-4">정당별 감성 통계</h2>
+              {homeData.party_stats && homeData.party_stats.length > 0 ? (
+                <div className="space-y-3">
+                  {homeData.party_stats.map((party, index) => (
+                    <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                      <div>
+                        <h4 className="font-semibold">{party.party_name}</h4>
+                        <p className="text-sm text-gray-600">
+                          의원 {party.member_count}명 · 발언 {party.statement_count}건
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`font-semibold ${getSentimentColor(party.avg_sentiment)}`}>
+                          {formatScore(party.avg_sentiment)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500">정당 통계를 불러올 수 없습니다.</p>
+              )}
+            </div>
+
+            {/* Recent Sessions */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h2 className="text-2xl font-bold mb-4">최근 회의</h2>
+              {homeData.recent_sessions && homeData.recent_sessions.length > 0 ? (
+                <div className="space-y-3">
+                  {homeData.recent_sessions.map((session) => (
+                    <Link
+                      key={session.id}
+                      to={`/sessions/${session.id}`}
+                      className="block p-3 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                    >
+                      <h4 className="font-semibold text-blue-600">{session.title}</h4>
+                      <p className="text-sm text-gray-600">{session.committee}</p>
+                      <p className="text-xs text-gray-500">
+                        발언 {session.statement_count}건 · 의안 {session.bill_count}건
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500">최근 회의가 없습니다.</p>
+              )}
+            </div>
+
+            {/* Recent Bills */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h2 className="text-2xl font-bold mb-4">최근 의안</h2>
+              {homeData.recent_bills && homeData.recent_bills.length > 0 ? (
+                <div className="space-y-3">
+                  {homeData.recent_bills.map((bill) => (
+                    <Link
+                      key={bill.id}
+                      to={`/bills/${bill.id}`}
+                      className="block p-3 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                    >
+                      <h4 className="font-semibold text-blue-600">{bill.title}</h4>
+                      <p className="text-sm text-gray-600">제안자: {bill.proposer}</p>
+                      <p className="text-xs text-gray-500">발언 {bill.statement_count}건</p>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500">최근 의안이 없습니다.</p>
+              )}
+            </div>
           </div>
-        </ContentSection>
-      </main>
-      <Footer />
-    </div>
+        </div>
+      </div>
+    </Layout>
   );
 };
 
