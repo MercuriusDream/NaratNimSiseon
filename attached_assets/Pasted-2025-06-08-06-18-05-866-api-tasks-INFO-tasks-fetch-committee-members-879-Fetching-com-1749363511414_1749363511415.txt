@@ -1,0 +1,16 @@
+2025-06-08 06:18:05,866 - api.tasks - INFO - tasks - fetch_committee_members - 879 - 🔍 Fetching committee members for: 외교통일위원회
+2025-06-08 06:18:07,324 - api.tasks - INFO - tasks - fetch_committee_members - 894 - 📊 Found 19 member records for 외교통일위원회
+2025-06-08 06:18:07,324 - api.tasks - INFO - tasks - fetch_committee_members - 941 - ✅ Successfully extracted 19 unique committee members for: 외교통일위원회
+2025-06-08 06:18:07,324 - api.tasks - INFO - tasks - fetch_committee_members - 950 - 📋 외교통일위원회 members: 권칠승, 김건, 김기웅, 김기현, 김석기 외 14명
+2025-06-08 06:18:07,325 - api.tasks - INFO - tasks - fetch_session_details - 1110 - 📋 Found 19 members in 외교통일위원회
+2025-06-08 06:18:07,370 - api.tasks - INFO - tasks - fetch_session_details - 1126 - ✅ Updated session details for: 52594 from VCONFDETAIL.
+2025-06-08 06:18:07,370 - api.tasks - INFO - tasks - is_celery_available - 226 - Celery broker_url not configured.
+2025-06-08 06:18:07,370 - api.tasks - INFO - tasks - fetch_session_bills - 1202 - 🔍 Fetching bills for session: 52594 (force=True, debug=False)
+2025-06-08 06:18:08,514 - api.tasks - INFO - tasks - fetch_session_bills - 1253 - ℹ️ No bills found from VCONFBILLLIST API for session 52594.
+2025-06-08 06:18:08,516 - api.tasks - INFO - tasks - is_celery_available - 226 - Celery broker_url not configured.
+2025-06-08 06:18:08,516 - api.tasks - INFO - tasks - process_session_pdf - 2379 - 📄 Processing PDF for session: 52594 (force=True, debug=False)
+2025-06-08 06:18:08,604 - api.tasks - INFO - tasks - process_session_pdf - 2414 - 📥 Downloading PDF from: https://record.assembly.go.kr/assembly/viewer/minutes/download/pdf.do?id=52594
+2025-06-08 06:18:16,262 - api.tasks - INFO - tasks - process_session_pdf - 2428 - 📥 PDF for session 52594 downloaded to temp_files/session_52594_1749363489.pdf
+2025-06-08 06:18:16,333 - api.tasks - INFO - tasks - process_session_pdf - 2442 - Extracting text from 83 pages in PDF for session 52594...
+2025-06-08 06:18:19,656 - api.tasks - INFO - tasks - process_session_pdf - 2451 - Processed 20/83 pages...
+2025-06-08 06:18:22,277 - api.tasks - INFO - tasks - process_session_pdf - 2451 - Processed 40/83 pages..
