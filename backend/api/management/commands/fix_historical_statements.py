@@ -77,19 +77,21 @@ class Command(BaseCommand):
                 '🔧 Step 2: Finding speakers with historical parties who made statements in 22nd Assembly...'
             ))
 
-        # Find speakers who have historical parties OR 정보없음 AND have 22nd Assembly statements
-        # Also find ALL speakers with these parties, even without statements
-        speakers_with_historical_parties = Speaker.objects.filter(
+        # Find speakers who have historical parties AND have 22nd Assembly statements
+        speakers_with_statements = Speaker.objects.filter(
+            statements__session__era_co='제22대'
+        ).filter(
             Q(plpt_nm__icontains='대한독립촉성국민회') | Q(plpt_nm__icontains='한나라당')
             | Q(plpt_nm__icontains='민주자유당') | Q(plpt_nm__icontains='민주정의당')
             | Q(plpt_nm__icontains='신민당') | Q(plpt_nm__icontains='정보없음')
             | Q(plpt_nm='정보없음') | Q(current_party__name__icontains='정보없음')
             | Q(current_party__name__icontains='한나라당')
             | Q(current_party__name='정보없음')
-            | Q(current_party__name='한나라당')).distinct()
+            | Q(current_party__name='한나라당')
+        ).distinct()
 
         self.stdout.write(
-            f'   Found {speakers_with_historical_parties.count()} speakers with historical parties who have 22nd Assembly statements'
+            f'   Found {speakers_with_statements.count()} speakers with historical parties who have 22nd Assembly statements'
         )
 
         # Process each speaker
@@ -97,19 +99,13 @@ class Command(BaseCommand):
         api_calls_made = 0
         removed_speakers = 0
 
-        for speaker in speakers_with_historical_parties:
+        for speaker in speakers_with_statements:
             statement_count = Statement.objects.filter(
                 speaker=speaker, session__era_co='제22대').count()
 
             self.stdout.write(
                 f'🔄 Processing {speaker.naas_nm} ({statement_count} statements in 22nd Assembly)'
             )
-
-            if statement_count == 0:
-                self.stdout.write(
-                    f'   ⚠️  No 22nd Assembly statements found for {speaker.naas_nm} - skipping'
-                )
-                pass
             self.stdout.write(f'   Current party info: {speaker.plpt_nm}')
             current_party_name = speaker.current_party.name if speaker.current_party else 'None'
             self.stdout.write(f'   Current party object: {current_party_name}')
