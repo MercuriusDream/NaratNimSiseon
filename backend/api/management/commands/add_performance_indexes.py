@@ -12,7 +12,7 @@ class Command(BaseCommand):
                 # Statement indexes
                 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_statement_session_id ON api_statement(session_id);',
                 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_statement_sentiment ON api_statement(sentiment_score) WHERE sentiment_score IS NOT NULL;',
-                'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_statement_speaker_party ON api_statement(speaker_id);',
+                'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_statement_speaker_id ON api_statement(speaker_id);',
                 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_statement_created_at ON api_statement(created_at DESC);',
 
                 # Session indexes  
