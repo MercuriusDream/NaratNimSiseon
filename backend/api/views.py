@@ -246,11 +246,12 @@ class BillViewSet(viewsets.ModelViewSet):
         if bill_name:
             queryset = queryset.filter(bill_nm__icontains=bill_name)
         if date_from:
-            queryset = queryset.filter(created_at__gte=date_from)
+            queryset = queryset.filter(session__conf_dt__gte=date_from)
         if date_to:
-            queryset = queryset.filter(created_at__lte=date_to)
+            queryset = queryset.filter(session__conf_dt__lte=date_to)
 
-        return queryset.order_by('-created_at')
+        # Order by session date (most recent first), then by creation time
+        return queryset.order_by('-session__conf_dt', '-created_at')
 
     def list(self, request, *args, **kwargs):
         """Override list to ensure consistent response format"""
@@ -792,9 +793,9 @@ def bill_list(request):
         if date_to:
             bills_qs = bills_qs.filter(session__conf_dt__lte=date_to)
 
-        # Pagination
+        # Pagination - order by session date first, then creation time
         paginator = StandardResultsSetPagination()
-        page = paginator.paginate_queryset(bills_qs.order_by('-created_at'),
+        page = paginator.paginate_queryset(bills_qs.order_by('-session__conf_dt', '-created_at'),
                                            request)
         serializer = BillSerializer(page, many=True)
 
@@ -1845,10 +1846,10 @@ def home_data(request):
                 'bill_count': bill_count
             })
 
-        # Get recent bills - simple query
+        # Get recent bills - simple query, ordered by session date
         recent_bills = Bill.objects.filter(
             session__era_co__in=['22', '제22대']
-        ).select_related('session').order_by('-created_at')[:5]
+        ).select_related('session').order_by('-session__conf_dt', '-created_at')[:5]
         
         bills_data = []
         for bill in recent_bills:

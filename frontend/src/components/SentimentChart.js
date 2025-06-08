@@ -6,75 +6,86 @@ const SentimentChart = ({ data }) => {
   // Handle different data structures
   let chartData = [];
 
-  if (data.party_rankings && Array.isArray(data.party_rankings)) {
-    // Overall sentiment stats data with party rankings
-    chartData = data.party_rankings.slice(0, 10);
-  } else if (data.party_analysis && Array.isArray(data.party_analysis)) {
-    // Bill sentiment data
-    chartData = data.party_analysis;
-  } else if (Array.isArray(data)) {
-    chartData = data;
-  } else if (data && typeof data === 'object') {
-    // Handle overall_stats object by creating a summary chart
-    if (data.total_statements && data.total_statements > 0) {
-      const totalStatements = data.total_statements;
+  if (data && typeof data === 'object') {
+    if (data.party_rankings && Array.isArray(data.party_rankings)) {
+      // Overall sentiment stats data with party rankings
+      chartData = data.party_rankings.slice(0, 10);
+    } else if (data.party_analysis && Array.isArray(data.party_analysis)) {
+      // Bill sentiment data
+      chartData = data.party_analysis;
+    } else if (Array.isArray(data)) {
+      chartData = data;
+    } else {
+      // Handle overall_stats object by creating a summary chart
+      const totalStatements = data.total_statements || 0;
       const positiveCount = data.positive_count || 0;
       const neutralCount = data.neutral_count || 0;
       const negativeCount = data.negative_count || 0;
 
-      // Calculate proportions as percentages
-      const positiveScore = positiveCount / totalStatements;
-      const neutralScore = neutralCount / totalStatements;
-      const negativeScore = negativeCount / totalStatements;
+      if (totalStatements > 0) {
+        // Calculate proportions as percentages
+        const positiveScore = positiveCount / totalStatements;
+        const neutralScore = neutralCount / totalStatements;
+        const negativeScore = negativeCount / totalStatements;
 
-      chartData = [
-        {
-          speaker__plpt_nm: '긍정적 발언',
-          party_name: '긍정적 발언',
-          avg_sentiment: positiveScore,
-          sentiment_score: positiveScore,
-          statement_count: positiveCount,
-          positive_count: positiveCount,
-          negative_count: 0,
-          proportion: (positiveScore * 100).toFixed(1) + '%',
-          isDistribution: true,
-          distributionType: 'positive'
-        },
-        {
-          speaker__plpt_nm: '중립적 발언',
-          party_name: '중립적 발언',
-          statement_count: neutralCount,
-          positive_count: 0,
-          negative_count: 0,
-          proportion: (neutralScore * 100).toFixed(1) + '%',
-          avg_sentiment: neutralScore,
-          isDistribution: true,
-          distributionType: 'neutral'
-        },
-        {
-          speaker__plpt_nm: '부정적 발언',
-          party_name: '부정적 발언',
-          avg_sentiment: -negativeScore,
-          sentiment_score: -negativeScore,
-          statement_count: negativeCount,
-          positive_count: 0,
-          negative_count: negativeCount,
-          proportion: (negativeScore * 100).toFixed(1) + '%',
-          isDistribution: true,
-          distributionType: 'negative'
-        }
-      ].filter(item => item.statement_count > 0); // Only show categories with data
-    } else {
-      chartData = [];
+        chartData = [
+          {
+            speaker__plpt_nm: '긍정적 발언',
+            party_name: '긍정적 발언',
+            avg_sentiment: positiveScore,
+            sentiment_score: positiveScore,
+            statement_count: positiveCount,
+            positive_count: positiveCount,
+            negative_count: 0,
+            proportion: (positiveScore * 100).toFixed(1) + '%',
+            isDistribution: true,
+            distributionType: 'positive'
+          },
+          {
+            speaker__plpt_nm: '중립적 발언',
+            party_name: '중립적 발언',
+            statement_count: neutralCount,
+            positive_count: 0,
+            negative_count: 0,
+            proportion: (neutralScore * 100).toFixed(1) + '%',
+            avg_sentiment: neutralScore,
+            isDistribution: true,
+            distributionType: 'neutral'
+          },
+          {
+            speaker__plpt_nm: '부정적 발언',
+            party_name: '부정적 발언',
+            avg_sentiment: -negativeScore,
+            sentiment_score: -negativeScore,
+            statement_count: negativeCount,
+            positive_count: 0,
+            negative_count: negativeCount,
+            proportion: (negativeScore * 100).toFixed(1) + '%',
+            isDistribution: true,
+            distributionType: 'negative'
+          }
+        ].filter(item => item.statement_count > 0); // Only show categories with data
+      } else {
+        chartData = [];
+      }
     }
+  } else if (Array.isArray(data)) {
+    chartData = data;
   } else {
     chartData = [];
   }
 
   if (!chartData || chartData.length === 0) {
+    // Show a default empty state chart instead of just text
     return (
-      <div className="text-center text-gray-600 py-4">
-        표시할 차트 데이터가 없습니다.
+      <div className="space-y-4">
+        <div className="text-center text-gray-600 py-8">
+          <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <p className="text-lg font-medium text-gray-900 mb-2">감성 분석 데이터 없음</p>
+          <p className="text-sm text-gray-500">분석할 발언 데이터가 아직 없습니다.</p>
+        </div>
       </div>
     );
   }

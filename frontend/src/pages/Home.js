@@ -24,11 +24,27 @@ const Home = () => {
           
           // Set sentiment data for chart if available
           if (homeResponse.data.overall_stats) {
-            setSentimentData({
-              positive: homeResponse.data.overall_stats.positive_count || 0,
-              negative: homeResponse.data.overall_stats.negative_count || 0,
-              neutral: homeResponse.data.overall_stats.neutral_count || 0
-            });
+            const stats = homeResponse.data.overall_stats;
+            const totalStatements = stats.total_statements || 0;
+            
+            if (totalStatements > 0) {
+              setSentimentData({
+                total_statements: totalStatements,
+                positive_count: stats.positive_count || 0,
+                negative_count: stats.negative_count || 0,
+                neutral_count: stats.neutral_count || 0,
+                average_sentiment: stats.average_sentiment || 0
+              });
+            } else {
+              // Set empty sentiment data to show proper empty state
+              setSentimentData({
+                total_statements: 0,
+                positive_count: 0,
+                negative_count: 0,
+                neutral_count: 0,
+                average_sentiment: 0
+              });
+            }
           }
           return;
         } catch (homeErr) {
@@ -67,10 +83,15 @@ const Home = () => {
         
         // Set sentiment data for chart
         if (combinedData.overall_stats) {
+          const stats = combinedData.overall_stats;
+          const totalStatements = stats.total_statements || 0;
+          
           setSentimentData({
-            positive: combinedData.overall_stats.positive_count || 0,
-            negative: combinedData.overall_stats.negative_count || 0,
-            neutral: combinedData.overall_stats.neutral_count || 0
+            total_statements: totalStatements,
+            positive_count: stats.positive_count || 0,
+            negative_count: stats.negative_count || 0,
+            neutral_count: stats.neutral_count || 0,
+            average_sentiment: stats.average_sentiment || 0
           });
         }
       } catch (err) {
