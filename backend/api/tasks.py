@@ -196,7 +196,7 @@ try:
     if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
         genai.configure(api_key=settings.GEMINI_API_KEY)
         model = genai.GenerativeModel(
-            'gemma-3-27b-it')  # Main model for detailed analysis
+            'gemini-2.0-flash-lite')  # Main model for detailed analysis
     else:
         logger.warning(
             "GEMINI_API_KEY not found or empty in settings. LLM features will be disabled."
