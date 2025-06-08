@@ -10,6 +10,7 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+
 class Command(BaseCommand):
     help = 'Revert historical party changes and fix speakers by calling API to get their actual 22nd Assembly party'
 
@@ -22,14 +23,17 @@ class Command(BaseCommand):
         parser.add_argument(
             '--revert-only',
             action='store_true',
-            help='Only revert the historical party changes without applying fixes',
+            help=
+            'Only revert the historical party changes without applying fixes',
         )
 
     def handle(self, *args, **options):
         dry_run = options.get('dry_run', False)
         revert_only = options.get('revert_only', False)
 
-        self.stdout.write(self.style.SUCCESS('🔄 Step 1: Reverting historical party markings...'))
+        self.stdout.write(
+            self.style.SUCCESS(
+                '🔄 Step 1: Reverting historical party markings...'))
 
         if dry_run:
             self.stdout.write('🔍 DRY RUN MODE - No changes will be made')
@@ -49,38 +53,44 @@ class Command(BaseCommand):
                             party.assembly_era = 22  # Revert back to 22nd Assembly
                             party.save()
                         reverted_parties += 1
-                        self.stdout.write(f'   ✅ Reverted {party_name} back to 22nd Assembly')
+                        self.stdout.write(
+                            f'   ✅ Reverted {party_name} back to 22nd Assembly'
+                        )
             except Exception as e:
                 self.stdout.write(f'   ❌ Error reverting {party_name}: {e}')
 
-        self.stdout.write(f'📊 Reverted {reverted_parties} parties back to assembly_era=22')
+        self.stdout.write(
+            f'📊 Reverted {reverted_parties} parties back to assembly_era=22')
 
         if revert_only:
             self.stdout.write('')
-            self.stdout.write(self.style.SUCCESS('✅ REVERT COMPLETE - Historical party markings have been undone'))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    '✅ REVERT COMPLETE - Historical party markings have been undone'
+                ))
             return
 
         # Now proceed with the proper fix
         self.stdout.write('')
-        self.stdout.write(self.style.SUCCESS('🔧 Step 2: Finding speakers with historical parties who made statements in 22nd Assembly...'))
+        self.stdout.write(
+            self.style.SUCCESS(
+                '🔧 Step 2: Finding speakers with historical parties who made statements in 22nd Assembly...'
+            ))
 
         # Find speakers who have historical parties OR 정보없음 AND have 22nd Assembly statements
         # Also find ALL speakers with these parties, even without statements
         speakers_with_historical_parties = Speaker.objects.filter(
-            Q(plpt_nm__icontains='대한독립촉성국민회') |
-            Q(plpt_nm__icontains='한나라당') |
-            Q(plpt_nm__icontains='민주자유당') |
-            Q(plpt_nm__icontains='민주정의당') |
-            Q(plpt_nm__icontains='신민당') |
-            Q(plpt_nm__icontains='정보없음') |
-            Q(plpt_nm='정보없음') |
-            Q(current_party__name__icontains='정보없음') |
-            Q(current_party__name__icontains='한나라당') |
-            Q(current_party__name='정보없음') |
-            Q(current_party__name='한나라당')
-        ).distinct()
+            Q(plpt_nm__icontains='대한독립촉성국민회') | Q(plpt_nm__icontains='한나라당')
+            | Q(plpt_nm__icontains='민주자유당') | Q(plpt_nm__icontains='민주정의당')
+            | Q(plpt_nm__icontains='신민당') | Q(plpt_nm__icontains='정보없음')
+            | Q(plpt_nm='정보없음') | Q(current_party__name__icontains='정보없음')
+            | Q(current_party__name__icontains='한나라당')
+            | Q(current_party__name='정보없음')
+            | Q(current_party__name='한나라당')).distinct()
 
-        self.stdout.write(f'   Found {speakers_with_historical_parties.count()} speakers with historical parties who have 22nd Assembly statements')
+        self.stdout.write(
+            f'   Found {speakers_with_historical_parties.count()} speakers with historical parties who have 22nd Assembly statements'
+        )
 
         # Process each speaker
         fixes_applied = 0
@@ -89,29 +99,42 @@ class Command(BaseCommand):
 
         for speaker in speakers_with_historical_parties:
             statement_count = Statement.objects.filter(
-                speaker=speaker,
-                session__era_co='제22대'
-            ).count()
+                speaker=speaker, session__era_co='제22대').count()
 
-            self.stdout.write(f'🔄 Processing {speaker.naas_nm} ({statement_count} statements in 22nd Assembly)')
+            self.stdout.write(
+                f'🔄 Processing {speaker.naas_nm} ({statement_count} statements in 22nd Assembly)'
+            )
+
+            if statement_count == 0:
+                self.stdout.write(
+                    f'   ⚠️  No 22nd Assembly statements found for {speaker.naas_nm} - skipping'
+                )
+                pass
             self.stdout.write(f'   Current party info: {speaker.plpt_nm}')
             current_party_name = speaker.current_party.name if speaker.current_party else 'None'
             self.stdout.write(f'   Current party object: {current_party_name}')
 
             # Special handling for 정보없음 speakers - remove them completely
-            if ('정보없음' in speaker.plpt_nm or 
-                (speaker.current_party and '정보없음' in speaker.current_party.name)):
-                
-                self.stdout.write(f'   🗑️  Found 정보없음 speaker: {speaker.naas_nm} - completely removing')
-                
+            if ('정보없음' in speaker.plpt_nm
+                    or (speaker.current_party
+                        and '정보없음' in speaker.current_party.name)):
+
+                self.stdout.write(
+                    f'   🗑️  Found 정보없음 speaker: {speaker.naas_nm} - completely removing'
+                )
+
                 if not dry_run:
                     # Delete ALL statements for this speaker (not just 22nd Assembly)
                     Statement.objects.filter(speaker=speaker).delete()
                     speaker.delete()
                     removed_speakers += 1
-                    self.stdout.write(f'   ✅ Completely removed {speaker.naas_nm} and all their statements')
+                    self.stdout.write(
+                        f'   ✅ Completely removed {speaker.naas_nm} and all their statements'
+                    )
                 else:
-                    self.stdout.write(f'   🔍 DRY RUN: Would completely remove {speaker.naas_nm}')
+                    self.stdout.write(
+                        f'   🔍 DRY RUN: Would completely remove {speaker.naas_nm}'
+                    )
                     removed_speakers += 1
                 continue
 
@@ -123,33 +146,45 @@ class Command(BaseCommand):
                 current_party = speaker.get_current_party_name()
 
                 # Check if the API party is different and is not a historical party
-                if (actual_22nd_party != current_party and 
-                    actual_22nd_party not in historical_parties and
-                    actual_22nd_party not in ['정당정보없음', '무소속', '', '정보없음']):
+                if (actual_22nd_party != current_party
+                        and actual_22nd_party not in historical_parties
+                        and actual_22nd_party
+                        not in ['정당정보없음', '무소속', '', '정보없음']):
 
-                    self.stdout.write(f'   ✅ Found correct 22nd Assembly party: {actual_22nd_party} (was: {current_party})')
+                    self.stdout.write(
+                        f'   ✅ Found correct 22nd Assembly party: {actual_22nd_party} (was: {current_party})'
+                    )
 
                     if not dry_run:
                         self.update_speaker_party(speaker, actual_22nd_party)
                         fixes_applied += 1
                     else:
-                        self.stdout.write(f'   🔍 DRY RUN: Would update {speaker.naas_nm} to {actual_22nd_party}')
+                        self.stdout.write(
+                            f'   🔍 DRY RUN: Would update {speaker.naas_nm} to {actual_22nd_party}'
+                        )
                         fixes_applied += 1
                 else:
-                    self.stdout.write(f'   ⚠️  API party not suitable for update: {actual_22nd_party}')
+                    self.stdout.write(
+                        f'   ⚠️  API party not suitable for update: {actual_22nd_party}'
+                    )
             else:
                 # For 한나라당 speakers, if API fails, try mapping to 국민의힘
-                if ('한나라당' in speaker.plpt_nm or 
-                    (speaker.current_party and '한나라당' in speaker.current_party.name)):
+                if ('한나라당' in speaker.plpt_nm
+                        or (speaker.current_party
+                            and '한나라당' in speaker.current_party.name)):
                     self.stdout.write(f'   🔄 한나라당 speaker - mapping to 국민의힘')
                     if not dry_run:
                         self.update_speaker_party(speaker, '국민의힘')
                         fixes_applied += 1
                     else:
-                        self.stdout.write(f'   🔍 DRY RUN: Would update {speaker.naas_nm} to 국민의힘')
+                        self.stdout.write(
+                            f'   🔍 DRY RUN: Would update {speaker.naas_nm} to 국민의힘'
+                        )
                         fixes_applied += 1
                 else:
-                    self.stdout.write(f'   ❌ Could not fetch 22nd Assembly data for {speaker.naas_nm}')
+                    self.stdout.write(
+                        f'   ❌ Could not fetch 22nd Assembly data for {speaker.naas_nm}'
+                    )
 
         # Summary
         self.stdout.write('')
@@ -158,21 +193,30 @@ class Command(BaseCommand):
         self.stdout.write(f'   API calls made: {api_calls_made}')
         if dry_run:
             self.stdout.write(f'   Would fix: {fixes_applied} speakers')
-            self.stdout.write(f'   Would remove: {removed_speakers} 정보없음 speakers')
+            self.stdout.write(
+                f'   Would remove: {removed_speakers} 정보없음 speakers')
         else:
             self.stdout.write(f'   Fixed: {fixes_applied} speakers')
             self.stdout.write(f'   Removed: {removed_speakers} 정보없음 speakers')
 
         self.stdout.write('')
         if dry_run:
-            self.stdout.write(self.style.SUCCESS('✅ DRY RUN COMPLETE - Use --dry-run=false to apply changes'))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    '✅ DRY RUN COMPLETE - Use --dry-run=false to apply changes'
+                ))
         else:
-            self.stdout.write(self.style.SUCCESS('✅ FIXES COMPLETE - Historical parties reverted and speakers updated'))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    '✅ FIXES COMPLETE - Historical parties reverted and speakers updated'
+                ))
 
     def fetch_22nd_assembly_party(self, speaker_name):
         """Fetch speaker's 22nd Assembly party from ALLNAMEMBER API"""
         try:
-            if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            if not hasattr(
+                    settings,
+                    'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
                 logger.error("ASSEMBLY_API_KEY not configured")
                 return None
 
@@ -202,13 +246,16 @@ class Command(BaseCommand):
 
                 # Check if this is 22nd Assembly data
                 if ('22' in era or '제22대' in era) and party_name:
-                    self.stdout.write(f'      🌐 API returned 22nd Assembly party: {party_name} (Era: {era})')
+                    self.stdout.write(
+                        f'      🌐 API returned 22nd Assembly party: {party_name} (Era: {era})'
+                    )
                     return party_name
 
             return None
 
         except Exception as e:
-            logger.error(f"Error fetching speaker details for {speaker_name}: {e}")
+            logger.error(
+                f"Error fetching speaker details for {speaker_name}: {e}")
             return None
 
     def update_speaker_party(self, speaker, new_party_name):
@@ -221,11 +268,11 @@ class Command(BaseCommand):
                     defaults={
                         'description': f'{new_party_name} - 제22대 국회',
                         'assembly_era': 22
-                    }
-                )
+                    })
 
                 if created:
-                    self.stdout.write(f'      ✨ Created new party: {new_party_name}')
+                    self.stdout.write(
+                        f'      ✨ Created new party: {new_party_name}')
 
                 # Update speaker's current party
                 speaker.current_party = correct_party
@@ -236,15 +283,15 @@ class Command(BaseCommand):
 
                 # Update party history
                 SpeakerPartyHistory.objects.filter(speaker=speaker).delete()
-                SpeakerPartyHistory.objects.create(
-                    speaker=speaker,
-                    party=correct_party,
-                    order=0,
-                    is_current=True
-                )
+                SpeakerPartyHistory.objects.create(speaker=speaker,
+                                                   party=correct_party,
+                                                   order=0,
+                                                   is_current=True)
 
-                self.stdout.write(f'      ✅ Updated {speaker.naas_nm} to {new_party_name}')
+                self.stdout.write(
+                    f'      ✅ Updated {speaker.naas_nm} to {new_party_name}')
 
         except Exception as e:
             logger.error(f"Error updating speaker {speaker.naas_nm}: {e}")
-            self.stdout.write(f'      ❌ Failed to update {speaker.naas_nm}: {e}')
+            self.stdout.write(
+                f'      ❌ Failed to update {speaker.naas_nm}: {e}')
