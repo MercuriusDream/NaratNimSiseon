@@ -2990,17 +2990,33 @@ def process_pdf_text_for_statements(full_text,
             segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
 
         bill_segmentation_prompt = f"""
-국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
+국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간(시작 인덱스 기준)을 나누어주세요.
 
-제공된 의안 목록:
+제공된 의안(법안) 목록:
 {chr(10).join([f"- {bill}" for bill in bill_names_list])}
+
+아래 회의록 텍스트에서 각 의안별 논의가 시작되는 위치(문자 인덱스)를 찾아주세요.
 
 회의록 텍스트:
 ---
-{full_text}
+{segmentation_text}
 ---
 
-각 의안에 대한 논의 시작 지점을 알려주세요. JSON 형식 응답:
+아래와 같은 JSON 형식으로만 응답하세요 (설명 없이):
+{
+  "z": [
+    {
+      "a": "의안명1",
+      "b": 1234,
+      "c": 0.95
+    },
+    ...
+  ]
+}
+
+- 각 의안이 회의록에서 논의되지 않았다면 "b"는 -1, "c"는 0.0으로 해주세요.
+- 반드시 제공된 의안 목록의 모든 항목에 대해 결과를 반환하세요.
+- 응답에는 JSON 외의 다른 텍스트(설명, 주석 등)를 포함하지 마세요.
 """
 
         try:
@@ -3011,7 +3027,7 @@ def process_pdf_text_for_statements(full_text,
                     "```json", "").replace("```", "").strip()
                 seg_data = json.loads(seg_text_cleaned)
                 bill_segments_from_llm = seg_data.get(
-                    "bill_discussion_segments", [])
+                    "z", [])
                 if bill_segments_from_llm:
                     logger.info(
                         f"LLM identified {len(bill_segments_from_llm)} potential bill discussion segments."
@@ -3034,9 +3050,9 @@ def process_pdf_text_for_statements(full_text,
                 for i, bill_name in enumerate(bill_names_list):
                     start_idx = i * text_per_bill
                     bill_segments_from_llm.append({
-                        "bill_name_identified": bill_name,
-                        "discussion_start_idx": start_idx,
-                        "confidence": 0.5
+                        "a": bill_name,
+                        "b": start_idx,
+                        "c": 0.5
                     })
                 logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
         except Exception as e_seg:
@@ -3050,9 +3066,9 @@ def process_pdf_text_for_statements(full_text,
                 for i, bill_name in enumerate(bill_names_list):
                     start_idx = i * text_per_bill
                     bill_segments_from_llm.append({
-                        "bill_name_identified": bill_name,
-                        "discussion_start_idx": start_idx,
-                        "confidence": 0.5
+                        "a": bill_name,
+                        "b": start_idx,
+                        "c": 0.5
                     })
                 logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
 
@@ -3061,30 +3077,30 @@ def process_pdf_text_for_statements(full_text,
     if bill_segments_from_llm:
         valid_segments_for_sort = []
         for seg_info in bill_segments_from_llm:
-            start_idx = seg_info.get("discussion_start_idx")
+            start_idx = seg_info.get("b")
             if start_idx is not None and isinstance(
                     start_idx, int) and 0 <= start_idx < len(full_text):
-                seg_info['start_index'] = start_idx
+                seg_info['b'] = start_idx
                 valid_segments_for_sort.append(seg_info)
 
         # Sort by start_index
-        valid_segments_for_sort.sort(key=lambda x: x['start_index'])
+        valid_segments_for_sort.sort(key=lambda x: x['b'])
 
         # Now define the actual text for each segment
         for i, current_seg_info in enumerate(valid_segments_for_sort):
-            segment_text_start_index = current_seg_info['start_index']
+            segment_text_start_index = current_seg_info['b']
             segment_text_end_index = len(full_text)  # Default to end
 
             if i + 1 < len(
                     valid_segments_for_sort):  # If there's a next segment
                 next_segment_start_index = valid_segments_for_sort[
-                    i + 1]['start_index']
+                    i + 1]['b']
                 segment_text_end_index = next_segment_start_index
 
             segment_actual_text = full_text[
                 segment_text_start_index:segment_text_end_index]
             sorted_segments_with_text.append({
-                "bill_name":
+                "a":
                 current_seg_info.get("bill_name_identified",
                                      "Unknown Bill Segment"),
                 "text":
