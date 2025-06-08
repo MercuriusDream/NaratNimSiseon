@@ -143,7 +143,7 @@ const SentimentDashboard = ({ billId = null }) => {
         </div>
       )}
 
-      {sentimentData && sentimentData.party_rankings && sentimentData.party_rankings.length > 0 && (
+      {sentimentData && Array.isArray(sentimentData.party_rankings) && sentimentData.party_rankings.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold mb-4">정당별 감성 순위</h3>
           <div className="space-y-3">
@@ -166,7 +166,7 @@ const SentimentDashboard = ({ billId = null }) => {
         </div>
       )}
 
-      {sentimentData && sentimentData.active_speakers && sentimentData.active_speakers.length > 0 && (
+      {sentimentData && Array.isArray(sentimentData.active_speakers) && sentimentData.active_speakers.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold mb-4">활동적인 발언자</h3>
           <div className="space-y-3">
@@ -189,7 +189,7 @@ const SentimentDashboard = ({ billId = null }) => {
         </div>
       )}
 
-      {sentimentData && sentimentData.recent_statements && sentimentData.recent_statements.length > 0 && (
+      {sentimentData && Array.isArray(sentimentData.recent_statements) && sentimentData.recent_statements.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold mb-4">최근 주요 발언</h3>
           <div className="space-y-4">
@@ -212,7 +212,12 @@ const SentimentDashboard = ({ billId = null }) => {
         </div>
       )}
 
-      {(!sentimentData || (!sentimentData.overall_stats && !sentimentData.party_analysis)) && !loading && !error && (
+      {(!sentimentData || (
+        !sentimentData.overall_stats && 
+        !sentimentData.party_analysis && 
+        !sentimentData.party_rankings && 
+        (!sentimentData.party_rankings || sentimentData.party_rankings.length === 0)
+      )) && !loading && !error && (
         <div className="bg-white rounded-lg shadow p-6 text-center text-gray-600">
           표시할 감성 데이터가 없습니다.
         </div>

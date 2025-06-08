@@ -36,6 +36,7 @@ urlpatterns = [
     path('api/analytics/category/', views.category_analytics, name='category_analytics'),
     path('api/analytics/category/<int:category_id>/trends/', views.category_trend_analysis, name='category_trend_analysis'),
     path('api/analytics/overall-sentiment/', views.overall_sentiment_stats, name='overall_sentiment_stats'),
+    path('api/analytics/sentiment/', views.overall_sentiment_stats, name='sentiment_stats'),
     path('api/analytics/sentiment/stats/', views.overall_sentiment_stats, name='overall_sentiment_stats_alt'),
     path('api/analytics/sentiment/by-party-topic/', views.sentiment_by_party_and_topic, name='sentiment_by_party_and_topic'),
     path('api/analytics/sentiment/by-category/', views.category_sentiment_analysis, name='category_sentiment_analysis'),

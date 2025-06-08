@@ -30,6 +30,7 @@ function App() {
           <Route path="/speakers" element={<SpeakerList />} />
           <Route path="/speakers/:id" element={<SpeakerDetail />} />
           <Route path="/sentiment" element={<SentimentAnalysis />} />
+        <Route path="/analytics" element={<SentimentAnalysis />} />
           <Route path="/statements" element={<StatementList />} />
         </Routes>
       </div>

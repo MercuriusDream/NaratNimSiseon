@@ -6,16 +6,18 @@ const SentimentChart = ({ data }) => {
   // Handle different data structures
   let chartData = [];
 
-  if (data.party_rankings) {
+  if (data.party_rankings && Array.isArray(data.party_rankings)) {
     // Overall sentiment stats data
     chartData = data.party_rankings.slice(0, 10);
-  } else if (data.party_analysis) {
+  } else if (data.party_analysis && Array.isArray(data.party_analysis)) {
     // Bill sentiment data
     chartData = data.party_analysis;
   } else if (Array.isArray(data)) {
     chartData = data;
-  } else {
+  } else if (data && typeof data === 'object') {
     chartData = [data];
+  } else {
+    chartData = [];
   }
 
   if (!chartData || chartData.length === 0) {
