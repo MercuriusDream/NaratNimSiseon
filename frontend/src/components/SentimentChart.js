@@ -17,33 +17,46 @@ const SentimentChart = ({ data }) => {
   } else if (data && typeof data === 'object') {
     // Handle overall_stats object by creating a summary chart
     if (data.total_statements && data.total_statements > 0) {
+      const totalStatements = data.total_statements;
+      const positiveCount = data.positive_count || 0;
+      const neutralCount = data.neutral_count || 0;
+      const negativeCount = data.negative_count || 0;
+      
+      // Calculate proportions as sentiment scores
+      const positiveScore = positiveCount / totalStatements;
+      const neutralScore = neutralCount / totalStatements;
+      const negativeScore = negativeCount / totalStatements;
+      
       chartData = [
         {
           speaker__plpt_nm: '긍정적 발언',
           party_name: '긍정적 발언',
-          avg_sentiment: 0.5,
-          sentiment_score: 0.5,
-          statement_count: data.positive_count || 0,
-          positive_count: data.positive_count || 0,
-          negative_count: 0
+          avg_sentiment: positiveScore,
+          sentiment_score: positiveScore,
+          statement_count: positiveCount,
+          positive_count: positiveCount,
+          negative_count: 0,
+          proportion: (positiveScore * 100).toFixed(1) + '%'
         },
         {
           speaker__plpt_nm: '중립적 발언',
           party_name: '중립적 발언', 
-          avg_sentiment: 0,
-          sentiment_score: 0,
-          statement_count: data.neutral_count || 0,
+          avg_sentiment: neutralScore * 0.5, // Scale neutral to middle range
+          sentiment_score: neutralScore * 0.5,
+          statement_count: neutralCount,
           positive_count: 0,
-          negative_count: 0
+          negative_count: 0,
+          proportion: (neutralScore * 100).toFixed(1) + '%'
         },
         {
           speaker__plpt_nm: '부정적 발언',
           party_name: '부정적 발언',
-          avg_sentiment: -0.5,
-          sentiment_score: -0.5,
-          statement_count: data.negative_count || 0,
+          avg_sentiment: -negativeScore,
+          sentiment_score: -negativeScore,
+          statement_count: negativeCount,
           positive_count: 0,
-          negative_count: data.negative_count || 0
+          negative_count: negativeCount,
+          proportion: (negativeScore * 100).toFixed(1) + '%'
         }
       ].filter(item => item.statement_count > 0); // Only show categories with data
     } else {
@@ -108,10 +121,13 @@ const SentimentChart = ({ data }) => {
               {item.statement_count && (
                 <span>발언 수: {item.statement_count}건</span>
               )}
-              {item.positive_count !== undefined && (
+              {item.proportion && (
+                <span>비율: {item.proportion}</span>
+              )}
+              {item.positive_count !== undefined && item.positive_count > 0 && (
                 <span>긍정: {item.positive_count}건</span>
               )}
-              {item.negative_count !== undefined && (
+              {item.negative_count !== undefined && item.negative_count > 0 && (
                 <span>부정: {item.negative_count}건</span>
               )}
             </div>
