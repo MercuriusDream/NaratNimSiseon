@@ -587,14 +587,8 @@ class PartyViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.error(f"Error triggering additional data fetch: {e}")
 
-            # Define problematic party names to exclude
-            problematic_parties = [
-                '대한독립촉성국민회', '한나라당', '민주자유당', '정보없음', 
-                '민주정의당', '신민당', '바른정당', '한국당', '무소속', '', ' '
-            ]
-
-            # Get only 22nd Assembly parties and enhance with statistics, excluding problematic ones
-            parties = Party.objects.filter(assembly_era=22).exclude(name__in=problematic_parties)
+            # Get only 22nd Assembly parties and enhance with statistics
+            parties = Party.objects.filter(assembly_era=22)
             party_data = []
 
             for party in parties:

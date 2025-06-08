@@ -12,7 +12,7 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
-    help = 'Fix speakers with historical parties by analyzing their statements and fetching actual 22nd Assembly data'
+    help = 'Fix speakers with historical parties by calling API to get their actual 22nd Assembly party'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -30,13 +30,13 @@ class Command(BaseCommand):
             '신민당', '바른정당', '한국당', '정보없음'
         ]
 
-        self.stdout.write(self.style.SUCCESS('🔧 Fixing historical parties using statement analysis...'))
+        self.stdout.write(self.style.SUCCESS('🔧 Finding speakers with historical parties and updating with 22nd Assembly data...'))
         self.stdout.write('')
 
         if dry_run:
             self.stdout.write('🔍 DRY RUN MODE - No changes will be made')
 
-        # Step 1: Find all speakers who have statements in 22nd Assembly and have any historical party in their plpt_nm
+        # Step 1: Find speakers who have historical parties in their plpt_nm AND have 22nd Assembly statements
         self.stdout.write('📊 Step 1: Finding speakers with historical parties who have 22nd Assembly statements...')
 
         # Build a complex Q query to find speakers with any historical party in their plpt_nm
@@ -52,7 +52,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f'   Found {problematic_speakers.count()} speakers with historical parties who have 22nd Assembly statements')
 
-        # Step 2: Process each speaker
+        # Step 2: For each speaker, call the API to get their actual 22nd Assembly party
         fixes_applied = 0
         api_calls_made = 0
 
@@ -78,42 +78,27 @@ class Command(BaseCommand):
                 continue
 
             # Fetch actual data from API
-            actual_party = self.fetch_speaker_from_api(speaker.naas_nm)
+            actual_22nd_party = self.fetch_22nd_assembly_party(speaker.naas_nm)
             
-            if actual_party:
+            if actual_22nd_party:
                 api_calls_made += 1
                 current_assigned_party = speaker.get_current_party_name()
                 
-                if actual_party != current_assigned_party and actual_party not in historical_parties:
-                    self.stdout.write(f'   ✅ Found correct party: {actual_party} (was: {current_assigned_party})')
+                if actual_22nd_party != current_assigned_party and actual_22nd_party not in historical_parties:
+                    self.stdout.write(f'   ✅ Found correct 22nd Assembly party: {actual_22nd_party} (was: {current_assigned_party})')
                     
                     if not dry_run:
-                        self.update_speaker_party(speaker, actual_party)
+                        self.update_speaker_party(speaker, actual_22nd_party)
                         fixes_applied += 1
                     else:
-                        self.stdout.write(f'   🔍 DRY RUN: Would update to {actual_party}')
+                        self.stdout.write(f'   🔍 DRY RUN: Would update to {actual_22nd_party}')
                         fixes_applied += 1
                 else:
-                    self.stdout.write(f'   ⚠️  API party matches current or is also historical: {actual_party}')
+                    self.stdout.write(f'   ⚠️  API party matches current or is also historical: {actual_22nd_party}')
             else:
-                self.stdout.write(f'   ❌ Could not fetch API data for {speaker.naas_nm}')
+                self.stdout.write(f'   ❌ Could not fetch 22nd Assembly data for {speaker.naas_nm}')
 
-        # Step 3: Clean up party statistics by removing problematic parties from view
-        self.stdout.write('')
-        self.stdout.write('🧹 Step 3: Updating party statistics...')
-        
-        if not dry_run:
-            # Mark historical parties for exclusion in statistics
-            for party_name in historical_parties:
-                try:
-                    party = Party.objects.get(name=party_name)
-                    party.assembly_era = 0  # Mark as historical
-                    party.save()
-                    self.stdout.write(f'   📋 Marked {party_name} as historical')
-                except Party.DoesNotExist:
-                    pass
-
-        # Step 4: Summary
+        # Step 3: Summary
         self.stdout.write('')
         self.stdout.write('📊 Summary:')
         self.stdout.write(f'   API calls made: {api_calls_made}')
@@ -126,10 +111,10 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.SUCCESS('✅ DRY RUN COMPLETE - No changes made'))
         else:
-            self.stdout.write(self.style.SUCCESS('✅ HISTORICAL PARTY FIXES COMPLETE'))
+            self.stdout.write(self.style.SUCCESS('✅ SPEAKER PARTY FIXES COMPLETE'))
 
-    def fetch_speaker_from_api(self, speaker_name):
-        """Fetch speaker details from ALLNAMEMBER API to get actual party"""
+    def fetch_22nd_assembly_party(self, speaker_name):
+        """Fetch speaker's 22nd Assembly party from ALLNAMEMBER API"""
         try:
             if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
                 logger.error("ASSEMBLY_API_KEY not configured")
@@ -140,7 +125,7 @@ class Command(BaseCommand):
                 "KEY": settings.ASSEMBLY_API_KEY,
                 "NAAS_NM": speaker_name,
                 "Type": "json",
-                "pSize": 5
+                "pSize": 10  # Get more results to find 22nd Assembly specifically
             }
 
             response = requests.get(url, params=params, timeout=30)
@@ -154,24 +139,18 @@ class Command(BaseCommand):
             if not member_data_list:
                 return None
 
-            # Look for 22nd Assembly member specifically
+            # Look specifically for 22nd Assembly member
             for member_data in member_data_list:
                 era = member_data.get('GTELT_ERACO', '')
+                # Check if this is 22nd Assembly data
                 if '22' in era or '제22대' in era:
                     party_name = member_data.get('PLPT_NM', '')
-                    if party_name and party_name != '정당정보없음':
-                        self.stdout.write(f'      🌐 API returned: {party_name} (Era: {era})')
+                    if party_name and party_name != '정당정보없음' and party_name != '':
+                        self.stdout.write(f'      🌐 API returned 22nd Assembly party: {party_name} (Era: {era})')
                         return party_name
 
-            # If no 22nd Assembly specific data, use the first result
-            first_member = member_data_list[0]
-            party_name = first_member.get('PLPT_NM', '')
-            era = first_member.get('GTELT_ERACO', '')
-            
-            if party_name and party_name != '정당정보없음':
-                self.stdout.write(f'      🌐 API returned (general): {party_name} (Era: {era})')
-                return party_name
-
+            # If no specific 22nd Assembly data found, log this
+            self.stdout.write(f'      ⚠️  No 22nd Assembly data found in API response for {speaker_name}')
             return None
 
         except requests.exceptions.RequestException as e:
@@ -184,7 +163,7 @@ class Command(BaseCommand):
         return None
 
     def update_speaker_party(self, speaker, new_party_name):
-        """Update speaker's party information"""
+        """Update speaker's party information with the correct 22nd Assembly party"""
         try:
             with transaction.atomic():
                 # Get or create the correct party
@@ -199,18 +178,26 @@ class Command(BaseCommand):
                 # Update speaker's current party
                 speaker.current_party = correct_party
                 
-                # Update the plpt_nm field to reflect the correct current party
-                # Keep historical parties but make sure current party is at the end
+                # Update the plpt_nm field - replace historical parties with correct current party
                 party_list = speaker.get_party_list()
                 
-                # Remove the new party if it's already in the list
-                party_list = [p for p in party_list if p != new_party_name]
+                # Remove historical parties and add the correct current party
+                historical_parties = [
+                    '대한독립촉성국민회', '한나라당', '민주자유당', '민주정의당',
+                    '신민당', '바른정당', '한국당', '정보없음'
+                ]
+                
+                # Filter out historical parties
+                updated_party_list = [p for p in party_list if p not in historical_parties]
+                
+                # Remove the new party if it's already in the list to avoid duplicates
+                updated_party_list = [p for p in updated_party_list if p != new_party_name]
                 
                 # Add the correct party as the most recent
-                party_list.append(new_party_name)
+                updated_party_list.append(new_party_name)
                 
                 # Update the plpt_nm field
-                speaker.plpt_nm = '/'.join(party_list)
+                speaker.plpt_nm = '/'.join(updated_party_list)
                 speaker.save()
 
                 # Update party history
@@ -219,12 +206,12 @@ class Command(BaseCommand):
                     speaker=speaker,
                     party=correct_party,
                     defaults={
-                        'order': len(party_list) - 1,
+                        'order': len(updated_party_list) - 1,
                         'is_current': True
                     }
                 )
 
-                self.stdout.write(f'      ✅ Updated {speaker.naas_nm} to {new_party_name}')
+                self.stdout.write(f'      ✅ Updated {speaker.naas_nm} from {"/".join(party_list)} to {speaker.plpt_nm}')
 
         except Exception as e:
             logger.error(f"Error updating speaker {speaker.naas_nm}: {e}")
