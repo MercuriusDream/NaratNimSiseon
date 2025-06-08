@@ -55,19 +55,22 @@ class SessionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         try:
-            # Start with simple base queryset first
-            base_queryset = Session.objects.select_related().prefetch_related()
+            # Simple, fast queryset - no complex joins
+            base_queryset = Session.objects.only(
+                'conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 
+                'conf_knd', 'cmit_nm', 'title', 'created_at'
+            )
             
-            # Apply era filter first for better performance
+            # Apply era filter first - default to 22nd Assembly
             era_co = self.request.query_params.get('era_co')
             if era_co and era_co not in ['all']:
                 if era_co in ['22', '제22대']:
-                    base_queryset = base_queryset.filter(Q(era_co='22') | Q(era_co='제22대'))
+                    base_queryset = base_queryset.filter(era_co__in=['22', '제22대'])
                 else:
-                    base_queryset = base_queryset.filter(Q(era_co=era_co) | Q(era_co=f'제{era_co}대'))
+                    base_queryset = base_queryset.filter(era_co=era_co)
             else:
-                # Default to 22nd Assembly for better performance - but check if exists first
-                base_queryset = base_queryset.filter(Q(era_co='22') | Q(era_co='제22대'))
+                # Always default to 22nd Assembly
+                base_queryset = base_queryset.filter(era_co__in=['22', '제22대'])
                 
             # Apply other filters
             sess = self.request.query_params.get('sess')
@@ -93,25 +96,56 @@ class SessionViewSet(viewsets.ModelViewSet):
             return base_queryset.order_by('-conf_dt')
         except Exception as e:
             logger.error(f"Error in SessionViewSet get_queryset: {e}")
-            return Session.objects.all().order_by('-conf_dt')
+            # Return empty queryset instead of all sessions to prevent timeout
+            return Session.objects.none()
 
     def list(self, request, *args, **kwargs):
         try:
             queryset = self.filter_queryset(self.get_queryset())
+            
+            # Ensure we always return a consistent format
+            if not queryset.exists():
+                return Response({
+                    'count': 0,
+                    'next': None,
+                    'previous': None,
+                    'results': []
+                })
 
-            # Limit queryset to prevent timeout
-            queryset = queryset[:50]  # Limit to 50 sessions max
+            # Limit to prevent timeout
+            queryset = queryset[:20]  # Even smaller limit for better performance
             
             page = self.paginate_queryset(queryset)
             if page is not None:
                 serializer = self.get_serializer(page, many=True)
-                return self.get_paginated_response(serializer.data)
+                response_data = self.get_paginated_response(serializer.data)
+                # Ensure results is always a list
+                if 'results' not in response_data.data:
+                    response_data.data['results'] = []
+                return response_data
                 
             serializer = self.get_serializer(queryset, many=True)
-            return Response(serializer.data)
+            serialized_data = serializer.data
+            
+            # Ensure we always return a list
+            if not isinstance(serialized_data, list):
+                serialized_data = []
+                
+            return Response({
+                'count': len(serialized_data),
+                'next': None,
+                'previous': None,
+                'results': serialized_data
+            })
         except Exception as e:
             logger.error(f"Error in SessionViewSet list: {e}")
-            return Response([], status=200)
+            # Always return consistent format even on error
+            return Response({
+                'count': 0,
+                'next': None,
+                'previous': None,
+                'results': []
+            }, status=200)
 
     @action(detail=True, methods=['get'])
     @api_action_wrapper(log_prefix="Fetching bills for session",
@@ -1750,19 +1784,27 @@ def stats_overview(request):
 def home_data(request):
     """Get aggregated data for home page with simple ORM queries"""
     try:
-        # Get recent sessions - keep it simple
+        # Get recent sessions - keep it simple and fast
         recent_sessions = Session.objects.filter(
             era_co__in=['22', '제22대']
         ).only('conf_id', 'title', 'conf_dt', 'cmit_nm', 'era_co', 'sess', 'dgr').order_by('-conf_dt')[:5]
         
         sessions_data = []
         for session in recent_sessions:
+            # Handle missing session data gracefully
+            title = session.title
+            if not title:
+                era = session.era_co or '22'
+                sess = session.sess or '1'
+                dgr = session.dgr or '1'
+                title = f'제{era}대 {sess}회 {dgr}차'
+            
             sessions_data.append({
                 'id': session.conf_id,
-                'title': session.title or f'제{session.era_co}대 {session.sess}회 {session.dgr}차',
+                'title': title,
                 'date': session.conf_dt.isoformat() if session.conf_dt else None,
                 'committee': session.cmit_nm or '',
-                'statement_count': 0,  # We'll skip counts for now to improve performance
+                'statement_count': 0,  # Skip for performance
                 'bill_count': 0
             })
 
