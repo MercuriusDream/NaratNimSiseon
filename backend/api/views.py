@@ -1641,10 +1641,10 @@ def sentiment_analysis_list(request):
 
 
 @api_view(['GET'])
-def session_sentiment_by_party(request, session_id):
+def session_sentiment_by_party(request, pk):
     """Get sentiment analysis by party for a specific session"""
     try:
-        session = get_object_or_404(Session, conf_id=session_id)
+        session = get_object_or_404(Session, conf_id=pk)
         
         # Get statements for this session
         statements = Statement.objects.filter(
@@ -1721,7 +1721,7 @@ def session_sentiment_by_party(request, session_id):
         logger.error(f"Error in session_sentiment_by_party: {e}")
         return Response({
             'session': {
-                'id': session_id,
+                'id': pk,
                 'title': None,
                 'date': None
             },
