@@ -1356,51 +1356,22 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
 
 
 def process_speech_segments_multithreaded(speech_segments, session_id, bill_name, debug=False):
-    """Process multiple speech segments sequentially with rate limiting to avoid API overload."""
+    """Process multiple speech segments with true parallel processing using batch analysis."""
     if not speech_segments:
         return []
     
     if debug:
-        logger.debug(f"🐛 DEBUG: Would process {len(speech_segments)} segments sequentially")
+        logger.debug(f"🐛 DEBUG: Would process {len(speech_segments)} segments in parallel batch")
         return []
     
-    logger.info(f"Processing {len(speech_segments)} speech segments sequentially for bill '{bill_name}'")
+    logger.info(f"🚀 Processing {len(speech_segments)} speech segments in parallel batch for bill '{bill_name}'")
     
-    all_statements = []
+    # Use the new batch processing function
+    all_statements = analyze_speech_segment_with_llm_batch(
+        speech_segments, session_id, bill_name, debug
+    )
     
-    # Process segments sequentially to avoid rate limiting issues
-    for i, segment in enumerate(speech_segments):
-        try:
-            logger.info(f"Processing speech segment {i + 1}/{len(speech_segments)} for bill '{bill_name}' ({len(segment)} chars)")
-            
-            result = analyze_speech_segment_with_llm(segment, session_id, bill_name, debug)
-            
-            if result:
-                all_statements.append(result)
-                logger.info(f"✅ Completed segment {i + 1}/{len(speech_segments)} for '{bill_name}'")
-            else:
-                logger.warning(f"⚠️ No result for segment {i + 1} in '{bill_name}'")
-            
-            # Rate limiting: wait 2.5 seconds between requests
-            if i < len(speech_segments) - 1:  # Don't wait after the last segment
-                time.sleep(2.5)
-                
-        except Exception as e:
-            logger.error(f"❌ Exception processing segment {i + 1} for bill '{bill_name}': {type(e).__name__}: {e}")
-            # Log the segment content that failed (first 200 chars)
-            failed_segment = speech_segments[i]
-            logger.debug(f"Failed segment content preview: {failed_segment[:200]}...")
-            # Log full traceback for debugging
-            if hasattr(e, '__traceback__'):
-                import traceback
-                logger.debug(f"Full traceback for segment {i + 1}: {traceback.format_exc()}")
-            continue
-        
-        # Log progress every 5 segments
-        if (i + 1) % 5 == 0 or (i + 1) == len(speech_segments):
-            logger.info(f"📊 Progress: {i + 1}/{len(speech_segments)} segments completed for '{bill_name}'")
-    
-    logger.info(f"🎉 Sequential processing completed for '{bill_name}': {len(all_statements)} valid statements from {len(speech_segments)} segments")
+    logger.info(f"🎉 Parallel batch processing completed for '{bill_name}': {len(all_statements)} valid statements from {len(speech_segments)} segments")
     return all_statements
 
 
@@ -1413,22 +1384,48 @@ def process_single_segment_for_statements(bill_text_segment,
         bill_text_segment, session_id, bill_name, debug)
 
 
-def analyze_speech_segment_with_llm(speech_segment,
-                                   session_id,
-                                   bill_name,
-                                   debug=False):
-    """Stage 3: Analyze a single speech segment with LLM to extract speaker name and content analysis."""
+def analyze_speech_segment_with_llm_batch(speech_segments, session_id, bill_name, debug=False):
+    """Batch analyze multiple speech segments with LLM without database operations."""
     if not model:
-        logger.warning(
-            "❌ Main LLM ('model') not available. Cannot analyze speech segment."
-        )
-        return None
+        logger.warning("❌ Main LLM ('model') not available. Cannot analyze speech segments.")
+        return []
 
+    if not speech_segments:
+        return []
+
+    logger.info(f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name}'")
+    
+    # Get assembly members once for the entire batch
+    assembly_members = get_all_assembly_members()
+    
+    # Process all segments in parallel using ThreadPoolExecutor
+    results = []
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        # Submit all LLM tasks
+        future_to_segment = {
+            executor.submit(analyze_single_segment_llm_only, segment, bill_name, assembly_members): i 
+            for i, segment in enumerate(speech_segments)
+        }
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_segment):
+            segment_index = future_to_segment[future]
+            try:
+                result = future.result()
+                if result:
+                    result['segment_index'] = segment_index
+                    results.append(result)
+            except Exception as e:
+                logger.error(f"❌ Exception in batch segment {segment_index}: {e}")
+    
+    logger.info(f"✅ Batch analysis completed: {len(results)} valid statements from {len(speech_segments)} segments")
+    return sorted(results, key=lambda x: x.get('segment_index', 0))
+
+
+def analyze_single_segment_llm_only(speech_segment, bill_name, assembly_members):
+    """Analyze a single speech segment with LLM only - no database operations."""
     if not speech_segment or len(speech_segment) < 50:
         return None
-
-    # Get all assembly member names for validation
-    assembly_members = get_all_assembly_members()
 
     prompt = f"""
 국회 회의록 발언 분석:
@@ -1470,7 +1467,6 @@ def analyze_speech_segment_with_llm(speech_segment,
     try:
         response = model.generate_content(prompt)
         if not response or not response.text:
-            logger.warning(f"❌ No LLM response for speech segment analysis")
             return None
 
         response_text_cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
@@ -1481,12 +1477,9 @@ def analyze_speech_segment_with_llm(speech_segment,
             if len(analysis_json) > 0 and isinstance(analysis_json[0], dict):
                 analysis_json = analysis_json[0]
             else:
-                logger.warning(f"❌ LLM returned unexpected list format for speech segment analysis")
                 return None
         
-        # Ensure analysis_json is a dictionary
         if not isinstance(analysis_json, dict):
-            logger.warning(f"❌ LLM response is not a dictionary: {type(analysis_json)}")
             return None
 
         speaker_name = analysis_json.get('speaker_name', '').strip()
@@ -1497,14 +1490,12 @@ def analyze_speech_segment_with_llm(speech_segment,
         # Validate speaker name against assembly members
         is_real_member = False
         if speaker_name and assembly_members:
-            # Clean the name for matching
             name_for_matching = speaker_name
             for title in ['의원', '위원장', '장관', '의장', '부의장']:
                 name_for_matching = name_for_matching.replace(title, '').strip()
             
             is_real_member = name_for_matching in assembly_members or speaker_name in assembly_members
             
-            # Fallback if we couldn't fetch assembly members
             if not assembly_members:
                 is_real_member = is_valid_member
 
@@ -1512,23 +1503,6 @@ def analyze_speech_segment_with_llm(speech_segment,
         should_ignore = any(ignored in speaker_name for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
         if not speaker_name or not speech_content or not is_valid_member or not is_substantial or should_ignore or not is_real_member:
-            # More detailed skip reason logging
-            skip_reasons = []
-            if not speaker_name:
-                skip_reasons.append("no speaker name")
-            if not speech_content:
-                skip_reasons.append("no speech content")
-            if not is_valid_member:
-                skip_reasons.append("not valid member")
-            if not is_substantial:
-                skip_reasons.append("not substantial content")
-            if should_ignore:
-                skip_reasons.append("ignored speaker type")
-            if not is_real_member:
-                skip_reasons.append("not real assembly member")
-            
-            skip_reason = ", ".join(skip_reasons)
-            logger.info(f"Skipping speech segment for bill '{bill_name}': {skip_reason}. Speaker='{speaker_name}', Valid={is_valid_member}, Substantial={is_substantial}, RealMember={is_real_member}")
             return None
 
         # Return the complete analysis
@@ -1543,16 +1517,15 @@ def analyze_speech_segment_with_llm(speech_segment,
             'bill_specific_keywords': analysis_json.get('bill_specific_keywords', [])
         }
 
-    except json.JSONDecodeError as e:
-        logger.error(f"❌ JSON parsing error for speech segment analysis in bill '{bill_name}': {e}")
-        logger.debug(f"Raw LLM response that failed to parse: {response_text_cleaned[:500]}...")
     except Exception as e:
-        logger.error(f"❌ Error during speech segment analysis for bill '{bill_name}': {e}")
-        if hasattr(e, '__traceback__'):
-            import traceback
-            logger.debug(f"Full traceback: {traceback.format_exc()}")
-    
-    return None
+        logger.debug(f"Error analyzing segment: {e}")
+        return None
+
+
+def analyze_speech_segment_with_llm(speech_segment, session_id, bill_name, debug=False):
+    """Legacy single segment analysis - kept for compatibility."""
+    assembly_members = get_all_assembly_members()
+    return analyze_single_segment_llm_only(speech_segment, bill_name, assembly_members)
 
 
 def analyze_single_statement_with_bill_context(statement_data_dict,
