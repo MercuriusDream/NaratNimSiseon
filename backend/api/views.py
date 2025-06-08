@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.db import models
+from django.db.models import F
 
 logger = logging.getLogger(__name__)
 
