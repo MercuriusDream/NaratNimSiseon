@@ -1607,11 +1607,19 @@ Return ONLY valid JSON array with {len(batch_segments)} objects:
   ... continue for all {len(batch_segments)} segments
 ]
 
-Rules: 
-- Extract speaker names from ◯ patterns, clean titles (의원, 위원장, 의사국장, etc.)
+CRITICAL EXCLUSION RULES:
+- EXCLUDE procedural/administrative speakers: 위원장, 부위원장, 위원장대리, 의사국장, 사무관, 국장, 서기관
+- EXCLUDE titles like: 문화체육관광위원장대리, 정무위원장, 법제사법위원장, 예산결산특별위원회위원장
+- EXCLUDE non-member roles: 국무총리, 장관, 차관, 실장, 청장, 원장, 대변인, 비서관, 수석
+- ONLY INCLUDE actual 의원 (parliament members) who can legally vote
+- If speaker has complex title (e.g., "◯문화체육관광위원장대리 임오경"), set is_valid_member=false
+- Extract clean name but validate against actual voting members only
+- Procedural announcements, meeting management, and administrative content should be marked is_substantial=false
+
+Real parliament member validation:
+- Must be actual 의원 (voting member)
+- Clean all titles: 의원, 위원장, 위원장대리, 의사국장, 사무관, 국장 etc.
 - start_idx and end_idx should represent character positions in the original segment
-- Real parliament member names only
-- No procedural speeches 
 - Must return exactly {len(batch_segments)} objects
 - Use segment_index 1-{len(batch_segments)}
 """
@@ -1676,11 +1684,29 @@ Rules:
                 speech_content = clean_original[actual_start:actual_end].strip(
                 )
 
-            # Clean speaker name from titles
+            # Clean speaker name from titles - comprehensive title removal
             if speaker_name:
-                for title in [
-                        '의원', '위원장', '장관', '의장', '부의장', '의사국장', '사무관', '국장'
-                ]:
+                complex_titles = [
+                    '문화체육관광위원장대리', '정무위원장', '법제사법위원회위원장', 
+                    '예산결산특별위원회위원장', '국정감사위원장', '기획재정위원장',
+                    '교육위원장', '과학기술정보방송통신위원장', '외교통일위원장',
+                    '국방위원장', '행정안전위원장', '농림축산식품해양수산위원장',
+                    '산업통상자원중소벤처기업위원장', '보건복지위원장', '환경노동위원장',
+                    '국토교통위원장', '정보위원장', '여성가족위원장', '위원장대리'
+                ]
+                
+                simple_titles = [
+                    '위원장', '부위원장', '의원', '장관', '차관', '의장', '부의장', 
+                    '의사국장', '사무관', '국장', '서기관', '실장', '청장', '원장',
+                    '대변인', '비서관', '수석', '정무위원', '간사'
+                ]
+                
+                # Remove complex titles first
+                for title in complex_titles:
+                    speaker_name = speaker_name.replace(title, '').strip()
+                    
+                # Then remove simple titles
+                for title in simple_titles:
                     speaker_name = speaker_name.replace(title, '').strip()
 
             # Validate speaker name against assembly members
@@ -1690,12 +1716,23 @@ Rules:
                 if not assembly_members:
                     is_real_member = is_valid_member
 
-            # Check if speaker should be ignored
+            # Check if speaker should be ignored (procedural/administrative)
+            procedural_keywords = [
+                '위원장', '부위원장', '위원장대리', '의사국장', '사무관', '국장', 
+                '서기관', '실장', '청장', '원장', '대변인', '비서관', '수석',
+                '국무총리', '장관', '차관'
+            ]
+            
             should_ignore = any(
                 ignored in speaker_name
                 for ignored in IGNORED_SPEAKERS) if speaker_name else True
+                
+            # Additional check for procedural speakers
+            is_procedural = any(
+                keyword in speaker_name 
+                for keyword in procedural_keywords) if speaker_name else False
 
-            if not speaker_name or not speech_content or not is_valid_member or not is_substantial or should_ignore or not is_real_member:
+            if not speaker_name or not speech_content or not is_valid_member or not is_substantial or should_ignore or not is_real_member or is_procedural:
                 continue
 
             # Return simplified analysis with global segment index
