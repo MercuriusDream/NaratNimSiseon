@@ -1820,54 +1820,63 @@ def home_data(request):
         # Get recent sessions - keep it simple and fast
         recent_sessions = Session.objects.filter(
             era_co__in=['22', '제22대']
-        ).only('conf_id', 'title', 'conf_dt', 'cmit_nm', 'era_co', 'sess', 'dgr').order_by('-conf_dt')[:5]
+        ).order_by('-conf_dt')[:5]
         
         sessions_data = []
         for session in recent_sessions:
+            # Count statements for this session
+            statement_count = Statement.objects.filter(session=session).count()
+            bill_count = Bill.objects.filter(session=session).count()
+            
             # Handle missing session data gracefully
             title = session.title
             if not title:
                 era = session.era_co or '22'
                 sess = session.sess or '1'
                 dgr = session.dgr or '1'
-                title = f'제{era}대 {sess}회 {dgr}차'
+                title = f'제{era}대 제{sess}회 제{dgr}차'
             
             sessions_data.append({
                 'id': session.conf_id,
                 'title': title,
                 'date': session.conf_dt.isoformat() if session.conf_dt else None,
                 'committee': session.cmit_nm or '',
-                'statement_count': 0,  # Skip for performance
-                'bill_count': 0
+                'statement_count': statement_count,
+                'bill_count': bill_count
             })
 
         # Get recent bills - simple query
         recent_bills = Bill.objects.filter(
             session__era_co__in=['22', '제22대']
-        ).select_related('session').only(
-            'bill_id', 'bill_nm', 'proposer', 'session__conf_id', 'session__title', 'session__era_co', 'session__sess', 'session__dgr'
-        ).order_by('-created_at')[:5]
+        ).select_related('session').order_by('-created_at')[:5]
         
         bills_data = []
         for bill in recent_bills:
+            # Count statements for this bill
+            statement_count = Statement.objects.filter(bill=bill).count()
+            
+            # Clean bill title - remove leading numbers like "10. "
+            clean_title = bill.bill_nm
+            if clean_title and '. ' in clean_title:
+                parts = clean_title.split('. ', 1)
+                if parts[0].isdigit():
+                    clean_title = parts[1]
+            
             bills_data.append({
                 'id': bill.bill_id,
-                'title': bill.bill_nm,
+                'title': clean_title,
                 'proposer': bill.proposer or '정보없음',
                 'session_id': bill.session.conf_id if bill.session else None,
                 'session_title': bill.session.title if bill.session and bill.session.title else (
-                    f"제{bill.session.era_co}대 {bill.session.sess}회 {bill.session.dgr}차" if bill.session else None
+                    f"제{bill.session.era_co}대 제{bill.session.sess}회 제{bill.session.dgr}차" if bill.session else None
                 ),
-                'statement_count': 0  # Skip count for performance
+                'statement_count': statement_count
             })
 
         # Get recent statements - simple query
         recent_statements = Statement.objects.filter(
             session__era_co__in=['제22대', '22']
-        ).select_related('speaker', 'session', 'bill').only(
-            'id', 'text', 'sentiment_score', 'created_at',
-            'speaker__naas_nm', 'session__title', 'bill__bill_nm'
-        ).order_by('-created_at')[:10]
+        ).select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
 
         statements_data = []
         for statement in recent_statements:
@@ -1888,16 +1897,31 @@ def home_data(request):
         total_speakers = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
         total_statements = Statement.objects.filter(session__era_co__in=['22', '제22대']).count()
 
+        # Calculate sentiment stats
+        sentiment_stats = Statement.objects.filter(
+            session__era_co__in=['22', '제22대'],
+            sentiment_score__isnull=False
+        ).aggregate(
+            avg_sentiment=Avg('sentiment_score'),
+            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+        )
+
+        avg_sentiment = sentiment_stats['avg_sentiment'] or 0
+        positive_count = sentiment_stats['positive_count'] or 0
+        negative_count = sentiment_stats['negative_count'] or 0
+        neutral_count = max(0, total_statements - positive_count - negative_count)
+
         return Response({
             'recent_sessions': sessions_data,
             'recent_bills': bills_data,
             'recent_statements': statements_data,
             'overall_stats': {
                 'total_statements': total_statements,
-                'average_sentiment': 0,  # Skip for performance
-                'positive_count': 0,
-                'neutral_count': 0,
-                'negative_count': 0
+                'average_sentiment': round(avg_sentiment, 3),
+                'positive_count': positive_count,
+                'neutral_count': neutral_count,
+                'negative_count': negative_count
             },
             'party_stats': [],
             'total_sessions': total_sessions,

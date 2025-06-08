@@ -16,7 +16,26 @@ const Home = () => {
         setLoading(true);
         setError(null);
 
-        // Fetch data with fallbacks for missing endpoints
+        // Try the home endpoint first
+        try {
+          const homeResponse = await api.get('/api/home-data/');
+          console.log('Home data response:', homeResponse.data);
+          setHomeData(homeResponse.data);
+          
+          // Set sentiment data for chart if available
+          if (homeResponse.data.overall_stats) {
+            setSentimentData({
+              positive: homeResponse.data.overall_stats.positive_count || 0,
+              negative: homeResponse.data.overall_stats.negative_count || 0,
+              neutral: homeResponse.data.overall_stats.neutral_count || 0
+            });
+          }
+          return;
+        } catch (homeErr) {
+          console.warn('Home endpoint failed, trying individual endpoints:', homeErr);
+        }
+
+        // Fallback to individual endpoints
         const dataPromises = [
           api.get('/api/sessions/').catch(() => ({ data: { results: [] } })),
           api.get('/api/bills/').catch(() => ({ data: { results: [] } })),
@@ -25,21 +44,35 @@ const Home = () => {
           api.get('/api/analytics/parties/').catch(() => ({ data: { results: [] } }))
         ];
 
-        const [sessionsRes, billsRes, statementsRes, homeDataRes, partyStatsRes] = await Promise.all(dataPromises);
+        const [sessionsRes, billsRes, statementsRes, overallRes, partyStatsRes] = await Promise.all(dataPromises);
 
-        // Use home endpoint data if available, otherwise construct from individual endpoints
-        const homeResponse = homeDataRes.data;
+        const combinedData = {
+          recent_sessions: sessionsRes.data.results || sessionsRes.data || [],
+          recent_bills: billsRes.data.results || billsRes.data || [],
+          recent_statements: statementsRes.data.results || statementsRes.data || [],
+          overall_stats: overallRes.data || {
+            total_statements: 0,
+            average_sentiment: 0,
+            positive_count: 0,
+            neutral_count: 0,
+            negative_count: 0
+          },
+          party_stats: partyStatsRes.data.results || partyStatsRes.data || [],
+          total_sessions: sessionsRes.data.count || (sessionsRes.data.results ? sessionsRes.data.results.length : 0),
+          total_bills: billsRes.data.count || (billsRes.data.results ? billsRes.data.results.length : 0),
+          total_speakers: 300 // Default fallback
+        };
 
-        setHomeData({
-          recent_sessions: homeResponse.recent_sessions || sessionsRes.data.results || [],
-          recent_bills: homeResponse.recent_bills || billsRes.data.results || [],
-          recent_statements: homeResponse.recent_statements || statementsRes.data.results || [],
-          overall_stats: homeResponse.overall_stats || {},
-          party_stats: homeResponse.party_stats || partyStatsRes.data.results || [],
-          total_sessions: homeResponse.total_sessions || 0,
-          total_bills: homeResponse.total_bills || 0,
-          total_speakers: homeResponse.total_speakers || 0
-        });
+        setHomeData(combinedData);
+        
+        // Set sentiment data for chart
+        if (combinedData.overall_stats) {
+          setSentimentData({
+            positive: combinedData.overall_stats.positive_count || 0,
+            negative: combinedData.overall_stats.negative_count || 0,
+            neutral: combinedData.overall_stats.neutral_count || 0
+          });
+        }
       } catch (err) {
         console.error('Error fetching home data:', err);
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -52,7 +85,8 @@ const Home = () => {
             total_statements: 0,
             average_sentiment: 0,
             positive_count: 0,
-            neutral_count: 0
+            neutral_count: 0,
+            negative_count: 0
           },
           party_stats: [],
           total_sessions: 0,
@@ -251,7 +285,7 @@ const Home = () => {
                     </h3>
                     <div className="flex justify-between text-sm text-gray-600">
                       <span>{session.date}</span>
-                      <span>{session.statement_count}건 발언</span>
+                      <span>{session.statement_count > 0 ? `${session.statement_count}건 발언` : '발언 없음'}</span>
                     </div>
                   </Link>
                 )) || (
@@ -299,7 +333,7 @@ const Home = () => {
                     </div>
                     <div className="flex justify-between text-sm text-gray-500">
                       <span>{bill.session_title}</span>
-                      <span>{bill.statement_count}건 발언</span>
+                      <span>{bill.statement_count > 0 ? `${bill.statement_count}건 발언` : '발언 없음'}</span>
                     </div>
                   </Link>
                 )) || (
