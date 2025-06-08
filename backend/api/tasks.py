@@ -1726,31 +1726,85 @@ def process_single_segment_for_statements(bill_text_segment,
 
 
 def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
-    """Use LLM to identify speech segment boundaries and return start/end indices."""
+    """Use LLM to identify speech segment boundaries and return start/end indices with batch processing."""
     if not genai or debug:
         return []
 
     logger.info(f"🎯 Getting speech segment indices for bill '{bill_name[:50]}...' ({len(text_segment)} chars)")
 
+    # Batch processing configuration
+    MAX_SEGMENTATION_LENGTH = 50000  # 50k chars per batch
+    BATCH_OVERLAP = 5000  # 5k character overlap between batches
+    
+    if len(text_segment) <= MAX_SEGMENTATION_LENGTH:
+        # Single batch processing
+        return _process_single_segmentation_batch(text_segment, bill_name, 0)
+    
+    # Multi-batch processing for large texts
+    logger.info(f"🔄 Processing large text in batches (max {MAX_SEGMENTATION_LENGTH} chars per batch)")
+    
+    all_indices = []
+    batch_start = 0
+    batch_count = 0
+    
+    while batch_start < len(text_segment):
+        batch_end = min(batch_start + MAX_SEGMENTATION_LENGTH, len(text_segment))
+        batch_text = text_segment[batch_start:batch_end]
+        batch_count += 1
+        
+        logger.info(f"📦 Processing batch {batch_count}: chars {batch_start}-{batch_end}")
+        
+        # Process this batch
+        batch_indices = _process_single_segmentation_batch(batch_text, bill_name, batch_start)
+        
+        if batch_indices:
+            # Adjust indices to be relative to the full document
+            adjusted_indices = []
+            for idx_pair in batch_indices:
+                adjusted_start = idx_pair['start'] + batch_start
+                adjusted_end = idx_pair['end'] + batch_start
+                
+                # Ensure indices don't exceed the full document length
+                if adjusted_start < len(text_segment) and adjusted_end <= len(text_segment):
+                    adjusted_indices.append({'start': adjusted_start, 'end': adjusted_end})
+            
+            all_indices.extend(adjusted_indices)
+            logger.info(f"✅ Batch {batch_count}: Found {len(adjusted_indices)} speech segments")
+        else:
+            logger.info(f"⚠️ Batch {batch_count}: No speech segments found")
+        
+        # Move to next batch with overlap
+        if batch_end >= len(text_segment):
+            break
+            
+        batch_start = batch_end - BATCH_OVERLAP
+        
+        # Rate limiting between batches
+        if batch_start < len(text_segment):
+            logger.info("⏳ Resting 3s before next batch...")
+            time.sleep(3)
+    
+    # Remove overlapping segments and sort by start position
+    deduplicated_indices = _deduplicate_speech_segments(all_indices)
+    
+    logger.info(f"🎉 Batch processing complete: {len(deduplicated_indices)} total speech segments from {batch_count} batches")
+    return deduplicated_indices
+
+
+def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0):
+    """Process a single batch of text for speech segmentation."""
     try:
         # Use lightweight model for segmentation
         segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
         
-        # Limit text for processing
-        MAX_SEGMENTATION_LENGTH = 50000  # 50k chars max
-        if len(text_segment) > MAX_SEGMENTATION_LENGTH:
-            text_for_prompt = text_segment[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
-        else:
-            text_for_prompt = text_segment
-
         prompt = f"""
 한국 국회 회의록 텍스트에서 개별 발언자의 발언 구간을 찾아 시작과 끝 인덱스를 알려주세요.
 
 의안: "{bill_name[:100]}..."
 
-회의록 텍스트:
+회의록 텍스트 (배치 내 상대 위치):
 ---
-{text_for_prompt}
+{text_segment}
 ---
 
 각 발언자의 발언 시작과 끝 위치를 JSON 배열로 반환해주세요:
@@ -1762,17 +1816,17 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
 
 규칙:
 - ◯ 마커로 시작하는 발언자별 구간을 찾으세요
-- start는 발언 시작 문자 위치, end는 발언 끝 문자 위치
+- start/end는 이 배치 내에서의 상대적 문자 위치 (0부터 시작)
 - 의사진행 발언(의사국장, 국장 등)은 제외
 - 실질적 의원 발언만 포함
 - 최소 50자 이상의 의미있는 발언만 포함
-- 인덱스는 0부터 시작하는 문자 위치
+- 배치 경계에서 잘린 발언은 다음 배치에서 처리됩니다
 """
 
         response = segmentation_model.generate_content(prompt)
         
         if not response or not response.text:
-            logger.warning(f"No response from LLM for speech segmentation")
+            logger.warning(f"No response from LLM for batch segmentation (offset: {global_offset})")
             return []
 
         response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
@@ -1785,23 +1839,55 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
                     if isinstance(idx_pair, dict) and 'start' in idx_pair and 'end' in idx_pair:
                         start = int(idx_pair['start'])
                         end = int(idx_pair['end'])
+                        # Validate indices are within this batch
                         if 0 <= start < end <= len(text_segment):
                             valid_indices.append({'start': start, 'end': end})
                 
-                logger.info(f"✅ LLM returned {len(valid_indices)} valid speech segment indices")
                 return valid_indices
             else:
-                logger.warning(f"LLM response is not a list: {type(indices)}")
+                logger.warning(f"LLM batch response is not a list: {type(indices)}")
                 return []
                 
         except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in speech segmentation: {e}")
+            logger.error(f"JSON decode error in batch segmentation: {e}")
             logger.debug(f"Raw response: {response_text[:500]}...")
             return []
             
     except Exception as e:
-        logger.error(f"Error in LLM speech segmentation: {e}")
+        logger.error(f"Error in batch speech segmentation: {e}")
         return []
+
+
+def _deduplicate_speech_segments(all_indices):
+    """Remove overlapping speech segments and return sorted unique segments."""
+    if not all_indices:
+        return []
+    
+    # Sort by start position
+    sorted_indices = sorted(all_indices, key=lambda x: x['start'])
+    
+    deduplicated = []
+    last_end = -1
+    
+    for segment in sorted_indices:
+        start = segment['start']
+        end = segment['end']
+        
+        # Skip if this segment overlaps significantly with the previous one
+        if start < last_end - 1000:  # Allow small overlap of 1000 chars
+            continue
+            
+        # Adjust start if there's minor overlap
+        if start < last_end:
+            start = last_end
+            
+        # Only add if the segment is still meaningful
+        if end - start > 50:  # Minimum 50 chars
+            deduplicated.append({'start': start, 'end': end})
+            last_end = end
+    
+    logger.info(f"🔧 Deduplicated {len(all_indices)} segments to {len(deduplicated)} unique segments")
+    return deduplicated
 
 
 def analyze_speech_segment_with_llm_batch(speech_segments,
