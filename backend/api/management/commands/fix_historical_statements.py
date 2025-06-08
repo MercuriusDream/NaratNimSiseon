@@ -36,7 +36,7 @@ class Command(BaseCommand):
 
         # Revert parties back to 22nd Assembly
         historical_parties = [
-            '대한독립촉성국민회', '한나라당', '민주자유당', '민주정의당', '신민당'
+            '대한독립촉성국민회', '한나라당', '민주자유당', '민주정의당', '신민당', '정보없음'
         ]
 
         reverted_parties = 0
@@ -64,13 +64,16 @@ class Command(BaseCommand):
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('🔧 Step 2: Finding speakers with historical parties who made statements in 22nd Assembly...'))
 
-        # Find speakers who have historical parties AND have 22nd Assembly statements
+        # Find speakers who have historical parties OR 정보없음 AND have 22nd Assembly statements
         speakers_with_historical_parties = Speaker.objects.filter(
             Q(plpt_nm__icontains='대한독립촉성국민회') |
             Q(plpt_nm__icontains='한나라당') |
             Q(plpt_nm__icontains='민주자유당') |
             Q(plpt_nm__icontains='민주정의당') |
-            Q(plpt_nm__icontains='신민당'),
+            Q(plpt_nm__icontains='신민당') |
+            Q(plpt_nm__icontains='정보없음') |
+            Q(plpt_nm='정보없음') |
+            Q(current_party__name='정보없음'),
             statements__session__era_co='22'
         ).distinct()
 
@@ -79,6 +82,7 @@ class Command(BaseCommand):
         # Process each speaker
         fixes_applied = 0
         api_calls_made = 0
+        removed_speakers = 0
 
         for speaker in speakers_with_historical_parties:
             statement_count = Statement.objects.filter(
@@ -88,6 +92,23 @@ class Command(BaseCommand):
 
             self.stdout.write(f'🔄 Processing {speaker.naas_nm} ({statement_count} statements in 22nd Assembly)')
             self.stdout.write(f'   Current party info: {speaker.plpt_nm}')
+
+            # Special handling for 정보없음 speakers - remove them
+            if ('정보없음' in speaker.plpt_nm or 
+                (speaker.current_party and speaker.current_party.name == '정보없음')):
+                
+                self.stdout.write(f'   🗑️  Found 정보없음 speaker: {speaker.naas_nm} - removing from 22nd Assembly')
+                
+                if not dry_run:
+                    # Delete the speaker and their statements
+                    Statement.objects.filter(speaker=speaker, session__era_co='22').delete()
+                    speaker.delete()
+                    removed_speakers += 1
+                    self.stdout.write(f'   ✅ Removed {speaker.naas_nm} and their 22nd Assembly statements')
+                else:
+                    self.stdout.write(f'   🔍 DRY RUN: Would remove {speaker.naas_nm}')
+                    removed_speakers += 1
+                continue
 
             # Call API to get their actual 22nd Assembly party
             actual_22nd_party = self.fetch_22nd_assembly_party(speaker.naas_nm)
@@ -99,7 +120,7 @@ class Command(BaseCommand):
                 # Check if the API party is different and is not a historical party
                 if (actual_22nd_party != current_party and 
                     actual_22nd_party not in historical_parties and
-                    actual_22nd_party not in ['정당정보없음', '무소속', '']):
+                    actual_22nd_party not in ['정당정보없음', '무소속', '', '정보없음']):
 
                     self.stdout.write(f'   ✅ Found correct 22nd Assembly party: {actual_22nd_party} (was: {current_party})')
 
@@ -112,7 +133,17 @@ class Command(BaseCommand):
                 else:
                     self.stdout.write(f'   ⚠️  API party not suitable for update: {actual_22nd_party}')
             else:
-                self.stdout.write(f'   ❌ Could not fetch 22nd Assembly data for {speaker.naas_nm}')
+                # For 한나라당 speakers, if API fails, try mapping to 국민의힘
+                if '한나라당' in speaker.plpt_nm:
+                    self.stdout.write(f'   🔄 한나라당 speaker - mapping to 국민의힘')
+                    if not dry_run:
+                        self.update_speaker_party(speaker, '국민의힘')
+                        fixes_applied += 1
+                    else:
+                        self.stdout.write(f'   🔍 DRY RUN: Would update {speaker.naas_nm} to 국민의힘')
+                        fixes_applied += 1
+                else:
+                    self.stdout.write(f'   ❌ Could not fetch 22nd Assembly data for {speaker.naas_nm}')
 
         # Summary
         self.stdout.write('')
@@ -121,8 +152,10 @@ class Command(BaseCommand):
         self.stdout.write(f'   API calls made: {api_calls_made}')
         if dry_run:
             self.stdout.write(f'   Would fix: {fixes_applied} speakers')
+            self.stdout.write(f'   Would remove: {removed_speakers} 정보없음 speakers')
         else:
             self.stdout.write(f'   Fixed: {fixes_applied} speakers')
+            self.stdout.write(f'   Removed: {removed_speakers} 정보없음 speakers')
 
         self.stdout.write('')
         if dry_run:
