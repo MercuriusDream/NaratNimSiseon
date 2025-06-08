@@ -1595,7 +1595,7 @@ def extract_statements_for_bill_segment(bill_text_segment,
                                         session_id,
                                         bill_name,
                                         debug=False):
-    """Extract and analyze statements for a specific bill text segment."""
+    """Extract statements using LLM for index-based segmentation, then batch process."""
     if not bill_text_segment:
         return []
 
@@ -1603,37 +1603,38 @@ def extract_statements_for_bill_segment(bill_text_segment,
         f"🔍 Processing bill segment: '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
     )
 
-    # Use batch processing for long text segments
-    MAX_SEGMENT_LENGTH = 20000  # 20K characters
-    if len(bill_text_segment) > MAX_SEGMENT_LENGTH:
-        logger.info(
-            f"Bill text segment too long ({len(bill_text_segment)} chars), processing in batches of {MAX_SEGMENT_LENGTH}"
-        )
-        # Process in batches
-        batches = []
-        for i in range(0, len(bill_text_segment), MAX_SEGMENT_LENGTH):
-            batch = bill_text_segment[i:i + MAX_SEGMENT_LENGTH]
-            batches.append(batch)
+    # Step 1: Get speech segment indices from LLM
+    speech_indices = get_speech_segment_indices_from_llm(bill_text_segment, bill_name, debug)
+    
+    if not speech_indices:
+        logger.info(f"No speech segments found for bill '{bill_name}', trying ◯ fallback")
+        return process_single_segment_for_statements_with_splitting(
+            bill_text_segment, session_id, bill_name, debug)
 
-        logger.info(
-            f"Processing {len(batches)} batches for bill '{bill_name}'")
+    # Step 2: Extract speech segments using indices
+    speech_segments = []
+    for idx_pair in speech_indices:
+        start_idx = idx_pair.get('start', 0)
+        end_idx = idx_pair.get('end', len(bill_text_segment))
+        
+        # Validate indices
+        start_idx = max(0, min(start_idx, len(bill_text_segment)))
+        end_idx = max(start_idx, min(end_idx, len(bill_text_segment)))
+        
+        if end_idx > start_idx:
+            segment_text = bill_text_segment[start_idx:end_idx].strip()
+            if segment_text and len(segment_text) > 50:  # Minimum meaningful content
+                speech_segments.append(segment_text)
 
-        all_batch_statements = []
-        for batch_idx, batch_text in enumerate(batches):
-            logger.info(
-                f"Processing batch {batch_idx + 1}/{len(batches)} for bill '{bill_name}'"
-            )
-            batch_statements = process_single_segment_for_statements_with_splitting(
-                batch_text, session_id, bill_name, debug)
-            all_batch_statements.extend(batch_statements)
-            if not debug:
-                time.sleep(0.5)  # Brief pause between batches
+    logger.info(f"Extracted {len(speech_segments)} speech segments using LLM indices")
 
-        return all_batch_statements
-
-    # Process single segment - use ◯ splitting approach
-    return process_single_segment_for_statements_with_splitting(
-        bill_text_segment, session_id, bill_name, debug)
+    # Step 3: Batch process the extracted segments
+    if speech_segments:
+        return process_speech_segments_multithreaded(speech_segments, session_id, bill_name, debug)
+    else:
+        logger.info(f"No valid speech segments extracted, using fallback")
+        return process_single_segment_for_statements_with_splitting(
+            bill_text_segment, session_id, bill_name, debug)
 
 
 def process_single_segment_for_statements_with_splitting(
@@ -1722,6 +1723,85 @@ def process_single_segment_for_statements(bill_text_segment,
     """Fallback: Use splitting approach for single segments."""
     return process_single_segment_for_statements_with_splitting(
         bill_text_segment, session_id, bill_name, debug)
+
+
+def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
+    """Use LLM to identify speech segment boundaries and return start/end indices."""
+    if not genai or debug:
+        return []
+
+    logger.info(f"🎯 Getting speech segment indices for bill '{bill_name[:50]}...' ({len(text_segment)} chars)")
+
+    try:
+        # Use lightweight model for segmentation
+        segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        
+        # Limit text for processing
+        MAX_SEGMENTATION_LENGTH = 50000  # 50k chars max
+        if len(text_segment) > MAX_SEGMENTATION_LENGTH:
+            text_for_prompt = text_segment[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
+        else:
+            text_for_prompt = text_segment
+
+        prompt = f"""
+한국 국회 회의록 텍스트에서 개별 발언자의 발언 구간을 찾아 시작과 끝 인덱스를 알려주세요.
+
+의안: "{bill_name[:100]}..."
+
+회의록 텍스트:
+---
+{text_for_prompt}
+---
+
+각 발언자의 발언 시작과 끝 위치를 JSON 배열로 반환해주세요:
+[
+  {{"start": 0, "end": 150}},
+  {{"start": 151, "end": 300}},
+  ...
+]
+
+규칙:
+- ◯ 마커로 시작하는 발언자별 구간을 찾으세요
+- start는 발언 시작 문자 위치, end는 발언 끝 문자 위치
+- 의사진행 발언(의사국장, 국장 등)은 제외
+- 실질적 의원 발언만 포함
+- 최소 50자 이상의 의미있는 발언만 포함
+- 인덱스는 0부터 시작하는 문자 위치
+"""
+
+        response = segmentation_model.generate_content(prompt)
+        
+        if not response or not response.text:
+            logger.warning(f"No response from LLM for speech segmentation")
+            return []
+
+        response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        
+        try:
+            indices = json.loads(response_text)
+            if isinstance(indices, list):
+                valid_indices = []
+                for idx_pair in indices:
+                    if isinstance(idx_pair, dict) and 'start' in idx_pair and 'end' in idx_pair:
+                        start = int(idx_pair['start'])
+                        end = int(idx_pair['end'])
+                        if 0 <= start < end <= len(text_segment):
+                            valid_indices.append({'start': start, 'end': end})
+                
+                logger.info(f"✅ LLM returned {len(valid_indices)} valid speech segment indices")
+                return valid_indices
+            else:
+                logger.warning(f"LLM response is not a list: {type(indices)}")
+                return []
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error in speech segmentation: {e}")
+            logger.debug(f"Raw response: {response_text[:500]}...")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Error in LLM speech segmentation: {e}")
+        return []
 
 
 def analyze_speech_segment_with_llm_batch(speech_segments,
