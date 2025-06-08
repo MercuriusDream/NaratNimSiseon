@@ -3360,20 +3360,34 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
     """
     import json
     try:
-        # Use larger chunks for better context and fewer API calls
-        CHUNK_SIZE = 8000  # Increased from 2000 for better context
-        OVERLAP_SIZE = 1000  # Overlap between chunks to catch bill transitions
+        # First, try a single-pass approach for better context
+        if len(segmentation_text) <= 15000:  # For smaller texts, process as one chunk
+            return _process_single_segmentation_chunk(segmentation_llm, segmentation_text, bill_names_list, 0)
+        
+        # For larger texts, use smarter chunking
+        CHUNK_SIZE = 12000  # Larger chunks for better context
+        OVERLAP_SIZE = 2000  # Larger overlap to catch bill transitions
         total_length = len(segmentation_text)
         
-        # Create overlapping chunks for better segmentation
+        # Find natural break points (like ◯ markers) for better chunking
         chunks = []
         chunk_start = 0
+        
         while chunk_start < total_length:
             chunk_end = min(chunk_start + CHUNK_SIZE, total_length)
+            
+            # If not at the end, try to find a natural break point
+            if chunk_end < total_length:
+                # Look for ◯ markers within the last 2000 chars
+                search_start = max(chunk_start, chunk_end - 2000)
+                last_marker = segmentation_text.rfind('◯', search_start, chunk_end)
+                if last_marker != -1 and last_marker > chunk_start + 1000:  # Ensure minimum chunk size
+                    chunk_end = last_marker
+            
             chunk_text = segmentation_text[chunk_start:chunk_end]
             
             # Only add chunk if it has meaningful content
-            if len(chunk_text.strip()) > 500:
+            if len(chunk_text.strip()) > 1000:  # Increased minimum content threshold
                 chunks.append((chunk_start, chunk_end, chunk_text))
             
             # Move to next chunk with overlap
@@ -3381,49 +3395,56 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
             if chunk_end >= total_length:
                 break
         
-        logger.info(f"[Segmentation LLM] Processing {len(chunks)} overlapping chunks with rate limiting")
+        logger.info(f"[Segmentation LLM] Processing {len(chunks)} natural-break chunks with rate limiting")
         
         def process_single_chunk_with_rate_limit(chunk_data):
             """Process a single chunk with LLM and rate limiting"""
             chunk_start, chunk_end, chunk_text = chunk_data
             
             # Estimate tokens for this chunk
-            estimated_tokens = len(chunk_text) // 3 + 500  # Conservative estimate with overhead
+            estimated_tokens = len(chunk_text) // 3 + 800  # More conservative estimate
             
             # Wait for rate limiter
             if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
                 logger.warning(f"[Segmentation LLM] Rate limit timeout for chunk {chunk_start}-{chunk_end}")
                 return []
             
-            # Create bill names string for prompt
-            bill_names_str = '\n'.join([f"- {bill}" for bill in bill_names_list[:10]])  # Limit to 10 bills for prompt clarity
+            # Create simplified bill names for better matching
+            simplified_bills = []
+            for bill in bill_names_list[:8]:  # Limit to 8 bills for better focus
+                # Extract core name (remove common suffixes)
+                core_name = bill.replace('법률안', '').replace('일부개정', '').replace('의안', '').strip()
+                if '(' in core_name:
+                    core_name = core_name.split('(')[0].strip()
+                simplified_bills.append({'original': bill, 'core': core_name})
             
-            # Improved prompt with better instructions
-            prompt = f"""국회 회의록에서 특정 법안들의 논의 구간을 찾아주세요.
+            bill_names_str = '\n'.join([f"- {bill['original']}" for bill in simplified_bills])
+            
+            # Improved prompt with fuzzy matching instructions
+            prompt = f"""국회 회의록에서 다음 법안들의 논의 구간을 찾아주세요.
 
-찾아야 할 법안들:
+법안 목록:
 {bill_names_str}
 
-회의록 텍스트 (위치 {chunk_start}-{chunk_end}):
+회의록 텍스트:
 ---
 {chunk_text}
 ---
 
-다음 조건을 만족하는 법안 논의 구간만 찾아주세요:
-1. 법안 이름이 명시적으로 언급됨
-2. 해당 법안에 대한 실질적 논의나 발언이 있음
-3. 단순 목록 나열이 아닌 구체적 내용 포함
-
-JSON 배열로만 응답하세요:
+각 법안의 논의 구간을 찾아 JSON 배열로 응답하세요:
 [
-  {{"a": "정확한_법안명", "b": 시작위치, "e": 종료위치, "c": 0.9}}
+  {{"bill_name": "정확한_법안명", "start_pos": 위치, "end_pos": 종료위치, "confidence": 0.9}}
 ]
 
-중요사항:
-- "a"는 위 법안 목록에서 정확히 일치하는 이름만 사용
-- "b", "e"는 이 텍스트 블록 내에서의 문자 위치 (0부터 시작)
-- "c"는 확신도 (0.7 이상인 것만 포함)
-- 법안이 언급되지 않으면 빈 배열 []로 응답"""
+매칭 규칙:
+1. 법안명이 완전히 일치하지 않아도 핵심 키워드가 포함되면 매칭
+2. 실질적인 논의나 발언이 있는 구간만 포함
+3. 단순 목록이나 의사진행 발언은 제외
+4. confidence는 0.6 이상만 포함
+5. 법안이 없으면 빈 배열 [] 응답
+
+핵심 키워드 예시:
+{chr(10).join([f"- {bill['core']}" for bill in simplified_bills if len(bill['core']) > 3])}"""
             
             try:
                 logger.info(f"[Segmentation LLM] Processing chunk {chunk_start}-{chunk_end} ({len(chunk_text)} chars)")
@@ -3455,40 +3476,66 @@ JSON 배열로만 응답하세요:
                     logger.warning(f"[Segmentation LLM] Expected list in chunk {chunk_start}-{chunk_end}, got {type(segments)}")
                     return []
                 
-                # Validate and adjust segments
+                # Validate and adjust segments with fuzzy matching
                 chunk_segments = []
                 for seg in segments:
-                    if not isinstance(seg, dict) or 'a' not in seg or 'b' not in seg or 'e' not in seg:
+                    if not isinstance(seg, dict):
                         continue
                     
-                    bill_name = seg['a'].strip()
-                    confidence = float(seg.get('c', 0.5))
+                    bill_name = seg.get('bill_name', '').strip()
+                    confidence = float(seg.get('confidence', 0.5))
                     
                     # Skip low confidence segments
-                    if confidence < 0.7:
+                    if confidence < 0.6:
                         continue
                     
-                    # Validate bill name is in our list
-                    if not any(bill_name in provided_bill or provided_bill in bill_name 
-                             for provided_bill in bill_names_list):
-                        logger.debug(f"Bill name '{bill_name}' not found in provided list, skipping")
+                    # Find best matching bill with fuzzy logic
+                    best_match = None
+                    best_score = 0
+                    
+                    for original_bill in bill_names_list:
+                        # Check exact match first
+                        if bill_name == original_bill:
+                            best_match = original_bill
+                            best_score = 1.0
+                            break
+                        
+                        # Check partial matches
+                        bill_words = set(bill_name.lower().split())
+                        original_words = set(original_bill.lower().split())
+                        
+                        # Calculate similarity
+                        common_words = bill_words.intersection(original_words)
+                        if common_words:
+                            similarity = len(common_words) / len(bill_words.union(original_words))
+                            if similarity > best_score and similarity > 0.4:  # 40% similarity threshold
+                                best_score = similarity
+                                best_match = original_bill
+                    
+                    if not best_match:
+                        logger.debug(f"No matching bill found for '{bill_name}', skipping")
                         continue
                     
                     try:
-                        seg_b = int(seg['b']) + chunk_start
-                        seg_e = int(seg['e']) + chunk_start
+                        seg_b = int(seg.get('start_pos', 0)) + chunk_start
+                        seg_e = int(seg.get('end_pos', 0)) + chunk_start
+                        
+                        # Use reasonable defaults if end position is missing
+                        if seg_e <= seg_b:
+                            seg_e = min(seg_b + 3000, total_length)  # Default 3k chars segment
                     except (ValueError, TypeError):
                         logger.warning(f"Invalid indices in segment: {seg}")
                         continue
                     
                     # Validate indices
-                    if seg_b < seg_e and seg_b >= 0 and seg_e <= total_length and (seg_e - seg_b) > 100:
+                    if seg_b < seg_e and seg_b >= 0 and seg_e <= total_length and (seg_e - seg_b) > 200:
                         chunk_segments.append({
-                            'a': bill_name,
+                            'a': best_match,  # Use the matched bill name
                             'b': seg_b,
                             'e': seg_e,
-                            'c': confidence
+                            'c': confidence * best_score  # Adjust confidence by match quality
                         })
+                        logger.debug(f"Matched '{bill_name}' -> '{best_match}' (score: {best_score:.2f})")
                 
                 logger.info(f"[Segmentation LLM] Found {len(chunk_segments)} valid segments in chunk {chunk_start}-{chunk_end}")
                 return chunk_segments
@@ -3527,7 +3574,7 @@ JSON 배열로만 응답하세요:
             found_overlap = False
             for existing_key, existing_seg in unique_segments.items():
                 if (existing_seg['a'] == bill_name and 
-                    abs(existing_seg['b'] - start_pos) < 2000):  # Within 2k chars = likely overlap
+                    abs(existing_seg['b'] - start_pos) < 3000):  # Within 3k chars = likely overlap
                     # Keep the one with higher confidence
                     if seg['c'] > existing_seg['c']:
                         unique_segments[existing_key] = seg
@@ -3545,15 +3592,101 @@ JSON 배열로만 응답하세요:
         
         logger.info(f"[Segmentation LLM] Rate-limited processing complete: {len(valid_segments)} unique segments from {len(all_segments)} total")
         
-        if not valid_segments:
-            logger.warning("No valid segments found by LLM segmentation")
-            return []
-            
         return valid_segments
         
     except Exception as e:
         logger.error(f"❌ Error in bill segmentation LLM: {e}")
         logger.exception("Traceback for bill segmentation LLM error:")
+        return []
+
+def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_list, offset):
+    """Process a single chunk for bill segmentation with improved matching."""
+    import json
+    try:
+        # Estimate tokens for rate limiting
+        estimated_tokens = len(text_chunk) // 3 + 1000
+        
+        if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+            logger.warning("Rate limit timeout for single segmentation chunk")
+            return []
+        
+        # Create simplified bill list for better matching
+        bill_info = []
+        for bill in bill_names_list[:10]:  # Limit for better focus
+            core_name = bill.replace('법률안', '').replace('일부개정', '').strip()
+            if '(' in core_name:
+                core_name = core_name.split('(')[0].strip()
+            bill_info.append({'full': bill, 'core': core_name})
+        
+        bill_list_str = '\n'.join([f"- {b['full']}" for b in bill_info])
+        keywords_str = ', '.join([b['core'] for b in bill_info if len(b['core']) > 3])
+        
+        prompt = f"""국회 회의록에서 법안별 논의 구간을 정확히 식별해주세요.
+
+대상 법안들:
+{bill_list_str}
+
+핵심 키워드: {keywords_str}
+
+회의록 텍스트:
+---
+{text_chunk}
+---
+
+각 법안의 실제 논의 구간을 찾아 JSON으로 응답:
+{{
+  "segments": [
+    {{
+      "bill_name": "정확한_법안명",
+      "start_index": 시작위치,
+      "end_index": 종료위치,
+      "confidence": 0.8
+    }}
+  ]
+}}
+
+조건:
+- 법안명은 위 목록에서 정확히 선택
+- 실제 토론/발언이 있는 구간만 포함
+- 단순 언급이나 목록은 제외
+- confidence 0.6 이상만 포함"""
+        
+        response = segmentation_llm.generate_content(prompt)
+        gemini_rate_limiter.record_request(estimated_tokens)
+        
+        if not response or not response.text:
+            return []
+        
+        response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+        
+        try:
+            data = json.loads(response_text)
+            segments = data.get('segments', [])
+            
+            valid_segments = []
+            for seg in segments:
+                if (seg.get('confidence', 0) >= 0.6 and 
+                    seg.get('bill_name') in bill_names_list):
+                    
+                    start_idx = int(seg.get('start_index', 0)) + offset
+                    end_idx = int(seg.get('end_index', 0)) + offset
+                    
+                    if start_idx < end_idx and (end_idx - start_idx) > 200:
+                        valid_segments.append({
+                            'a': seg['bill_name'],
+                            'b': start_idx,
+                            'e': end_idx,
+                            'c': seg['confidence']
+                        })
+            
+            return valid_segments
+            
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.error(f"Error parsing segmentation response: {e}")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Error in single segmentation chunk: {e}")
         return []
 
     # Sort segments by their appearance order in the full_text using their indices
