@@ -1412,93 +1412,51 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
 
 
 def process_speech_segments_multithreaded(speech_segments, session_id, bill_name, debug=False):
-    """Process multiple speech segments concurrently with rate limiting."""
+    """Process multiple speech segments sequentially with rate limiting to avoid API overload."""
     if not speech_segments:
         return []
     
     if debug:
-        logger.debug(f"🐛 DEBUG: Would process {len(speech_segments)} segments with multithreading")
+        logger.debug(f"🐛 DEBUG: Would process {len(speech_segments)} segments sequentially")
         return []
     
-    # Rate limiting: 2 seconds between requests means max 30 requests per minute
-    # Use a queue to control request timing
-    rate_limit_queue = queue.Queue()
-    
-    def rate_limited_analyzer(segment, session_id, bill_name, segment_index):
-        """Wrapper for analyze_speech_segment_with_llm with rate limiting."""
-        try:
-            # Wait for rate limit permission
-            rate_limit_queue.get(timeout=2)  # 2 second timeout
-            
-            logger.info(f"Processing speech segment {segment_index + 1}/{len(speech_segments)} for bill '{bill_name}' ({len(segment)} chars)")
-            
-            result = analyze_speech_segment_with_llm(segment, session_id, bill_name, debug)
-            
-            # Schedule next request after 2.1 seconds (slightly above rate limit)
-            threading.Timer(2.1, lambda: rate_limit_queue.put(True)).start()
-            
-            return result, segment_index
-            
-        except Exception as e:
-            logger.error(f"Error processing segment {segment_index + 1}: {type(e).__name__}: {e}")
-            if hasattr(e, '__traceback__'):
-                import traceback
-                logger.debug(f"Full traceback for segment {segment_index + 1}: {traceback.format_exc()}")
-            # Still need to schedule next request
-            threading.Timer(2.1, lambda: rate_limit_queue.put(True)).start()
-            return None, segment_index
-    
-    # Initialize rate limiting - allow first request immediately
-    rate_limit_queue.put(True)
+    logger.info(f"Processing {len(speech_segments)} speech segments sequentially for bill '{bill_name}'")
     
     all_statements = []
     
-    # Use ThreadPoolExecutor with limited workers to respect rate limits
-    # Max 3 workers to allow some parallelism while staying within limits
-    max_workers = min(3, len(speech_segments))
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all tasks
-        future_to_index = {
-            executor.submit(rate_limited_analyzer, segment, session_id, bill_name, i): i
-            for i, segment in enumerate(speech_segments)
-        }
-        
-        # Collect results as they complete
-        completed_count = 0
-        for future in as_completed(future_to_index):
-            completed_count += 1
-            try:
-                result, segment_index = future.result(timeout=60)  # 60 second timeout per request
-                if result:
-                    all_statements.append(result)
-                    logger.info(f"✅ Completed segment {segment_index + 1}/{len(speech_segments)} for '{bill_name}'")
-                else:
-                    logger.warning(f"⚠️ No result for segment {segment_index + 1} in '{bill_name}'")
-                    
-            except concurrent.futures.TimeoutError:
-                segment_index = future_to_index[future]
-                logger.error(f"❌ Timeout (60s) processing segment {segment_index + 1} for bill '{bill_name}' - LLM may be overloaded")
-                if segment_index < len(speech_segments):
-                    failed_segment = speech_segments[segment_index]
-                    logger.debug(f"Timed out segment preview: {failed_segment[:200]}...")
-            except Exception as e:
-                segment_index = future_to_index[future]
-                logger.error(f"❌ Exception processing segment {segment_index + 1} for bill '{bill_name}': {type(e).__name__}: {e}")
-                # Log the segment content that failed (first 200 chars)
-                if segment_index < len(speech_segments):
-                    failed_segment = speech_segments[segment_index]
-                    logger.debug(f"Failed segment content preview: {failed_segment[:200]}...")
-                # Log full traceback for debugging
-                if hasattr(e, '__traceback__'):
-                    import traceback
-                    logger.debug(f"Full traceback for segment {segment_index + 1}: {traceback.format_exc()}")
+    # Process segments sequentially to avoid rate limiting issues
+    for i, segment in enumerate(speech_segments):
+        try:
+            logger.info(f"Processing speech segment {i + 1}/{len(speech_segments)} for bill '{bill_name}' ({len(segment)} chars)")
             
-            # Log progress
-            if completed_count % 5 == 0 or completed_count == len(speech_segments):
-                logger.info(f"📊 Progress: {completed_count}/{len(speech_segments)} segments completed for '{bill_name}'")
+            result = analyze_speech_segment_with_llm(segment, session_id, bill_name, debug)
+            
+            if result:
+                all_statements.append(result)
+                logger.info(f"✅ Completed segment {i + 1}/{len(speech_segments)} for '{bill_name}'")
+            else:
+                logger.warning(f"⚠️ No result for segment {i + 1} in '{bill_name}'")
+            
+            # Rate limiting: wait 2.5 seconds between requests
+            if i < len(speech_segments) - 1:  # Don't wait after the last segment
+                time.sleep(2.5)
+                
+        except Exception as e:
+            logger.error(f"❌ Exception processing segment {i + 1} for bill '{bill_name}': {type(e).__name__}: {e}")
+            # Log the segment content that failed (first 200 chars)
+            failed_segment = speech_segments[i]
+            logger.debug(f"Failed segment content preview: {failed_segment[:200]}...")
+            # Log full traceback for debugging
+            if hasattr(e, '__traceback__'):
+                import traceback
+                logger.debug(f"Full traceback for segment {i + 1}: {traceback.format_exc()}")
+            continue
+        
+        # Log progress every 5 segments
+        if (i + 1) % 5 == 0 or (i + 1) == len(speech_segments):
+            logger.info(f"📊 Progress: {i + 1}/{len(speech_segments)} segments completed for '{bill_name}'")
     
-    logger.info(f"🎉 Multithreaded processing completed for '{bill_name}': {len(all_statements)} valid statements from {len(speech_segments)} segments")
+    logger.info(f"🎉 Sequential processing completed for '{bill_name}': {len(all_statements)} valid statements from {len(speech_segments)} segments")
     return all_statements
 
 
