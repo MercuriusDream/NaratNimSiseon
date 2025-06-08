@@ -797,8 +797,7 @@ def data_status(request):
     statement_count = Statement.objects.count()
 
     # Recent activity (last 24 hours)
-    yesterday = datetime.now() - timedelta(hours=24)
-    recent_sessions = Session.objects.filter(created_at__gte=yesterday).count()
+    yesterday = datetime.now() - timedelta(hours=24)    recent_sessions = Session.objects.filter(created_at__gte=yesterday).count()
     recent_bills = Bill.objects.filter(created_at__gte=yesterday).count()
     recent_statements = Statement.objects.filter(
         created_at__gte=yesterday).count()
@@ -824,7 +823,7 @@ def data_status(request):
             sentiment_score__gt=0.3).count()
         negative_statements = Statement.objects.filter(
             sentiment_score__lt=-0.3).count()
-        neutral_statements = statement_count - positive_statements - negative_statements
+        neutral_statements = statement_count - positive_statements - negative_count
 
         sentiment_data = {
             'average_sentiment':
@@ -1571,7 +1570,7 @@ def home_data(request):
     try:
         # Try to get data from any available assembly, not just 22nd
         # First try 22nd Assembly, then fall back to any assembly
-        recent_sessions_22 = Session.objects.filter(era_co='22').prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
+        recent_sessions_22 = Session.objects.filter(era_co='제22대').prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
         recent_sessions = recent_sessions_22 if recent_sessions_22.exists() else Session.objects.prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
 
         sessions_data = []
@@ -1590,7 +1589,7 @@ def home_data(request):
                 continue
 
         # Get recent bills - try 22nd Assembly first, then any
-        recent_bills_22 = Bill.objects.filter(session__era_co='22').select_related('session').annotate(
+        recent_bills_22 = Bill.objects.filter(session__era_co='제22대').select_related('session').annotate(
             statement_count=Count('statements')
         ).order_by('-created_at')[:5]
         recent_bills = recent_bills_22 if recent_bills_22.exists() else Bill.objects.select_related('session').annotate(
@@ -1617,7 +1616,9 @@ def home_data(request):
                 continue
 
         # Get recent statements - try 22nd Assembly first, then any
-        recent_statements_22 = Statement.objects.filter(session__era_co='22').select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
+        recent_statements_22 = Statement.objects.filter(
+            session__era_co='제22대'
+        ).select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
         recent_statements = recent_statements_22 if recent_statements_22.exists() else Statement.objects.select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
 
         statements_data = []
@@ -1640,7 +1641,7 @@ def home_data(request):
                 continue
 
         # Get sentiment stats - try 22nd Assembly first
-        sentiment_stats_22 = Statement.objects.filter(session__era_co='22').aggregate(
+        sentiment_stats_22 = Statement.objects.filter(session__era_co='제22대').aggregate(
             total_count=Count('id'),
             avg_sentiment=Avg('sentiment_score'),
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
@@ -1668,7 +1669,7 @@ def home_data(request):
         historical_parties = ['대한독립촉성국민회', '민주자유당', '민주정의당']
 
         # Get party statistics - try 22nd Assembly first
-        party_stats_22 = Statement.objects.filter(session__era_co='22').select_related('speaker').values(
+        party_stats_22 = Statement.objects.filter(session__era_co='제22대').select_related('speaker').values(
             'speaker__plpt_nm'
         ).annotate(
             party_name=F('speaker__plpt_nm'),
@@ -1714,14 +1715,14 @@ def home_data(request):
             party['avg_sentiment'] = round(party['avg_sentiment'] or 0, 3)
 
         # Get basic counts - try 22nd Assembly first, then any
-        total_sessions_22 = Session.objects.filter(era_co='22').count()
-        total_bills_22 = Bill.objects.filter(session__era_co='22').count()
-        total_speakers_22 = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
+        total_sessions = Session.objects.filter(era_co='제22대').count()
+        total_bills = Bill.objects.filter(session__era_co='제22대').count()
+        total_speakers = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
 
         # If no 22nd Assembly data, get from any assembly
-        total_sessions = total_sessions_22 if total_sessions_22 > 0 else Session.objects.count()
-        total_bills = total_bills_22 if total_bills_22 > 0 else Bill.objects.count()
-        total_speakers = total_speakers_22 if total_speakers_22 > 0 else Speaker.objects.count()
+        total_sessions = total_sessions if total_sessions > 0 else Session.objects.count()
+        total_bills = total_bills if total_bills > 0 else Bill.objects.count()
+        total_speakers = total_speakers if total_speakers > 0 else Speaker.objects.count()
 
         # Ensure all arrays are properly formatted
         response_data = {

@@ -90,7 +90,7 @@ class Command(BaseCommand):
         for speaker in speakers_with_historical_parties:
             statement_count = Statement.objects.filter(
                 speaker=speaker,
-                session__era_co='22'
+                session__era_co='제22대'
             ).count()
 
             self.stdout.write(f'🔄 Processing {speaker.naas_nm} ({statement_count} statements in 22nd Assembly)')
