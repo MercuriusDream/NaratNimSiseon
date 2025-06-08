@@ -580,8 +580,14 @@ class PartyViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.error(f"Error triggering additional data fetch: {e}")
 
-            # Get all parties and enhance with statistics
-            parties = Party.objects.all()
+            # Define problematic party names to exclude
+            problematic_parties = [
+                '대한독립촉성국민회', '한나라당', '민주자유당', '정보없음', 
+                '민주정의당', '신민당', '바른정당', '한국당', '무소속', '', ' '
+            ]
+            
+            # Get all parties and enhance with statistics, excluding problematic ones
+            parties = Party.objects.exclude(name__in=problematic_parties)
             party_data = []
 
             for party in parties:
@@ -1638,7 +1644,13 @@ def home_data(request):
         negative_count = sentiment_stats['negative_count'] or 0
         neutral_count = total_statements - positive_count - negative_count
 
-        # Optimize party statistics with a single query
+        # Define problematic party names to exclude
+        problematic_parties = [
+            '대한독립촉성국민회', '한나라당', '민주자유당', '정보없음', 
+            '민주정의당', '신민당', '바른정당', '한국당', '무소속', '', ' '
+        ]
+        
+        # Optimize party statistics with a single query, excluding problematic parties
         party_stats = Statement.objects.select_related('speaker').values(
             'speaker__plpt_nm'
         ).annotate(
@@ -1648,6 +1660,8 @@ def home_data(request):
         ).filter(
             speaker__plpt_nm__isnull=False,
             statement_count__gt=0
+        ).exclude(
+            speaker__plpt_nm__in=problematic_parties
         ).order_by('-statement_count')[:10]
 
         # Get member counts for top parties in a single query
