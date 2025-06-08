@@ -36,19 +36,17 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write('🔍 DRY RUN MODE - No changes will be made')
 
-        # Step 1: Find all statements from speakers with historical parties
-        self.stdout.write('📊 Step 1: Finding statements from historical party members...')
+        # Step 1: Find all speakers who have statements in 22nd Assembly and have any historical party in their plpt_nm
+        self.stdout.write('📊 Step 1: Finding speakers with historical parties who have 22nd Assembly statements...')
 
-        # Get all speakers who have statements in 22nd Assembly AND are assigned to historical parties
+        # Build a complex Q query to find speakers with any historical party in their plpt_nm
+        historical_party_q = Q()
+        for party in historical_parties:
+            historical_party_q |= Q(plpt_nm__icontains=party)
+
+        # Get speakers who have historical parties AND have statements in 22nd Assembly
         problematic_speakers = Speaker.objects.filter(
-            Q(plpt_nm__icontains='대한독립촉성국민회') |
-            Q(plpt_nm__icontains='한나라당') |
-            Q(plpt_nm__icontains='민주자유당') |
-            Q(plpt_nm__icontains='민주정의당') |
-            Q(plpt_nm__icontains='신민당') |
-            Q(plpt_nm__icontains='바른정당') |
-            Q(plpt_nm__icontains='한국당') |
-            Q(plpt_nm__icontains='정보없음'),
+            historical_party_q,
             statements__session__era_co='22'
         ).distinct()
 
@@ -59,6 +57,7 @@ class Command(BaseCommand):
         api_calls_made = 0
 
         for speaker in problematic_speakers:
+            # Get statement count in 22nd Assembly
             statement_count = Statement.objects.filter(
                 speaker=speaker,
                 session__era_co='22'
@@ -69,6 +68,14 @@ class Command(BaseCommand):
 
             self.stdout.write(f'🔄 Processing {speaker.naas_nm} ({statement_count} statements)')
             self.stdout.write(f'   Current party info: {speaker.plpt_nm}')
+
+            # Check if this speaker has any historical parties in their party list
+            party_list = speaker.get_party_list()
+            has_historical = any(party in historical_parties for party in party_list)
+            
+            if not has_historical:
+                self.stdout.write(f'   ✅ No historical parties found in current data')
+                continue
 
             # Fetch actual data from API
             actual_party = self.fetch_speaker_from_api(speaker.naas_nm)
@@ -85,12 +92,28 @@ class Command(BaseCommand):
                         fixes_applied += 1
                     else:
                         self.stdout.write(f'   🔍 DRY RUN: Would update to {actual_party}')
+                        fixes_applied += 1
                 else:
                     self.stdout.write(f'   ⚠️  API party matches current or is also historical: {actual_party}')
             else:
                 self.stdout.write(f'   ❌ Could not fetch API data for {speaker.naas_nm}')
 
-        # Step 3: Summary
+        # Step 3: Clean up party statistics by removing problematic parties from view
+        self.stdout.write('')
+        self.stdout.write('🧹 Step 3: Updating party statistics...')
+        
+        if not dry_run:
+            # Mark historical parties for exclusion in statistics
+            for party_name in historical_parties:
+                try:
+                    party = Party.objects.get(name=party_name)
+                    party.assembly_era = 0  # Mark as historical
+                    party.save()
+                    self.stdout.write(f'   📋 Marked {party_name} as historical')
+                except Party.DoesNotExist:
+                    pass
+
+        # Step 4: Summary
         self.stdout.write('')
         self.stdout.write('📊 Summary:')
         self.stdout.write(f'   API calls made: {api_calls_made}')

@@ -88,7 +88,7 @@ class SessionViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         try:
             queryset = self.filter_queryset(self.get_queryset())
-            
+
             page = self.paginate_queryset(queryset)
             if page is not None:
                 serializer = self.get_serializer(page, many=True)
@@ -135,21 +135,21 @@ class BillViewSet(viewsets.ModelViewSet):
         try:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
-            
+
             # Add extra data for the bill
             response_data = serializer.data
-            
+
             # Add statement count
             statement_count = Statement.objects.filter(bill=instance).count()
             response_data['statement_count'] = statement_count
-            
+
             # Add voting records count if available
             try:
                 voting_count = VotingRecord.objects.filter(bill=instance).count()
                 response_data['voting_count'] = voting_count
             except:
                 response_data['voting_count'] = 0
-            
+
             return Response(response_data)
         except Http404:
             return Response({
@@ -180,7 +180,7 @@ class BillViewSet(viewsets.ModelViewSet):
         """Override list to ensure consistent response format"""
         try:
             queryset = self.filter_queryset(self.get_queryset())
-            
+
             page = self.paginate_queryset(queryset)
             if page is not None:
                 serializer = self.get_serializer(page, many=True)
@@ -592,7 +592,7 @@ class PartyViewSet(viewsets.ModelViewSet):
                 '대한독립촉성국민회', '한나라당', '민주자유당', '정보없음', 
                 '민주정의당', '신민당', '바른정당', '한국당', '무소속', '', ' '
             ]
-            
+
             # Get only 22nd Assembly parties and enhance with statistics, excluding problematic ones
             parties = Party.objects.filter(assembly_era=22).exclude(name__in=problematic_parties)
             party_data = []
@@ -601,12 +601,12 @@ class PartyViewSet(viewsets.ModelViewSet):
                 # Get basic statistics
                 speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
                 statements = Statement.objects.filter(speaker__plpt_nm__icontains=party.name)
-                
+
                 # Calculate stats
                 member_count = speakers.count()
                 total_statements = statements.count()
                 avg_sentiment = statements.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
-                
+
                 # Get recent statements for the party
                 recent_statements = statements.order_by('-created_at')[:5]
                 recent_statements_data = []
@@ -616,13 +616,13 @@ class PartyViewSet(viewsets.ModelViewSet):
                         'sentiment_score': stmt.sentiment_score or 0,
                         'created_at': stmt.created_at.isoformat() if stmt.created_at else None
                     })
-                
+
                 # Get top members by statement count
                 top_members = speakers.annotate(
                     statement_count=Count('statements'),
                     avg_sentiment=Avg('statements__sentiment_score')
                 ).filter(statement_count__gt=0).order_by('-statement_count')[:3]
-                
+
                 top_members_data = []
                 for member in top_members:
                     top_members_data.append({
@@ -650,7 +650,7 @@ class PartyViewSet(viewsets.ModelViewSet):
                     'created_at': party.created_at.isoformat() if party.created_at else None,
                     'updated_at': party.updated_at.isoformat() if party.updated_at else None
                 }
-                
+
                 if member_count > 0 or total_statements > 0:  # Only include parties with data
                     party_data.append(party_info)
 
@@ -796,7 +796,7 @@ def refresh_all_data(request):
 def data_status(request):
     """Real-time data collection status monitoring endpoint"""
 
-    # Basic counts
+        # Basic counts
     session_count = Session.objects.count()
     bill_count = Bill.objects.count()
     speaker_count = Speaker.objects.count()
@@ -1524,10 +1524,10 @@ def sentiment_analysis_list(request):
     """Get list of sentiment analysis data"""
     try:
         time_range = request.query_params.get('time_range', 'all')
-        
+
         # Base queryset for statements
         statements_qs = Statement.objects.select_related('speaker', 'session', 'bill').all()
-        
+
         # Apply time filter
         now = timezone.now()
         if time_range == 'year':
@@ -1542,7 +1542,7 @@ def sentiment_analysis_list(request):
 
         # Get sentiment analysis data grouped by different dimensions
         results = []
-        
+
         # By speaker sentiment
         speaker_sentiment = statements_qs.values(
             'speaker__naas_nm', 'speaker__plpt_nm'
@@ -1579,7 +1579,7 @@ def home_data(request):
         # First try 22nd Assembly, then fall back to any assembly
         recent_sessions_22 = Session.objects.filter(era_co='22').prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
         recent_sessions = recent_sessions_22 if recent_sessions_22.exists() else Session.objects.prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
-        
+
         sessions_data = []
         for session in recent_sessions:
             try:
@@ -1602,14 +1602,14 @@ def home_data(request):
         recent_bills = recent_bills_22 if recent_bills_22.exists() else Bill.objects.select_related('session').annotate(
             statement_count=Count('statements')
         ).order_by('-created_at')[:5]
-        
+
         bills_data = []
         for bill in recent_bills:
             try:
                 session_title = None
                 if bill.session:
                     session_title = bill.session.title if bill.session.title else f"제{bill.session.era_co}대 {bill.session.sess}회 {bill.session.dgr}차"
-                
+
                 bills_data.append({
                     'id': bill.bill_id,
                     'title': bill.bill_nm,
@@ -1625,7 +1625,7 @@ def home_data(request):
         # Get recent statements - try 22nd Assembly first, then any
         recent_statements_22 = Statement.objects.filter(session__era_co='22').select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
         recent_statements = recent_statements_22 if recent_statements_22.exists() else Statement.objects.select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
-        
+
         statements_data = []
         for statement in recent_statements:
             try:
@@ -1652,7 +1652,7 @@ def home_data(request):
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
             negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
         )
-        
+
         # If no 22nd Assembly data, get from any assembly
         if sentiment_stats_22['total_count'] == 0:
             sentiment_stats = Statement.objects.aggregate(
@@ -1663,12 +1663,15 @@ def home_data(request):
             )
         else:
             sentiment_stats = sentiment_stats_22
-        
+
         total_statements = sentiment_stats['total_count'] or 0
         avg_sentiment = sentiment_stats['avg_sentiment'] or 0
         positive_count = sentiment_stats['positive_count'] or 0
         negative_count = sentiment_stats['negative_count'] or 0
         neutral_count = total_statements - positive_count - negative_count
+
+        # Define historical parties for exclusion
+        historical_parties = ['대한독립촉성국민회', '민주자유당', '민주정의당']
 
         # Get party statistics - try 22nd Assembly first
         party_stats_22 = Statement.objects.filter(session__era_co='22').select_related('speaker').values(
@@ -1696,10 +1699,8 @@ def home_data(request):
                 speaker__plpt_nm__isnull=False,
                 statement_count__gt=5
             ).exclude(
-                speaker__plpt_nm__in=['', ' ', '무소속', '정보없음', 'None']
+                speaker__plpt_nm__in=historical_parties
             ).order_by('-statement_count')[:8]
-        else:
-            party_stats = party_stats_22
 
         # Add member counts for these parties
         for party in party_stats:
@@ -1708,21 +1709,21 @@ def home_data(request):
                 plpt_nm__icontains=party['party_name'],
                 gtelt_eraco__icontains='22'
             ).count()
-            
+
             if member_count_22 == 0:
                 party['member_count'] = Speaker.objects.filter(
                     plpt_nm__icontains=party['party_name']
                 ).count()
             else:
                 party['member_count'] = member_count_22
-                
+
             party['avg_sentiment'] = round(party['avg_sentiment'] or 0, 3)
 
         # Get basic counts - try 22nd Assembly first, then any
         total_sessions_22 = Session.objects.filter(era_co='22').count()
         total_bills_22 = Bill.objects.filter(session__era_co='22').count()
         total_speakers_22 = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
-        
+
         # If no 22nd Assembly data, get from any assembly
         total_sessions = total_sessions_22 if total_sessions_22 > 0 else Session.objects.count()
         total_bills = total_bills_22 if total_bills_22 > 0 else Bill.objects.count()
