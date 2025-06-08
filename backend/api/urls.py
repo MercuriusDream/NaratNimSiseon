@@ -30,5 +30,6 @@ urlpatterns = [
     path('party-detail/<int:party_id>/', views.party_detail, name='party-detail'),
     path('analytics/category-sentiment/', views.category_sentiment_analysis, name='category-sentiment-analysis'),
     path('analytics/overall-sentiment/', views.overall_sentiment_stats, name='overall-sentiment-stats'),
-    path('analytics/sentiment/', views.overall_sentiment_stats, name='sentiment-analysis'),
+    path('analytics/sentiment/', views.overall_sentiment_stats, name='overall-sentiment-stats'),
+    path('analytics/sentiment-by-party-topic/', views.sentiment_by_party_and_topic, name='sentiment-by-party-topic'),
 ]

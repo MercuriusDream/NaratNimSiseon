@@ -29,8 +29,8 @@ function App() {
           <Route path="/sessions/:id" element={<SessionDetail />} />
           <Route path="/speakers" element={<SpeakerList />} />
           <Route path="/speakers/:id" element={<SpeakerDetail />} />
-          <Route path="/statements" element={<StatementList />} />
           <Route path="/sentiment" element={<SentimentAnalysis />} />
+          <Route path="/statements" element={<StatementList />} />
         </Routes>
       </div>
     </Router>

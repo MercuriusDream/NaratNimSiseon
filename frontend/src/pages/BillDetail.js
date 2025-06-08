@@ -26,11 +26,7 @@ function BillDetail() {
         ]);
 
         // Ensure bill data is properly set
-        if (billResponse.data) {
-          setBill(billResponse.data);
-        } else {
-          throw new Error('의안 데이터를 찾을 수 없습니다.');
-        }
+        setBill(billResponse.data);
 
         const statementsData = statementsResponse.data;
 

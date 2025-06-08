@@ -100,10 +100,7 @@ class BillViewSet(viewsets.ModelViewSet):
         try:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
-            return Response({
-                'status': 'success',
-                'data': serializer.data
-            })
+            return Response(serializer.data)
         except Exception as e:
             logger.error(f"Error retrieving bill {kwargs.get('pk')}: {e}")
             return Response({
@@ -528,11 +525,7 @@ class PartyViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error in PartyViewSet list: {e}")
-            return Response({
-                'results': [],
-                'count': 0,
-                'error': 'Failed to fetch party data'
-            })
+            return Response([])
 
 
 class StatementListView(generics.ListAPIView):
@@ -940,6 +933,104 @@ def overall_sentiment_stats(request):
         logger.error(f"Error in overall sentiment stats: {e}")
         return Response({'error': 'Failed to fetch sentiment statistics'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def sentiment_by_party_and_topic(request):
+    """Get sentiment analysis grouped by party and topic/bill"""
+    try:
+        group_by = request.query_params.get('group_by', 'bill')  # 'bill' or 'topic'
+        time_range = request.query_params.get('time_range', 'all')
+        
+        # Base queryset for statements
+        statements_qs = Statement.objects.select_related('speaker', 'bill', 'session').all()
+        
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=365))
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=30))
+        
+        results = []
+        
+        if group_by == 'bill':
+            # Group by party and bill
+            party_bill_data = {}
+            
+            for statement in statements_qs.filter(sentiment_score__isnull=False, bill__isnull=False):
+                party_name = statement.speaker.get_current_party_name()
+                bill_name = statement.bill.bill_nm
+                
+                key = f"{party_name}|{bill_name}"
+                if key not in party_bill_data:
+                    party_bill_data[key] = {
+                        'party_name': party_name,
+                        'bill_name': bill_name,
+                        'bill_id': statement.bill.bill_id,
+                        'sentiment_scores': [],
+                        'statement_count': 0
+                    }
+                
+                party_bill_data[key]['sentiment_scores'].append(statement.sentiment_score)
+                party_bill_data[key]['statement_count'] += 1
+            
+            # Calculate averages
+            for data in party_bill_data.values():
+                if data['sentiment_scores']:
+                    data['avg_sentiment'] = round(sum(data['sentiment_scores']) / len(data['sentiment_scores']), 3)
+                    data['positive_count'] = len([s for s in data['sentiment_scores'] if s > 0.3])
+                    data['negative_count'] = len([s for s in data['sentiment_scores'] if s < -0.3])
+                    data['neutral_count'] = data['statement_count'] - data['positive_count'] - data['negative_count']
+                    results.append(data)
+        
+        else:  # group_by == 'topic'
+            # Group by party and topic (category)
+            party_topic_data = {}
+            
+            for statement in statements_qs.filter(sentiment_score__isnull=False, categories__isnull=False).distinct():
+                party_name = statement.speaker.get_current_party_name()
+                
+                for category_relation in statement.categories.all():
+                    topic_name = category_relation.category.name
+                    
+                    key = f"{party_name}|{topic_name}"
+                    if key not in party_topic_data:
+                        party_topic_data[key] = {
+                            'party_name': party_name,
+                            'topic_name': topic_name,
+                            'sentiment_scores': [],
+                            'statement_count': 0
+                        }
+                    
+                    party_topic_data[key]['sentiment_scores'].append(statement.sentiment_score)
+                    party_topic_data[key]['statement_count'] += 1
+            
+            # Calculate averages
+            for data in party_topic_data.values():
+                if data['sentiment_scores']:
+                    data['avg_sentiment'] = round(sum(data['sentiment_scores']) / len(data['sentiment_scores']), 3)
+                    data['positive_count'] = len([s for s in data['sentiment_scores'] if s > 0.3])
+                    data['negative_count'] = len([s for s in data['sentiment_scores'] if s < -0.3])
+                    data['neutral_count'] = data['statement_count'] - data['positive_count'] - data['negative_count']
+                    results.append(data)
+        
+        # Sort by average sentiment (descending)
+        results.sort(key=lambda x: x.get('avg_sentiment', 0), reverse=True)
+        
+        return Response({
+            'group_by': group_by,
+            'time_range': time_range,
+            'results': results,
+            'total_entries': len(results)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in sentiment_by_party_and_topic: {e}")
+        return Response({'error': 'Failed to fetch sentiment analysis'}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])

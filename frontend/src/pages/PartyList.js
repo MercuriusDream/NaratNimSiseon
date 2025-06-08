@@ -57,7 +57,7 @@ function PartyList() {
         console.warn('Parties data is not an array after processing:', partiesData);
         partiesData = [];
       }
-      
+
       setParties(partiesData);
 
       if (response.data && response.data.additional_data_fetched) {
