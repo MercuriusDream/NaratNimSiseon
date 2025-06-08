@@ -1,0 +1,29 @@
+2025-06-08 15:21:52,281 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3493 - [Segmentation LLM] Found 0 valid segments in chunk 0-8000
+2025-06-08 15:21:52,281 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3509 - [Segmentation LLM] Completed chunk 1/8 (0-8000): 0 segments
+2025-06-08 15:21:54,281 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3429 - [Segmentation LLM] Processing chunk 7000-15000 (8000 chars)
+2025-06-08 15:21:56,844 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3474 - Bill name '검사징계법 일부개정법률안' not found in provided list, skipping
+2025-06-08 15:21:56,845 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3474 - Bill name '검사징계법 일부개정법률안' not found in provided list, skipping
+2025-06-08 15:21:56,845 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3474 - Bill name '순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한 법률안' not found in provided list, skipping
+2025-06-08 15:21:56,845 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3474 - Bill name '순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한 법률안' not found in provided list, skipping
+2025-06-08 15:21:56,845 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3474 - Bill name '윤석열 전 대통령 등에 의한 내란·외환 행위의 진상규명을 위한 특별검사 임명 등에 관한 법률안' not found in provided list, skipping
+2025-06-08 15:21:56,845 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3474 - Bill name '윤석열 전 대통령 등에 의한 내란·외환 행위의 진상규명을 위한 특별검사 임명 등에 관한 법률안' not found in provided list, skipping
+2025-06-08 15:21:56,845 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3474 - Bill name '김건희와 명태균·건진법사 관련 국정농단 및 불법 선거 개입 사건 등 진상규명을 위한 특별검사 임명 등에 관한 법률안' not found in provided list, skipping
+2025-06-08 15:21:56,845 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3474 - Bill name '김건희와 명태균·건진법사 관련 국정농단 및 불법 선거 개입 사건 등 진상규명을 위한 특별검사 임명 등에 관한 법률안' not found in provided list, skipping
+2025-06-08 15:21:56,845 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3493 - [Segmentation LLM] Found 0 valid segments in chunk 7000-15000
+2025-06-08 15:21:56,845 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3509 - [Segmentation LLM] Completed chunk 2/8 (7000-15000): 0 segments
+2025-06-08 15:21:58,845 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3429 - [Segmentation LLM] Processing chunk 14000-22000 (8000 chars)
+2025-06-08 15:22:03,057 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3493 - [Segmentation LLM] Found 10 valid segments in chunk 14000-22000
+2025-06-08 15:22:03,058 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3509 - [Segmentation LLM] Completed chunk 3/8 (14000-22000): 10 segments
+2025-06-08 15:22:05,058 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3429 - [Segmentation LLM] Processing chunk 21000-29000 (8000 chars)
+2025-06-08 15:22:05,437 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3444 - [Segmentation LLM] No segments found in chunk 21000-29000
+2025-06-08 15:22:05,437 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3509 - [Segmentation LLM] Completed chunk 4/8 (21000-29000): 0 segments
+2025-06-08 15:22:07,439 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3429 - [Segmentation LLM] Processing chunk 28000-36000 (8000 chars)
+2025-06-08 15:22:07,783 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3444 - [Segmentation LLM] No segments found in chunk 28000-36000
+2025-06-08 15:22:07,783 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3509 - [Segmentation LLM] Completed chunk 5/8 (28000-36000): 0 segments
+2025-06-08 15:22:09,783 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3429 - [Segmentation LLM] Processing chunk 35000-43000 (8000 chars)
+2025-06-08 15:22:10,112 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3444 - [Segmentation LLM] No segments found in chunk 35000-43000
+2025-06-08 15:22:10,112 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3509 - [Segmentation LLM] Completed chunk 6/8 (35000-43000): 0 segments
+2025-06-08 15:22:12,112 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3429 - [Segmentation LLM] Processing chunk 42000-50000 (8000 chars)
+2025-06-08 15:22:12,476 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3444 - [Segmentation LLM] No segments found in chunk 42000-50000
+2025-06-08 15:22:12,476 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3509 - [Segmentation LLM] Completed chunk 7/8 (42000-50000): 0 segments
+^C2025-06-08 15:22:12,503 - api.tasks - INFO - tasks - process_session_pdf - 3073 - 🗑️ Deleted temporary PDF: temp_files/session_54810_1749396096.pdf
