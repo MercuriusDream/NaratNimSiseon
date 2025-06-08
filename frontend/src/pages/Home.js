@@ -27,7 +27,7 @@ const Home = () => {
       setLoading(true);
       const response = await api.get('/api/home/');
       console.log('Home data response:', response.data);
-      
+
       // Ensure we have the expected data structure
       const data = response.data || {};
       setHomeData({
@@ -131,10 +131,24 @@ const Home = () => {
           </div>
 
           {/* Sentiment Analysis Chart */}
-          {homeData.overall_stats.total_statements > 0 && (
+          {homeData.overall_stats && homeData.overall_stats.total_statements > 0 && (
             <div className="bg-white p-6 rounded-lg shadow mb-8">
               <h2 className="text-2xl font-bold mb-4">전체 감성 분석</h2>
-              <SentimentChart data={homeData.overall_stats} />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Overall sentiment breakdown */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">감성 분포</h3>
+                  <SentimentChart data={homeData.overall_stats} />
+                </div>
+
+                {/* Party sentiment chart */}
+                {homeData.party_stats && homeData.party_stats.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">정당별 감성</h3>
+                    <SentimentChart data={homeData.party_stats} />
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

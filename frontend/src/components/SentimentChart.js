@@ -7,7 +7,7 @@ const SentimentChart = ({ data }) => {
   let chartData = [];
 
   if (data.party_rankings && Array.isArray(data.party_rankings)) {
-    // Overall sentiment stats data
+    // Overall sentiment stats data with party rankings
     chartData = data.party_rankings.slice(0, 10);
   } else if (data.party_analysis && Array.isArray(data.party_analysis)) {
     // Bill sentiment data
@@ -15,7 +15,40 @@ const SentimentChart = ({ data }) => {
   } else if (Array.isArray(data)) {
     chartData = data;
   } else if (data && typeof data === 'object') {
-    chartData = [data];
+    // Handle overall_stats object by creating a summary chart
+    if (data.total_statements && data.total_statements > 0) {
+      chartData = [
+        {
+          speaker__plpt_nm: '긍정적 발언',
+          party_name: '긍정적 발언',
+          avg_sentiment: 0.5,
+          sentiment_score: 0.5,
+          statement_count: data.positive_count || 0,
+          positive_count: data.positive_count || 0,
+          negative_count: 0
+        },
+        {
+          speaker__plpt_nm: '중립적 발언',
+          party_name: '중립적 발언', 
+          avg_sentiment: 0,
+          sentiment_score: 0,
+          statement_count: data.neutral_count || 0,
+          positive_count: 0,
+          negative_count: 0
+        },
+        {
+          speaker__plpt_nm: '부정적 발언',
+          party_name: '부정적 발언',
+          avg_sentiment: -0.5,
+          sentiment_score: -0.5,
+          statement_count: data.negative_count || 0,
+          positive_count: 0,
+          negative_count: data.negative_count || 0
+        }
+      ].filter(item => item.statement_count > 0); // Only show categories with data
+    } else {
+      chartData = [];
+    }
   } else {
     chartData = [];
   }
@@ -55,9 +88,9 @@ const SentimentChart = ({ data }) => {
               </span>
             </div>
 
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="w-full bg-gray-200 rounded-full h-3 relative">
               <div
-                className={`h-2 rounded-full ${
+                className={`h-3 rounded-full transition-all duration-300 ${
                   sentimentScore > 0.3
                     ? 'bg-green-500'
                     : sentimentScore < -0.3
@@ -65,20 +98,20 @@ const SentimentChart = ({ data }) => {
                     : 'bg-gray-400'
                 }`}
                 style={{
-                  width: `${Math.min(Math.abs(sentimentScore) * 100, 100)}%`
+                  width: `${Math.max(Math.min(Math.abs(sentimentScore) * 100, 100), 5)}%`
                 }}
               ></div>
             </div>
 
             <div className="text-xs text-gray-600 mt-1 flex space-x-4">
               {item.statement_count && (
-                <span>발언 수: {item.statement_count}</span>
+                <span>발언 수: {item.statement_count}건</span>
               )}
               {item.positive_count !== undefined && (
-                <span>긍정: {item.positive_count}</span>
+                <span>긍정: {item.positive_count}건</span>
               )}
               {item.negative_count !== undefined && (
-                <span>부정: {item.negative_count}</span>
+                <span>부정: {item.negative_count}건</span>
               )}
             </div>
           </div>
