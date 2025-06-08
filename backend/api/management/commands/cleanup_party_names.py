@@ -5,7 +5,7 @@ from django.db import transaction
 
 
 class Command(BaseCommand):
-    help = 'Clean up party names to use only the most recent party and fix incorrect party mappings'
+    help = 'Clean up party names by using only the rightmost party from slash-separated lists'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -16,7 +16,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--show-stats',
             action='store_true',
-            help='Show statistics about party mappings',
+            help='Show statistics about party names',
         )
 
     def handle(self, *args, **options):
@@ -32,18 +32,16 @@ class Command(BaseCommand):
             self.style.SUCCESS('🧹 Starting party name cleanup...')
         )
         
-        # Party name mappings for incorrect names
-        party_mappings = {
-            '더불어민주연합': '더불어민주당',
-            '민주통합당': '더불어민주당',  # Historical party that became 더불어민주당
-            '새정치민주연합': '더불어민주당',  # Historical party that became 더불어민주당
-        }
-        
         speakers = Speaker.objects.all()
         updated_count = 0
-        cleaned_count = 0
+        simplified_count = 0
         
         self.stdout.write(f'📊 Processing {speakers.count()} speakers...')
+        
+        # Show statistics if requested
+        if show_stats:
+            self.show_party_statistics()
+            return
         
         with transaction.atomic():
             for speaker in speakers:
@@ -57,55 +55,41 @@ class Command(BaseCommand):
                     # Get the most recent (rightmost) party
                     most_recent_party = party_list[-1].strip()
                     
-                    # Apply party mappings if needed
-                    if most_recent_party in party_mappings:
-                        most_recent_party = party_mappings[most_recent_party]
-                        cleaned_count += 1
-                        self.stdout.write(f'🔄 Mapping {party_list[-1]} → {most_recent_party} for {speaker.naas_nm}')
-                    
-                    # Check if we need to update
-                    needs_update = False
-                    
-                    # Case 1: Multiple parties in history, use only the most recent
+                    # Only update if there are multiple parties (contains slashes)
                     if len(party_list) > 1:
-                        needs_update = True
+                        simplified_count += 1
                         self.stdout.write(f'📝 Simplifying {speaker.naas_nm}: {original_plpt_nm} → {most_recent_party}')
-                    
-                    # Case 2: Single party but needs mapping
-                    elif len(party_list) == 1 and party_list[0].strip() in party_mappings:
-                        needs_update = True
-                        self.stdout.write(f'🔄 Updating {speaker.naas_nm}: {original_plpt_nm} → {most_recent_party}')
-                    
-                    if needs_update and not dry_run:
-                        # Update the speaker's party name to only the most recent
-                        speaker.plpt_nm = most_recent_party
                         
-                        # Get or create the party object
-                        party, created = Party.objects.get_or_create(
-                            name=most_recent_party,
-                            defaults={
-                                'description': f'{most_recent_party} - 정리됨',
-                                'assembly_era': 22  # Current assembly
-                            }
-                        )
-                        
-                        if created:
-                            self.stdout.write(f'✨ Created party: {most_recent_party}')
-                        
-                        # Set current party
-                        speaker.current_party = party
-                        speaker.save()
-                        
-                        # Clear existing party history and create new simplified one
-                        SpeakerPartyHistory.objects.filter(speaker=speaker).delete()
-                        SpeakerPartyHistory.objects.create(
-                            speaker=speaker,
-                            party=party,
-                            order=0,
-                            is_current=True
-                        )
-                        
-                        updated_count += 1
+                        if not dry_run:
+                            # Update the speaker's party name to only the most recent
+                            speaker.plpt_nm = most_recent_party
+                            
+                            # Get or create the party object
+                            party, created = Party.objects.get_or_create(
+                                name=most_recent_party,
+                                defaults={
+                                    'description': f'{most_recent_party} - 정리됨',
+                                    'assembly_era': 22  # Current assembly
+                                }
+                            )
+                            
+                            if created:
+                                self.stdout.write(f'✨ Created party: {most_recent_party}')
+                            
+                            # Set current party
+                            speaker.current_party = party
+                            speaker.save()
+                            
+                            # Clear existing party history and create new simplified one
+                            SpeakerPartyHistory.objects.filter(speaker=speaker).delete()
+                            SpeakerPartyHistory.objects.create(
+                                speaker=speaker,
+                                party=party,
+                                order=0,
+                                is_current=True
+                            )
+                            
+                            updated_count += 1
                 
                 except Exception as e:
                     self.stdout.write(
@@ -118,47 +102,49 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING(
                     f'🔍 DRY RUN COMPLETE:\n'
-                    f'   Would update: {updated_count} speakers\n'
-                    f'   Would clean mappings: {cleaned_count} speakers'
+                    f'   Would simplify: {simplified_count} speakers\n'
+                    f'   Would update: {updated_count} speakers'
                 )
             )
         else:
             self.stdout.write(
                 self.style.SUCCESS(
-                    f'✅ Cleanup completed!\n'
-                    f'   Updated: {updated_count} speakers\n'
-                    f'   Cleaned mappings: {cleaned_count} speakers'
+                    f'✅ CLEANUP COMPLETE:\n'
+                    f'   Simplified: {simplified_count} speakers\n'
+                    f'   Updated: {updated_count} speakers'
                 )
             )
-        
-        if show_stats:
-            self.show_party_statistics()
     
     def show_party_statistics(self):
-        """Show statistics about current party distribution"""
-        self.stdout.write('\n📈 Current Party Statistics:')
-        self.stdout.write('=' * 50)
+        """Show statistics about party names in the database"""
+        self.stdout.write('\n📊 PARTY STATISTICS:')
         
-        from django.db.models import Count
-        
-        # Count speakers by current party
-        party_stats = Speaker.objects.values('current_party__name').annotate(
-            member_count=Count('naas_cd')
-        ).order_by('-member_count')
-        
-        for stat in party_stats:
-            party_name = stat['current_party__name'] or '정당정보없음'
-            member_count = stat['member_count']
-            self.stdout.write(f'🏛️  {party_name}: {member_count} members')
-        
-        # Count unique party names in plpt_nm field
+        # Get unique party names
         unique_parties = set()
-        for speaker in Speaker.objects.all():
-            if speaker.plpt_nm:
-                unique_parties.add(speaker.plpt_nm.strip())
+        slash_parties = []
         
-        self.stdout.write(f'\n📊 Total unique party names: {len(unique_parties)}')
-        self.stdout.write('Current party names:')
-        for party in sorted(unique_parties):
-            if party:
-                self.stdout.write(f'   • {party}')
+        speakers = Speaker.objects.all()
+        for speaker in speakers:
+            if speaker.plpt_nm:
+                unique_parties.add(speaker.plpt_nm)
+                if '/' in speaker.plpt_nm:
+                    slash_parties.append(speaker.plpt_nm)
+        
+        self.stdout.write(f'📈 Total unique party entries: {len(unique_parties)}')
+        self.stdout.write(f'📈 Entries with slashes: {len(slash_parties)}')
+        
+        # Show some examples
+        self.stdout.write('\n🔍 Examples of slash-separated parties:')
+        for party in sorted(set(slash_parties))[:10]:
+            count = Speaker.objects.filter(plpt_nm=party).count()
+            self.stdout.write(f'   {party} ({count} speakers)')
+        
+        # Show party distribution
+        from django.db.models import Count
+        party_counts = Speaker.objects.values('plpt_nm').annotate(
+            count=Count('naas_cd')
+        ).order_by('-count')[:20]
+        
+        self.stdout.write('\n📊 Top 20 party entries by speaker count:')
+        for item in party_counts:
+            self.stdout.write(f'   {item["plpt_nm"]}: {item["count"]} speakers')
