@@ -1,0 +1,60 @@
+        try:
+            seg_response = segmentation_llm.generate_content(
+                bill_segmentation_prompt)
+            if seg_response and seg_response.text:
+                seg_text_cleaned = seg_response.text.strip().replace(
+                    "```json", "").replace("```", "").strip()
+                seg_data = json.loads(seg_text_cleaned)
+                bill_segments_from_llm = seg_data.get(
+                    "bill_discussion_segments", [])
+                logger.info(
+                    f"LLM identified {len(bill_segments_from_llm)} bill segments"
+                )
+        except (json.JSONDecodeError, Exception) as e:
+            logger.error(
+                f"Error in bill segmentation: {e}. Will process as single bill segment."
+            )
+            # Fallback: treat entire text as one bill segment
+            if bill_names_list:
+                bill_segments_from_llm = [{
+                    "bill_name_identified":
+                    bill_names_list[0],
+                    "discussion_start_idx":
+                    0,
+                    "relevance_to_provided_list":
+                    0.5
+                }]
+
+    # Step 2: Create ordered bill segments with text
+    sorted_segments_with_text = []
+    if bill_segments_from_llm:
+        valid_segments_for_sort = []
+        for seg_info in bill_segments_from_llm:
+            start_idx = seg_info.get("discussion_start_idx")
+            if start_idx is not None and isinstance(
+                    start_idx, int) and 0 <= start_idx < len(full_text):
+                seg_info['start_index'] = start_idx
+                valid_segments_for_sort.append(seg_info)
+
+        # Sort by start_index
+        valid_segments_for_sort.sort(key=lambda x: x['start_index'])
+
+        # Define text segments
+        for i, current_seg_info in enumerate(valid_segments_for_sort):
+            segment_text_start_index = current_seg_info['start_index']
+            segment_text_end_index = len(full_text)
+
+            if i + 1 < len(valid_segments_for_sort):
+                next_segment_start_index = valid_segments_for_sort[
+                    i + 1]['start_index']
+                segment_text_end_index = next_segment_start_index
+
+            segment_actual_text = full_text[
+                segment_text_start_index:segment_text_end_index]
+            sorted_segments_with_text.append({
+                "bill_name":
+                current_seg_info.get("bill_name_identified",
+                                     "Unknown Bill Segment"),
+                "text":
+                segment_actual_text
+            })
