@@ -3424,6 +3424,9 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                     logger.info(f"[Segmentation LLM] No segments found in chunk {chunk_start}-{chunk_end}")
                     return []
                 
+                # Debug: Log the raw response
+                logger.debug(f"[Segmentation LLM DEBUG] Raw response for chunk {chunk_start}-{chunk_end}: {response_text[:1000]}...")
+                
                 try:
                     segments = json.loads(response_text)
                 except json.JSONDecodeError as e_json:
@@ -3433,6 +3436,7 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                 
                 if not isinstance(segments, list):
                     logger.warning(f"[Segmentation LLM] Expected list in chunk {chunk_start}-{chunk_end}, got {type(segments)}")
+                    logger.debug(f"[Segmentation LLM DEBUG] Full response was: {response_text}")
                     return []
                 
                 # Validate and adjust segments with fuzzy matching
@@ -3476,15 +3480,37 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                         continue
                     
                     try:
-                        seg_b = int(seg.get('start_pos', 0)) + chunk_start
-                        seg_e = int(seg.get('end_pos', 0)) + chunk_start
+                        start_pos_raw = seg.get('start_pos')
+                        end_pos_raw = seg.get('end_pos')
                         
-                        # Use reasonable defaults if end position is missing
+                        # Handle None or invalid positions by using chunk boundaries
+                        if start_pos_raw is None or start_pos_raw < 0:
+                            logger.info(f"[Segmentation LLM] Bill '{best_match}' has None/invalid start_pos, using chunk start")
+                            seg_b = chunk_start
+                        else:
+                            seg_b = int(start_pos_raw) + chunk_start
+                        
+                        if end_pos_raw is None or end_pos_raw <= 0:
+                            logger.info(f"[Segmentation LLM] Bill '{best_match}' has None/invalid end_pos, using fallback")
+                            # Use a reasonable segment size based on bill name position in text
+                            bill_name_pos = chunk_text.find(bill_name)
+                            if bill_name_pos >= 0:
+                                seg_e = min(chunk_start + bill_name_pos + 5000, total_length)  # 5k chars from bill mention
+                            else:
+                                seg_e = min(seg_b + 3000, total_length)  # Default 3k chars segment
+                        else:
+                            seg_e = int(end_pos_raw) + chunk_start
+                        
+                        # Ensure end position is after start position
                         if seg_e <= seg_b:
                             seg_e = min(seg_b + 3000, total_length)  # Default 3k chars segment
-                    except (ValueError, TypeError):
-                        logger.warning(f"Invalid indices in segment: {seg}")
-                        continue
+                            
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Invalid indices in segment: {seg}, error: {e}")
+                        # Force valid positions since we know the bill exists
+                        seg_b = chunk_start
+                        seg_e = min(chunk_start + 3000, total_length)
+                        logger.info(f"[Segmentation LLM] Using forced positions for '{best_match}': {seg_b}-{seg_e}")
                     
                     # Validate indices
                     if seg_b < seg_e and seg_b >= 0 and seg_e <= total_length and (seg_e - seg_b) > 200:
@@ -3494,9 +3520,13 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                             'e': seg_e,
                             'c': confidence * best_score  # Adjust confidence by match quality
                         })
-                        logger.debug(f"Matched '{bill_name}' -> '{best_match}' (score: {best_score:.2f})")
+                        logger.debug(f"Matched '{bill_name}' -> '{best_match}' (score: {best_score:.2f}) at {seg_b}-{seg_e}")
+                    else:
+                        logger.debug(f"[Segmentation LLM DEBUG] Rejected segment '{best_match}': seg_b={seg_b}, seg_e={seg_e}, length={seg_e-seg_b}, total_length={total_length}")
                 
                 logger.info(f"[Segmentation LLM] Found {len(chunk_segments)} valid segments in chunk {chunk_start}-{chunk_end}")
+                if len(chunk_segments) == 0:
+                    logger.debug(f"[Segmentation LLM DEBUG] No valid segments found. Processed {len([s for s in segments if isinstance(s, dict)])} potential segments from LLM response")
                 return chunk_segments
                 
             except Exception as e_chunk:
