@@ -1291,48 +1291,9 @@ def fetch_session_bills(self,
                     '행정부', '정부제출', '의장', '부의장', '국회의장', '국회부의장'
                 ]
                 
-                # Process the proposer information
-                if bill_proposer:
-                    if bill_proposer.endswith('위원회'):
-                        # Committee proposer - fetch actual committee members
-                        logger.info(f"🏛️ Fetching members for committee: {bill_proposer}")
-                        committee_members = fetch_committee_members(bill_proposer, debug=debug)
-                        if committee_members:
-                            # Create detailed proposer info with member names
-                            member_names = [member['name'] for member in committee_members if member.get('name')]
-                            if len(member_names) <= 5:
-                                # If 5 or fewer members, list them all
-                                proposer_info = f"{bill_proposer}: " + ", ".join(member_names)
-                            else:
-                                # If more than 5, show first 3 and count
-                                proposer_info = f"{bill_proposer}: " + ", ".join(member_names[:3]) + f" 외 {len(member_names)-3}명"
-                            logger.info(f"📋 Bill {bill_id_api} proposed by {bill_proposer} with {len(committee_members)} members")
-                        else:
-                            # Committee name but no members found
-                            proposer_info = bill_proposer
-                            logger.warning(f"⚠️ No members found for committee {bill_proposer}")
-                    elif bill_proposer in institutional_proposers or any(inst in bill_proposer for inst in institutional_proposers):
-                        # Institutional proposer - don't try to fetch individual details
-                        proposer_info = bill_proposer
-                        logger.info(f"🏛️ Bill {bill_id_api} proposed by institutional entity: {bill_proposer}")
-                    else:
-                        # Individual proposer - verify if they're a real assembly member
-                        # Try to fetch their details to confirm they exist
-                        speaker_details = fetch_speaker_details(bill_proposer)
-                        if speaker_details:
-                            # Real assembly member - use their name with party info
-                            party_info = speaker_details.plpt_nm or "정당정보없음"
-                            current_party = party_info.split('/')[-1].strip() if '/' in party_info else party_info
-                            proposer_info = f"{bill_proposer} ({current_party})"
-                            logger.info(f"👤 Bill {bill_id_api} proposed by {bill_proposer} from {current_party}")
-                        else:
-                            # Could be a general proposer or title
-                            proposer_info = bill_proposer
-                            logger.info(f"📝 Bill {bill_id_api} proposed by: {bill_proposer}")
-                else:
-                    # No proposer info found, keep default
-                    logger.warning(f"⚠️ No proposer information found for bill {bill_id_api}")
-                    proposer_info = "국회본회의"
+                # Always use generic proposer initially, then fetch detailed info from BILLINFODETAIL
+                proposer_info = bill_proposer if bill_proposer else "국회본회의"
+                logger.info(f"📝 Bill {bill_id_api} initial proposer: {proposer_info} - will fetch detailed info from BILLINFODETAIL")
 
                 bill_defaults = {
                     'session': session_obj,
@@ -1355,25 +1316,21 @@ def fetch_session_bills(self,
                 if created:
                     created_count += 1
                     logger.info(
-                        f"✨ Created new bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) proposed by {proposer_info} for session {session_id}"
+                        f"✨ Created new bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) initial proposer: {proposer_info} for session {session_id}"
                     )
-                    # Fetch detailed information for new bills
-                    if not debug:
-                        if is_celery_available():
-                            fetch_bill_detail_info.delay(bill_id_api, force=False, debug=debug)
-                        else:
-                            fetch_bill_detail_info(bill_id_api, force=False, debug=debug)
                 else:  # Bill already existed, update_or_create updated it
                     updated_count += 1
                     logger.info(
-                        f"🔄 Updated existing bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) proposed by {proposer_info} for session {session_id}"
+                        f"🔄 Updated existing bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) initial proposer: {proposer_info} for session {session_id}"
                     )
-                    # Optionally fetch detailed info for updated bills if force is enabled
-                    if force and not debug:
-                        if is_celery_available():
-                            fetch_bill_detail_info.delay(bill_id_api, force=True, debug=debug)
-                        else:
-                            fetch_bill_detail_info(bill_id_api, force=True, debug=debug)
+
+                # ALWAYS fetch detailed information from BILLINFODETAIL to get real proposer data
+                if not debug:
+                    logger.info(f"🔍 Fetching detailed proposer info from BILLINFODETAIL for bill {bill_id_api}")
+                    if is_celery_available():
+                        fetch_bill_detail_info.delay(bill_id_api, force=True, debug=debug)
+                    else:
+                        fetch_bill_detail_info(bill_id_api, force=True, debug=debug)
             logger.info(
                 f"🎉 Bills processed for session {session_id}: {created_count} created, {updated_count} updated."
             )
@@ -3534,23 +3491,45 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
             bill.bill_no = bill_detail_data.get('BILL_NO')
             updated_fields.append('bill_no')
 
-        # Update proposer information with more detailed data
+        # Always update proposer information with detailed data from BILLINFODETAIL
         proposer_kind = bill_detail_data.get('PPSR_KIND', '').strip()
         proposer_name = bill_detail_data.get('PPSR', '').strip()
         
         if proposer_name:
+            # Replace generic proposers with real proposer data
+            current_proposer = bill.proposer
+            is_generic_proposer = current_proposer in ['국회본회의', '국회', '본회의'] or any(generic in current_proposer for generic in ['국회본회의', '국회', '본회의'])
+            
             if proposer_kind == '의원' and proposer_name:
-                # Individual member proposer
-                detailed_proposer = f"{proposer_name} ({proposer_kind})"
+                # Individual member proposer - get detailed info
+                detailed_proposer = f"{proposer_name}"
+                # Try to get party information
+                if '등' in proposer_name:
+                    # Multiple proposers (e.g., "박성민의원 등 11인")
+                    detailed_proposer = proposer_name
+                else:
+                    # Single proposer - try to get party info
+                    speaker_details = fetch_speaker_details(proposer_name.replace('의원', '').strip())
+                    if speaker_details and speaker_details.plpt_nm:
+                        party_info = speaker_details.plpt_nm.split('/')[-1].strip()
+                        detailed_proposer = f"{proposer_name} ({party_info})"
+                    else:
+                        detailed_proposer = proposer_name
             elif proposer_kind and proposer_name:
-                # Other types of proposers
+                # Other types of proposers (정부, 위원회 등)
                 detailed_proposer = f"{proposer_name} ({proposer_kind})"
             else:
                 detailed_proposer = proposer_name
             
-            if bill.proposer != detailed_proposer:
+            # Always update if we have better proposer data or if current is generic
+            if is_generic_proposer or bill.proposer != detailed_proposer:
+                old_proposer = bill.proposer
                 bill.proposer = detailed_proposer
                 updated_fields.append('proposer')
+                if is_generic_proposer:
+                    logger.info(f"🔄 Replaced generic proposer '{old_proposer}' with real data: '{detailed_proposer}'")
+                else:
+                    logger.info(f"🔄 Updated proposer from '{old_proposer}' to '{detailed_proposer}'")
 
         # Update proposal date if available
         if bill_detail_data.get('PPSL_DT') and bill.propose_dt != bill_detail_data.get('PPSL_DT'):
