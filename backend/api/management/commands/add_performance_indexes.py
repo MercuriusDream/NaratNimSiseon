@@ -1,3 +1,4 @@
+
 from django.core.management.base import BaseCommand
 from django.db import connection
 
@@ -20,6 +21,8 @@ class Command(BaseCommand):
                 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_session_era_only ON api_session(era_co);',
                 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_session_sess_dgr ON api_session(sess, dgr);',
                 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_session_22nd ON api_session(conf_dt DESC) WHERE era_co IN (\'22\', \'제22대\');',
+                'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_session_era_22_date ON api_session(conf_dt DESC) WHERE era_co IN (\'22\', \'제22대\');',
+                'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_session_era_sess_dgr ON api_session(era_co, sess, dgr);',
 
                 # Speaker indexes
                 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_speaker_assembly_era ON api_speaker(gtelt_eraco) WHERE gtelt_eraco LIKE \'%22%\';',
@@ -38,12 +41,6 @@ class Command(BaseCommand):
                 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_statement_session_sentiment ON api_statement(session_id, sentiment_score);',
                 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_statement_speaker_session ON api_statement(speaker_id, session_id);',
             ]
-
-            # Sessions table indexes - optimized for common queries
-            indexes.append(('idx_session_era_date', 'api_session', '(era_co, conf_dt DESC)'))
-            indexes.append(('idx_session_conf_dt', 'api_session', '(conf_dt DESC)'))
-            indexes.append(('idx_session_era_22_date', 'api_session', "(conf_dt DESC) WHERE era_co IN ('22', '제22대')"))
-            indexes.append(('idx_session_era_sess_dgr', 'api_session', '(era_co, sess, dgr)'))
 
             for index_sql in indexes:
                 try:
