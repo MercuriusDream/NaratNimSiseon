@@ -1388,17 +1388,23 @@ def home_data(request):
                 'bill_count': session.bills.count()
             })
 
-        # Get recent bills
-        recent_bills = Bill.objects.order_by('-created_at')[:5]
+        # Get recent bills with statement counts
+        recent_bills = Bill.objects.select_related('session').prefetch_related('statements').order_by('-created_at')[:5]
         bills_data = []
         for bill in recent_bills:
+            statement_count = bill.statements.count()
+            # Generate a proper session title if not available
+            session_title = bill.session.title if bill.session and bill.session.title else None
+            if not session_title and bill.session:
+                session_title = f"제{bill.session.era_co} {bill.session.sess}회 {bill.session.dgr}차"
+            
             bills_data.append({
                 'id': bill.bill_id,
                 'title': bill.bill_nm,
                 'proposer': bill.proposer,
                 'session_id': bill.session.conf_id if bill.session else None,
-                'session_title': bill.session.title if bill.session else None,
-                'statement_count': bill.statements.count() if hasattr(bill, 'statements') else 0
+                'session_title': session_title,
+                'statement_count': statement_count
             })
 
         # Get recent statements with sentiment analysis
