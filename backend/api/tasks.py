@@ -3333,7 +3333,6 @@ def process_pdf_text_for_statements(full_text,
                 logger.info("✅ Successfully re-initialized Gemini API")
                 
                 # Update global variables
-                global model, genai
                 model = temp_model
                 genai = genai_reinit
             else:
