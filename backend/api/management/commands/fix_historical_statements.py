@@ -1,4 +1,3 @@
-
 from django.core.management.base import BaseCommand
 from api.models import Speaker, Statement, Party, SpeakerPartyHistory
 from django.db.models import Count, Q
@@ -31,7 +30,7 @@ class Command(BaseCommand):
         revert_only = options.get('revert_only', False)
 
         self.stdout.write(self.style.SUCCESS('🔄 Step 1: Reverting historical party markings...'))
-        
+
         if dry_run:
             self.stdout.write('🔍 DRY RUN MODE - No changes will be made')
 
@@ -92,18 +91,18 @@ class Command(BaseCommand):
 
             # Call API to get their actual 22nd Assembly party
             actual_22nd_party = self.fetch_22nd_assembly_party(speaker.naas_nm)
-            
+
             if actual_22nd_party:
                 api_calls_made += 1
                 current_party = speaker.get_current_party_name()
-                
+
                 # Check if the API party is different and is not a historical party
                 if (actual_22nd_party != current_party and 
                     actual_22nd_party not in historical_parties and
                     actual_22nd_party not in ['정당정보없음', '무소속', '']):
-                    
+
                     self.stdout.write(f'   ✅ Found correct 22nd Assembly party: {actual_22nd_party} (was: {current_party})')
-                    
+
                     if not dry_run:
                         self.update_speaker_party(speaker, actual_22nd_party)
                         fixes_applied += 1
@@ -161,7 +160,7 @@ class Command(BaseCommand):
             for member_data in member_data_list:
                 era = member_data.get('GTELT_ERACO', '')
                 party_name = member_data.get('PLPT_NM', '')
-                
+
                 # Check if this is 22nd Assembly data
                 if ('22' in era or '제22대' in era) and party_name:
                     self.stdout.write(f'      🌐 API returned 22nd Assembly party: {party_name} (Era: {era})')
@@ -191,7 +190,7 @@ class Command(BaseCommand):
 
                 # Update speaker's current party
                 speaker.current_party = correct_party
-                
+
                 # Replace the plpt_nm with just the correct current party
                 speaker.plpt_nm = new_party_name
                 speaker.save()
