@@ -36,7 +36,9 @@ const SentimentChart = ({ data }) => {
           statement_count: positiveCount,
           positive_count: positiveCount,
           negative_count: 0,
-          proportion: (positiveScore * 100).toFixed(1) + '%'
+          proportion: (positiveScore * 100).toFixed(1) + '%',
+          isDistribution: true,
+          distributionType: 'positive'
         },
         {
           speaker__plpt_nm: '중립적 발언',
@@ -46,7 +48,9 @@ const SentimentChart = ({ data }) => {
           statement_count: neutralCount,
           positive_count: 0,
           negative_count: 0,
-          proportion: (neutralScore * 100).toFixed(1) + '%'
+          proportion: (neutralScore * 100).toFixed(1) + '%',
+          isDistribution: true,
+          distributionType: 'neutral'
         },
         {
           speaker__plpt_nm: '부정적 발언',
@@ -56,7 +60,9 @@ const SentimentChart = ({ data }) => {
           statement_count: negativeCount,
           positive_count: 0,
           negative_count: negativeCount,
-          proportion: (negativeScore * 100).toFixed(1) + '%'
+          proportion: (negativeScore * 100).toFixed(1) + '%',
+          isDistribution: true,
+          distributionType: 'negative'
         }
       ].filter(item => item.statement_count > 0); // Only show categories with data
     } else {
@@ -83,6 +89,20 @@ const SentimentChart = ({ data }) => {
     return `rgb(${red}, ${green}, ${blue})`;
   };
 
+  // Function to get fixed color for distribution categories
+  const getDistributionColor = (distributionType) => {
+    switch (distributionType) {
+      case 'positive':
+        return '#22C55E'; // Green
+      case 'neutral':
+        return '#6B7280'; // Grey
+      case 'negative':
+        return '#EF4444'; // Red
+      default:
+        return '#6B7280'; // Default grey
+    }
+  };
+
   return (
     <div className="space-y-4">
       {chartData.map((item, index) => {
@@ -93,6 +113,14 @@ const SentimentChart = ({ data }) => {
                            item.speaker__naas_nm ||
                            `항목 ${index + 1}`;
 
+        const isDistribution = item.isDistribution;
+        const barColor = isDistribution 
+          ? getDistributionColor(item.distributionType)
+          : getSentimentColor(sentimentScore);
+        const barWidth = isDistribution 
+          ? `${Math.max(Math.min(item.avg_sentiment * 100, 100), 5)}%`
+          : `${Math.max(Math.min(Math.abs(sentimentScore) * 100, 100), 5)}%`;
+
         return (
           <div key={index} className="border-b pb-4 last:border-b-0">
             <div className="flex items-center justify-between mb-2">
@@ -101,9 +129,12 @@ const SentimentChart = ({ data }) => {
               </span>
               <div 
                 className="px-2 py-1 rounded text-xs text-white font-medium"
-                style={{ backgroundColor: getSentimentColor(sentimentScore) }}
+                style={{ backgroundColor: barColor }}
               >
-                {sentimentScore.toFixed(3)}
+                {isDistribution 
+                  ? `${(item.avg_sentiment * 100).toFixed(1)}%`
+                  : sentimentScore.toFixed(3)
+                }
               </div>
             </div>
 
@@ -111,8 +142,8 @@ const SentimentChart = ({ data }) => {
               <div
                 className={`h-3 rounded-full transition-all duration-300`}
                 style={{
-                  width: `${Math.max(Math.min(Math.abs(sentimentScore) * 100, 100), 5)}%`,
-                  backgroundColor: getSentimentColor(sentimentScore)
+                  width: barWidth,
+                  backgroundColor: barColor
                 }}
               ></div>
             </div>
