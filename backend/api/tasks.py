@@ -1339,11 +1339,23 @@ def fetch_session_bills(self,
                     logger.info(
                         f"✨ Created new bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) proposed by {proposer_info} for session {session_id}"
                     )
+                    # Fetch detailed information for new bills
+                    if not debug:
+                        if is_celery_available():
+                            fetch_bill_detail_info.delay(bill_id_api, force=False, debug=debug)
+                        else:
+                            fetch_bill_detail_info(bill_id_api, force=False, debug=debug)
                 else:  # Bill already existed, update_or_create updated it
                     updated_count += 1
                     logger.info(
                         f"🔄 Updated existing bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) proposed by {proposer_info} for session {session_id}"
                     )
+                    # Optionally fetch detailed info for updated bills if force is enabled
+                    if force and not debug:
+                        if is_celery_available():
+                            fetch_bill_detail_info.delay(bill_id_api, force=True, debug=debug)
+                        else:
+                            fetch_bill_detail_info(bill_id_api, force=True, debug=debug)
             logger.info(
                 f"🎉 Bills processed for session {session_id}: {created_count} created, {updated_count} updated."
             )
@@ -3433,6 +3445,146 @@ def fetch_additional_data_nepjpxkkabqiqpbvk(self,
             logger.error(
                 f"Max retries after unexpected error for {api_endpoint_name}.")
         # raise # Optionally
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
+    """Fetch detailed bill information using BILLINFODETAIL API."""
+    logger.info(
+        f"📄 Fetching detailed info for bill: {bill_id} (force={force}, debug={debug})"
+    )
+
+    if debug:
+        logger.debug(f"🐛 DEBUG: Skipping bill detail fetch for bill {bill_id}")
+        return
+
+    try:
+        if not hasattr(settings,
+                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error(
+                "ASSEMBLY_API_KEY not configured for bill detail fetch.")
+            return
+
+        # Get the bill object
+        try:
+            bill = Bill.objects.get(bill_id=bill_id)
+        except Bill.DoesNotExist:
+            logger.error(f"Bill {bill_id} not found in database.")
+            return
+
+        url = "https://open.assembly.go.kr/portal/openapi/BILLINFODETAIL"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "BILL_ID": bill_id,
+            "Type": "json"
+        }
+
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        if debug:
+            logger.debug(
+                f"🐛 DEBUG: Bill detail API response for {bill_id}: {json.dumps(data, indent=2, ensure_ascii=False)}"
+            )
+
+        bill_detail_data = None
+        api_key_name = 'BILLINFODETAIL'
+        if data and api_key_name in data and isinstance(data[api_key_name], list):
+            if len(data[api_key_name]) > 1 and isinstance(data[api_key_name][1], dict):
+                rows = data[api_key_name][1].get('row', [])
+                if rows:
+                    bill_detail_data = rows[0]  # Take first row
+            elif len(data[api_key_name]) > 0 and isinstance(data[api_key_name][0], dict):
+                head_info = data[api_key_name][0].get('head')
+                if head_info and head_info[0].get('RESULT', {}).get('CODE', '').startswith("INFO-200"):
+                    logger.info(f"API result for bill detail ({bill_id}) indicates no data.")
+                elif 'row' in data[api_key_name][0]:
+                    rows = data[api_key_name][0].get('row', [])
+                    if rows:
+                        bill_detail_data = rows[0]
+
+        if not bill_detail_data:
+            logger.info(f"No detailed information found for bill {bill_id}")
+            return
+
+        # Update bill with detailed information
+        updated_fields = []
+        
+        # Update bill number if not set or different
+        if bill_detail_data.get('BILL_NO') and bill.bill_no != bill_detail_data.get('BILL_NO'):
+            bill.bill_no = bill_detail_data.get('BILL_NO')
+            updated_fields.append('bill_no')
+
+        # Update proposer information with more detailed data
+        proposer_kind = bill_detail_data.get('PPSR_KIND', '').strip()
+        proposer_name = bill_detail_data.get('PPSR', '').strip()
+        
+        if proposer_name:
+            if proposer_kind == '의원' and proposer_name:
+                # Individual member proposer
+                detailed_proposer = f"{proposer_name} ({proposer_kind})"
+            elif proposer_kind and proposer_name:
+                # Other types of proposers
+                detailed_proposer = f"{proposer_name} ({proposer_kind})"
+            else:
+                detailed_proposer = proposer_name
+            
+            if bill.proposer != detailed_proposer:
+                bill.proposer = detailed_proposer
+                updated_fields.append('proposer')
+
+        # Update proposal date if available
+        if bill_detail_data.get('PPSL_DT') and bill.propose_dt != bill_detail_data.get('PPSL_DT'):
+            bill.propose_dt = bill_detail_data.get('PPSL_DT')
+            updated_fields.append('propose_dt')
+
+        # Save if any fields were updated
+        if updated_fields or force:
+            bill.save()
+            logger.info(
+                f"✅ Updated bill {bill_id} with detailed info. Fields updated: {', '.join(updated_fields) if updated_fields else 'forced update'}"
+            )
+            
+            # Log the detailed information
+            logger.info(f"📋 Bill Details:")
+            logger.info(f"   - Bill Name: {bill_detail_data.get('BILL_NM', 'N/A')}")
+            logger.info(f"   - Bill Number: {bill_detail_data.get('BILL_NO', 'N/A')}")
+            logger.info(f"   - Proposer Kind: {bill_detail_data.get('PPSR_KIND', 'N/A')}")
+            logger.info(f"   - Proposer: {bill_detail_data.get('PPSR', 'N/A')}")
+            logger.info(f"   - Proposal Date: {bill_detail_data.get('PPSL_DT', 'N/A')}")
+            logger.info(f"   - Session: {bill_detail_data.get('PPSL_SESS', 'N/A')}")
+            logger.info(f"   - Committee: {bill_detail_data.get('JRCMIT_NM', 'N/A')}")
+        else:
+            logger.info(f"ℹ️ No updates needed for bill {bill_id}")
+
+        # Optionally fetch voting data for this bill
+        if not debug:
+            logger.info(f"🔄 Triggering voting data fetch for bill {bill_id}")
+            if is_celery_available():
+                fetch_voting_data_for_bill.delay(bill_id, force=force, debug=debug)
+            else:
+                fetch_voting_data_for_bill(bill_id, force=force, debug=debug)
+
+    except RequestException as re_exc:
+        logger.error(
+            f"Request error fetching bill detail for {bill_id}: {re_exc}")
+        try:
+            self.retry(exc=re_exc)
+        except MaxRetriesExceededError:
+            logger.error(f"Max retries for bill detail {bill_id}.")
+    except json.JSONDecodeError as json_e:
+        logger.error(f"JSON decode error for bill detail {bill_id}: {json_e}")
+    except Exception as e:
+        logger.error(
+            f"❌ Unexpected error fetching bill detail for {bill_id}: {e}")
+        logger.exception(f"Full traceback for bill detail {bill_id}:")
+        try:
+            self.retry(exc=e)
+        except MaxRetriesExceededError:
+            logger.error(
+                f"Max retries after unexpected error for bill detail {bill_id}."
+            )
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
