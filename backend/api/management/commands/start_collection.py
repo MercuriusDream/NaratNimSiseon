@@ -47,14 +47,14 @@ class Command(BaseCommand):
             self.stdout.write('📡 Starting data collection...')
 
         fetch_latest_sessions(force=force, debug=debug)
-        
+
         if not debug:
             if verbose:
                 self.stdout.write('📄 Starting PDF processing...')
-            
+
             # Import the new tasks
             from api.tasks import fetch_additional_data_nepjpxkkabqiqpbvk
-            
+
             # Start additional data collection
             if is_celery_available():
                 fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=force, debug=debug)

@@ -1226,71 +1226,15 @@ def extract_text_segment(text, start_marker, end_marker=None):
         return ""
 
 
-# Global cache for assembly members (in production, you might want to use Redis)
-_assembly_members_cache = None
-_cache_timestamp = None
-
 def get_all_assembly_members():
-    """Fetch and cache all assembly member names from ALLNAMEMBER API."""
-    global _assembly_members_cache, _cache_timestamp
-    
-    # Use cache if it's less than 1 week old
-    if (_assembly_members_cache is not None and _cache_timestamp is not None and 
-        time.time() - _cache_timestamp < 604800):
-        logger.info(f"Using cached assembly members ({len(_assembly_members_cache)} members)")
-        return _assembly_members_cache
-    
-    if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
-        logger.error("ASSEMBLY_API_KEY not configured for get_all_assembly_members.")
-        return set()
-
+    """Get all assembly member names from local Speaker database."""
     try:
-        logger.info("Fetching assembly member names from ALLNAMEMBER API...")
-        url = "https://open.assembly.go.kr/portal/openapi/ALLNAMEMBER"
-        all_members = set()
-        page = 1
-        page_size = 300
-        
-        max_pages = 50  # Safety limit: 50 pages * 300 = 15,000 max members
-        while page <= max_pages:
-            params = {
-                "KEY": settings.ASSEMBLY_API_KEY,
-                "Type": "json",
-                "pIndex": page,
-                "pSize": page_size
-            }
-            
-            response = requests.get(url, params=params, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            
-            members_data = []
-            if 'ALLNAMEMBER' in data and len(data['ALLNAMEMBER']) > 1:
-                members_data = data['ALLNAMEMBER'][1].get('row', [])
-            
-            if not members_data:
-                break
-                
-            # Extract member names
-            for member in members_data:
-                member_name = member.get('NAAS_NM', '').strip()
-                if member_name:
-                    all_members.add(member_name)
-            
-            if len(members_data) < page_size:
-                break
-                
-            page += 1
-        
-        # Cache the results
-        _assembly_members_cache = all_members
-        _cache_timestamp = time.time()
-        
-        logger.info(f"✅ Fetched and cached {len(all_members)} assembly member names from ALLNAMEMBER API")
-        return all_members
-        
+        # Get all speaker names from our local database
+        speaker_names = set(Speaker.objects.values_list('naas_nm', flat=True))
+        logger.info(f"✅ Using {len(speaker_names)} assembly member names from local database")
+        return speaker_names
     except Exception as e:
-        logger.error(f"❌ Error fetching assembly members: {e}")
+        logger.error(f"❌ Error fetching assembly members from database: {e}")
         return set()
 
 
