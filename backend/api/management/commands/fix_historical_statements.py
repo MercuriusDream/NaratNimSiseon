@@ -135,13 +135,18 @@ class Command(BaseCommand):
                 continue
 
             # Call API to get their actual 22nd Assembly party
-            actual_22nd_party = self.fetch_22nd_assembly_party(speaker.naas_nm)
+            raw_22nd_party = self.fetch_22nd_assembly_party(speaker.naas_nm)
 
-            if actual_22nd_party:
+            if raw_22nd_party:
                 api_calls_made += 1
                 current_party = speaker.get_current_party_name()
+                
+                # Clean up the party name - extract the most recent/relevant party
+                actual_22nd_party = self.clean_party_name(raw_22nd_party)
+                
+                self.stdout.write(f'   🧹 Cleaned API party: {raw_22nd_party} → {actual_22nd_party}')
 
-                # Check if the API party is different and is not a historical party
+                # Check if the cleaned API party is different and is not a historical party
                 if (actual_22nd_party != current_party
                         and actual_22nd_party not in historical_parties
                         and actual_22nd_party
@@ -291,3 +296,33 @@ class Command(BaseCommand):
             logger.error(f"Error updating speaker {speaker.naas_nm}: {e}")
             self.stdout.write(
                 f'      ❌ Failed to update {speaker.naas_nm}: {e}')
+
+    def clean_party_name(self, party_name):
+        """Clean complex party name strings to extract the most relevant current party"""
+        if not party_name:
+            return party_name
+            
+        # Split by slash and get individual parties
+        parties = [p.strip() for p in party_name.split('/') if p.strip()]
+        
+        if not parties:
+            return party_name
+            
+        # Priority mapping for current 22nd Assembly parties
+        priority_parties = [
+            '더불어민주당',
+            '국민의힘', 
+            '조국혁신당',
+            '진보당',
+            '개혁신당',
+            '새로운미래',
+            '무소속'
+        ]
+        
+        # Look for priority parties first (most recent/relevant)
+        for priority_party in priority_parties:
+            if priority_party in parties:
+                return priority_party
+        
+        # If no priority party found, return the last (most recent) party
+        return parties[-1]
