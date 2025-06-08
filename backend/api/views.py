@@ -194,9 +194,9 @@ class SessionViewSet(viewsets.ModelViewSet):
                         default_error_message='발언 목록을 불러오는 중 오류가 발생했습니다.')
     def statements(self, request, pk=None):
         session = self.get_object()
-        statements = session.statements.all()
+        statements = session.statements.select_related('speaker', 'bill').all()
         serializer = StatementSerializer(statements, many=True)
-        return Response({'status': 'success', 'data': serializer.data})
+        return Response(serializer.data)
 
 
 class BillViewSet(viewsets.ModelViewSet):
@@ -876,7 +876,7 @@ def data_status(request):
             sentiment_score__gt=0.3).count()
         negative_statements = Statement.objects.filter(
             sentiment_score__lt=-0.3).count()
-        neutral_statements = statement_count - positive_statements - negative_count
+        neutral_statements = statement_count - positive_statements - negative_statements
 
         sentiment_data = {
             'average_sentiment':
