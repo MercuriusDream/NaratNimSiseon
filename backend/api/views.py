@@ -1575,8 +1575,11 @@ def sentiment_analysis_list(request):
 def home_data(request):
     """Get aggregated data for home page"""
     try:
-        # Use prefetch_related to optimize queries - only 22nd Assembly
-        recent_sessions = Session.objects.filter(era_co='22').prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
+        # Try to get data from any available assembly, not just 22nd
+        # First try 22nd Assembly, then fall back to any assembly
+        recent_sessions_22 = Session.objects.filter(era_co='22').prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
+        recent_sessions = recent_sessions_22 if recent_sessions_22.exists() else Session.objects.prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
+        
         sessions_data = []
         for session in recent_sessions:
             try:
@@ -1592,8 +1595,11 @@ def home_data(request):
                 logger.error(f"Error processing session {session.conf_id}: {e}")
                 continue
 
-        # Optimize recent bills query - only 22nd Assembly
-        recent_bills = Bill.objects.filter(session__era_co='22').select_related('session').annotate(
+        # Get recent bills - try 22nd Assembly first, then any
+        recent_bills_22 = Bill.objects.filter(session__era_co='22').select_related('session').annotate(
+            statement_count=Count('statements')
+        ).order_by('-created_at')[:5]
+        recent_bills = recent_bills_22 if recent_bills_22.exists() else Bill.objects.select_related('session').annotate(
             statement_count=Count('statements')
         ).order_by('-created_at')[:5]
         
@@ -1616,8 +1622,10 @@ def home_data(request):
                 logger.error(f"Error processing bill {bill.bill_id}: {e}")
                 continue
 
-        # Optimize recent statements query - only 22nd Assembly
-        recent_statements = Statement.objects.filter(session__era_co='22').select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
+        # Get recent statements - try 22nd Assembly first, then any
+        recent_statements_22 = Statement.objects.filter(session__era_co='22').select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
+        recent_statements = recent_statements_22 if recent_statements_22.exists() else Statement.objects.select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
+        
         statements_data = []
         for statement in recent_statements:
             try:
@@ -1637,13 +1645,24 @@ def home_data(request):
                 logger.error(f"Error processing statement {statement.id}: {e}")
                 continue
 
-        # Optimize sentiment stats calculation with a single query - only 22nd Assembly
-        sentiment_stats = Statement.objects.filter(session__era_co='22').aggregate(
+        # Get sentiment stats - try 22nd Assembly first
+        sentiment_stats_22 = Statement.objects.filter(session__era_co='22').aggregate(
             total_count=Count('id'),
             avg_sentiment=Avg('sentiment_score'),
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
             negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
         )
+        
+        # If no 22nd Assembly data, get from any assembly
+        if sentiment_stats_22['total_count'] == 0:
+            sentiment_stats = Statement.objects.aggregate(
+                total_count=Count('id'),
+                avg_sentiment=Avg('sentiment_score'),
+                positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+                negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+            )
+        else:
+            sentiment_stats = sentiment_stats_22
         
         total_statements = sentiment_stats['total_count'] or 0
         avg_sentiment = sentiment_stats['avg_sentiment'] or 0
@@ -1651,8 +1670,8 @@ def home_data(request):
         negative_count = sentiment_stats['negative_count'] or 0
         neutral_count = total_statements - positive_count - negative_count
 
-        # Get party statistics with simpler approach - only 22nd Assembly
-        party_stats = Statement.objects.filter(session__era_co='22').select_related('speaker').values(
+        # Get party statistics - try 22nd Assembly first
+        party_stats_22 = Statement.objects.filter(session__era_co='22').select_related('speaker').values(
             'speaker__plpt_nm'
         ).annotate(
             party_name=F('speaker__plpt_nm'),
@@ -1660,23 +1679,54 @@ def home_data(request):
             avg_sentiment=Avg('sentiment_score')
         ).filter(
             speaker__plpt_nm__isnull=False,
-            statement_count__gt=10  # Only parties with significant activity
+            statement_count__gt=5  # Lower threshold
         ).exclude(
-            speaker__plpt_nm__in=['', ' ', '무소속', '정보없음']
+            speaker__plpt_nm__in=['', ' ', '무소속', '정보없음', 'None']
         ).order_by('-statement_count')[:8]
+
+        # If no 22nd Assembly party data, get from any assembly
+        if not party_stats_22:
+            party_stats = Statement.objects.select_related('speaker').values(
+                'speaker__plpt_nm'
+            ).annotate(
+                party_name=F('speaker__plpt_nm'),
+                statement_count=Count('id'),
+                avg_sentiment=Avg('sentiment_score')
+            ).filter(
+                speaker__plpt_nm__isnull=False,
+                statement_count__gt=5
+            ).exclude(
+                speaker__plpt_nm__in=['', ' ', '무소속', '정보없음', 'None']
+            ).order_by('-statement_count')[:8]
+        else:
+            party_stats = party_stats_22
 
         # Add member counts for these parties
         for party in party_stats:
-            party['member_count'] = Speaker.objects.filter(
+            # Try 22nd Assembly first, then any assembly
+            member_count_22 = Speaker.objects.filter(
                 plpt_nm__icontains=party['party_name'],
                 gtelt_eraco__icontains='22'
             ).count()
+            
+            if member_count_22 == 0:
+                party['member_count'] = Speaker.objects.filter(
+                    plpt_nm__icontains=party['party_name']
+                ).count()
+            else:
+                party['member_count'] = member_count_22
+                
             party['avg_sentiment'] = round(party['avg_sentiment'] or 0, 3)
 
-        # Get basic counts with a single query each - only 22nd Assembly
-        total_sessions = Session.objects.filter(era_co='22').count()
-        total_bills = Bill.objects.filter(session__era_co='22').count()
-        total_speakers = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
+        # Get basic counts - try 22nd Assembly first, then any
+        total_sessions_22 = Session.objects.filter(era_co='22').count()
+        total_bills_22 = Bill.objects.filter(session__era_co='22').count()
+        total_speakers_22 = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
+        
+        # If no 22nd Assembly data, get from any assembly
+        total_sessions = total_sessions_22 if total_sessions_22 > 0 else Session.objects.count()
+        total_bills = total_bills_22 if total_bills_22 > 0 else Bill.objects.count()
+        total_speakers = total_speakers_22 if total_speakers_22 > 0 else Speaker.objects.count()
 
         # Ensure all arrays are properly formatted
         response_data = {
