@@ -3439,30 +3439,56 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
         valid_segments_for_sort = []
         for seg_info in bill_segments_from_llm:
             start_idx = seg_info.get("b")
-            if start_idx is not None and isinstance(
-                    start_idx, int) and 0 <= start_idx < len(full_text):
+            end_idx = seg_info.get("e")
+            
+            if start_idx is not None and isinstance(start_idx, int) and 0 <= start_idx < len(full_text):
+                # Validate end index
+                if end_idx is not None and isinstance(end_idx, int) and end_idx > start_idx and end_idx <= len(full_text):
+                    seg_info['e'] = end_idx
+                else:
+                    # If no valid end index, use next segment's start or end of text
+                    seg_info['e'] = len(full_text)
+                
                 seg_info['b'] = start_idx
                 valid_segments_for_sort.append(seg_info)
 
         # Sort by start_index
         valid_segments_for_sort.sort(key=lambda x: x['b'])
 
-        # Now define the actual text for each segment
+        # Adjust end indices to prevent overlaps
+        for i, current_seg_info in enumerate(valid_segments_for_sort):
+            if i + 1 < len(valid_segments_for_sort):
+                next_start = valid_segments_for_sort[i + 1]['b']
+                # Ensure current segment doesn't overlap with next
+                if current_seg_info['e'] > next_start:
+                    current_seg_info['e'] = next_start
+
+        # Now define the actual text for each segment using precise indices
         for current_seg_info in valid_segments_for_sort:
             segment_text_start_index = current_seg_info['b']
-            segment_text_end_index = current_seg_info.get('e', len(full_text))
-            # Ensure indices are valid
-            if not isinstance(segment_text_start_index, int) or not isinstance(segment_text_end_index, int):
+            segment_text_end_index = current_seg_info['e']
+            
+            # Final validation
+            if (segment_text_start_index < 0 or 
+                segment_text_end_index > len(full_text) or 
+                segment_text_start_index >= segment_text_end_index):
+                logger.warning(f"Invalid indices for bill segment: start={segment_text_start_index}, end={segment_text_end_index}")
                 continue
-            if segment_text_start_index < 0 or segment_text_end_index > len(full_text) or segment_text_start_index >= segment_text_end_index:
-                continue
+                
             segment_actual_text = full_text[segment_text_start_index:segment_text_end_index]
+            bill_name = current_seg_info.get("a", "Unknown Bill Segment")
+            
             sorted_segments_with_text.append({
-                "bill_name": current_seg_info.get("a", "Unknown Bill Segment"),
-                "text": segment_actual_text
+                "bill_name": bill_name,
+                "text": segment_actual_text,
+                "start_index": segment_text_start_index,
+                "end_index": segment_text_end_index
             })
+            
+            logger.info(f"📍 Bill segment '{bill_name}': chars {segment_text_start_index}-{segment_text_end_index} ({len(segment_actual_text)} chars)")
+            
         logger.info(
-            f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance."
+            f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance with precise boundaries."
         )
 
     if sorted_segments_with_text:
@@ -3472,16 +3498,32 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
         for seg_data in sorted_segments_with_text:
             bill_name_for_seg = seg_data["bill_name"]
             text_of_segment = seg_data["text"]
+            segment_start = seg_data.get("start_index", 0)
+            segment_end = seg_data.get("end_index", len(full_text))
+            
             logger.info(
                 f"--- Processing segment for Bill: {bill_name_for_seg} ({len(text_of_segment)} chars) ---"
             )
+            logger.info(f"    📍 Position in full text: {segment_start}-{segment_end}")
 
             # This function returns a list of DICTS, where each dict has speaker, text, and LLM analysis fields
             statements_in_segment = extract_statements_for_bill_segment(
                 text_of_segment, session_id, bill_name_for_seg, debug)
+            
             for stmt_data in statements_in_segment:
-                stmt_data[
-                    'associated_bill_name'] = bill_name_for_seg  # Add association
+                stmt_data['associated_bill_name'] = bill_name_for_seg
+                stmt_data['bill_segment_start'] = segment_start
+                stmt_data['bill_segment_end'] = segment_end
+                # Calculate approximate position of statement within the bill segment
+                if 'text' in stmt_data:
+                    stmt_text = stmt_data['text']
+                    # Find the statement's position within the segment
+                    stmt_pos_in_segment = text_of_segment.find(stmt_text[:100])  # Use first 100 chars for matching
+                    if stmt_pos_in_segment >= 0:
+                        stmt_data['statement_position_in_full_text'] = segment_start + stmt_pos_in_segment
+                    else:
+                        stmt_data['statement_position_in_full_text'] = segment_start
+                        
             all_extracted_statements_data.extend(statements_in_segment)
             if not debug:
                 time.sleep(1)  # Pause between processing major segments
@@ -3610,9 +3652,11 @@ def process_extracted_statements_data(statements_data_list,
                 continue
 
             associated_bill_obj = None
-            assoc_bill_name_from_data = stmt_data.get(
-                'associated_bill_name'
-            )  # Set during segmentation/full_text processing
+            assoc_bill_name_from_data = stmt_data.get('associated_bill_name')
+            bill_segment_start = stmt_data.get('bill_segment_start')
+            bill_segment_end = stmt_data.get('bill_segment_end')
+            statement_position = stmt_data.get('statement_position_in_full_text')
+            
             if assoc_bill_name_from_data and assoc_bill_name_from_data not in [
                     "General Discussion / Full Transcript",
                     "Unknown Bill Segment",
@@ -3667,6 +3711,10 @@ def process_extracted_statements_data(statements_data_list,
                             logger.warning(f"No bill found for '{assoc_bill_name_from_data}' in session {session_obj.conf_id}")
                     else:
                         logger.info(f"✅ Found exact bill match: '{assoc_bill_name_from_data}'")
+
+                    # Log the bill matching with position information
+                    if associated_bill_obj and bill_segment_start is not None:
+                        logger.info(f"📍 Statement by {speaker_name} matched to bill '{associated_bill_obj.bill_nm}' at position {statement_position} (segment: {bill_segment_start}-{bill_segment_end})")
 
                 except Exception as e_bill_find:
                     logger.warning(
@@ -3871,6 +3919,24 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
     if debug and statements:
         logger.debug(f"Sample regex statement: {statements[0]}")
     return statements
+
+
+def validate_bill_statement_association(statement_position, bill_segments):
+    """
+    Validate which bill a statement should be associated with based on its position in the full text.
+    Returns the bill name that contains the statement position.
+    """
+    if statement_position is None or not bill_segments:
+        return None
+        
+    for segment in bill_segments:
+        start_pos = segment.get('start_index', segment.get('b', 0))
+        end_pos = segment.get('end_index', segment.get('e', float('inf')))
+        
+        if start_pos <= statement_position < end_pos:
+            return segment.get('bill_name', segment.get('a'))
+    
+    return None
 
 
 def analyze_single_statement(statement_data_dict, session_id, debug=False):
