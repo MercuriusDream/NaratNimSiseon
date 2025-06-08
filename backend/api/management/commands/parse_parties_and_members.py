@@ -1,5 +1,4 @@
 from django.core.management.base import BaseCommand
-from api.tasks import fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
 from api.models import Speaker
 import requests
 import json
@@ -64,12 +63,7 @@ class Command(BaseCommand):
         # Fetch member data from ALLNAMEMBER API
         self.fetch_and_parse_members(force=force, debug=debug)
         
-        # Fetch additional party data 
-        self.stdout.write('📊 Fetching additional party data...')
-        if is_celery_available():
-            fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=force, debug=debug)
-        else:
-            fetch_additional_data_nepjpxkkabqiqpbvk(force=force, debug=debug)
+        # Note: Additional party data fetching can be done separately if needed
         
         self.stdout.write(
             self.style.SUCCESS('✅ Party and member data parsing completed!')
