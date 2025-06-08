@@ -22,7 +22,7 @@ const SentimentChart = ({ data }) => {
       const neutralCount = data.neutral_count || 0;
       const negativeCount = data.negative_count || 0;
       
-      // Calculate proportions as sentiment scores
+      // Calculate proportions as percentages
       const positiveScore = positiveCount / totalStatements;
       const neutralScore = neutralCount / totalStatements;
       const negativeScore = negativeCount / totalStatements;
@@ -118,7 +118,7 @@ const SentimentChart = ({ data }) => {
           ? getDistributionColor(item.distributionType)
           : getSentimentColor(sentimentScore);
         const barWidth = isDistribution 
-          ? `${Math.max(Math.min(item.avg_sentiment * 100, 100), 5)}%`
+          ? `${Math.max(Math.min((item.statement_count / (item.statement_count || 1)) * 100, 100), 5)}%`
           : `${Math.max(Math.min(Math.abs(sentimentScore) * 100, 100), 5)}%`;
 
         return (
@@ -132,7 +132,7 @@ const SentimentChart = ({ data }) => {
                 style={{ backgroundColor: barColor }}
               >
                 {isDistribution 
-                  ? `${(item.avg_sentiment * 100).toFixed(1)}%`
+                  ? item.proportion
                   : sentimentScore.toFixed(3)
                 }
               </div>
