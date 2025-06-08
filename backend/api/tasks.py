@@ -1798,31 +1798,38 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
         # Use lightweight model for segmentation
         segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
 
-        prompt = f"""
-한국 국회 회의록 텍스트에서 개별 발언자의 발언 구간을 찾아 시작과 끝 인덱스를 알려주세요.
+        # Ensure we have actual text content
+        if not text_segment or len(text_segment.strip()) < 100:
+            logger.warning(f"Text segment too short or empty for segmentation (length: {len(text_segment) if text_segment else 0})")
+            return []
+
+        # Limit text length for prompt
+        max_text_length = 10000  # 10k chars max for segmentation prompt
+        if len(text_segment) > max_text_length:
+            text_for_prompt = text_segment[:max_text_length] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
+        else:
+            text_for_prompt = text_segment
+
+        prompt = f"""한국 국회 회의록 텍스트에서 개별 발언자의 발언 구간을 찾아 시작과 끝 인덱스를 알려주세요.
 
 의안: "{bill_name[:100]}..."
 
-회의록 텍스트 (배치 내 상대 위치):
----
-{text_segment}
----
+회의록 텍스트:
+{text_for_prompt}
 
 각 발언자의 발언 시작과 끝 위치를 JSON 배열로 반환해주세요:
 [
   {{"start": 0, "end": 150}},
-  {{"start": 151, "end": 300}},
-  ...
+  {{"start": 151, "end": 300}}
 ]
 
 규칙:
 - ◯ 마커로 시작하는 발언자별 구간을 찾으세요
-- start/end는 이 배치 내에서의 상대적 문자 위치 (0부터 시작)
+- start/end는 위 텍스트 내에서의 문자 위치 (0부터 시작)
 - 의사진행 발언(의사국장, 국장 등)은 제외
 - 실질적 의원 발언만 포함
 - 최소 50자 이상의 의미있는 발언만 포함
-- 배치 경계에서 잘린 발언은 다음 배치에서 처리됩니다
-"""
+- JSON 배열만 응답하고 다른 설명은 하지 마세요"""
 
         response = segmentation_model.generate_content(prompt)
 
@@ -1831,6 +1838,14 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
             return []
 
         response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        
+        # Log the raw response for debugging
+        logger.debug(f"Raw LLM segmentation response (first 200 chars): {response_text[:200]}...")
+
+        # Handle cases where LLM responds with explanation instead of JSON
+        if "죄송합니다" in response_text or "정보가 부족" in response_text or "텍스트가 제공되지 않았" in response_text:
+            logger.warning(f"LLM returned explanation instead of JSON segmentation. This indicates prompt issue.")
+            return []
 
         try:
             indices = json.loads(response_text)
@@ -1844,6 +1859,7 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
                         if 0 <= start < end <= len(text_segment):
                             valid_indices.append({'start': start, 'end': end})
 
+                logger.info(f"Successfully extracted {len(valid_indices)} speech segments from LLM")
                 return valid_indices
             else:
                 logger.warning(f"LLM batch response is not a list: {type(indices)}")
@@ -2990,32 +3006,38 @@ def process_pdf_text_for_statements(full_text,
             )
             segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
 
-        bill_segmentation_prompt = f"""
-다음 국회 회의록에서 각 의안의 논의 시작점을 찾아 JSON으로 응답해주세요.
+        # Ensure we have actual content for segmentation
+        if not segmentation_text or len(segmentation_text.strip()) < 500:
+            logger.warning(f"Segmentation text too short or empty (length: {len(segmentation_text) if segmentation_text else 0})")
+            bill_segments_from_llm = []
+        else:
+            # Limit text for prompt to prevent overflow
+            text_for_segmentation = segmentation_text[:50000] if len(segmentation_text) > 50000 else segmentation_text
+            
+            bill_segmentation_prompt = f"""다음 국회 회의록에서 각 의안의 논의 시작점을 찾아 JSON으로 응답해주세요.
 
 의안 목록:
 {chr(10).join([f"- {bill}" for bill in bill_names_list])}
 
 회의록 텍스트:
-{segmentation_text[:50000]}
+{text_for_segmentation}
 
 다음 JSON 형식으로 응답하세요:
 {{
   "bill_segments": [
     {{
       "bill_name": "정확한 의안명",
-      "start_position": 시작 위치(숫자),
-      "confidence": 0.0-1.0 신뢰도
+      "start_position": 시작위치숫자,
+      "confidence": 0.8
     }}
   ]
 }}
 
 규칙:
-1. 의안명은 제공된 목록에서 정확히 선택
-2. 회의록에서 "○ 의안번호" 또는 의안명이 처음 나타나는 위치를 찾으세요
-3. 신뢰도 0.7 이상만 포함
-4. JSON만 응답하고 다른 설명 없이
-"""
+- 의안명은 제공된 목록에서 정확히 선택
+- 회의록에서 의안이 처음 언급되는 위치를 찾으세요
+- 신뢰도 0.7 이상만 포함
+- JSON만 응답하고 설명 없이"""
 
         try:
             seg_response = segmentation_llm.generate_content(
