@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api';
 import { Link } from 'react-router-dom';
 import NavigationHeader from '../components/NavigationHeader';
@@ -70,67 +70,10 @@ function PartyList() {
     }
   }, [timeRange, selectedCategories]);
 
-  // Update the fetchParties function
-  const fetchParties = fetchPartiesCallback;
-
   useEffect(() => {
-    fetchParties();
+    fetchPartiesCallback();
     fetchCategoryData();
-  }, [fetchParties, timeRange, selectedCategories]);
-
-  const fetchParties = async (fetchAdditional = false) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams({ time_range: timeRange });
-      if (selectedCategories.length > 0) {
-        params.append('categories', selectedCategories.join(','));
-      }
-      if (fetchAdditional) {
-        params.append('fetch_additional', 'true');
-      }
-
-      const response = await api.get(`/api/parties/?${params.toString()}`);
-
-      // Handle different response structures and ensure we always have an array
-      let partiesData = [];
-      if (response.data) {
-        if (Array.isArray(response.data)) {
-          partiesData = response.data;
-        } else if (response.data.results && Array.isArray(response.data.results)) {
-          partiesData = response.data.results;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          partiesData = response.data.data;
-        } else {
-          // If no recognizable array structure, default to empty array
-          console.warn('Unexpected parties data structure:', response.data);
-          partiesData = [];
-        }
-      }
-
-      // Double-check that partiesData is always an array
-      if (!Array.isArray(partiesData)) {
-        console.warn('Parties data is not an array after processing:', partiesData);
-        partiesData = [];
-      }
-
-      setParties(partiesData);
-
-      if (response.data && response.data.additional_data_fetched) {
-        console.log('Additional data fetch triggered');
-      }
-    } catch (err) {
-      const errorMessage = err.response?.status === 500 
-        ? '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
-        : '데이터를 불러오는 중 오류가 발생했습니다.';
-      setError(errorMessage);
-      console.error('Error fetching parties:', err);
-      setParties([]); // Ensure parties is set to empty array on error
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [fetchPartiesCallback, timeRange, selectedCategories]);
 
   const fetchCategoryData = async () => {
     try {
@@ -187,7 +130,7 @@ function PartyList() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">정당 목록</h1>
           <button
-            onClick={() => fetchParties(true)}
+            onClick={() => fetchPartiesCallback(true)}
             disabled={loading}
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
           >

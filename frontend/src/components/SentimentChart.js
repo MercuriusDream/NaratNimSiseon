@@ -111,13 +111,16 @@ const SentimentChart = ({ data }) => {
                            item.speaker_name || 
                            item.speaker__naas_nm ||
                            `항목 ${index + 1}`;
+        const positiveCount = data.positive_count || 0;
+        const neutralCount = data.neutral_count || 0;
+        const negativeCount = data.negative_count || 0;
 
         const isDistribution = item.isDistribution;
         const barColor = isDistribution 
           ? getDistributionColor(item.distributionType)
           : getSentimentColor(sentimentScore);
         const barWidth = isDistribution 
-          ? `${Math.max(Math.min((item.avg_sentiment || item.statement_count / data.length) * 100, 100), 5)}%`
+          ? `${Math.max(Math.min((item.statement_count / (positiveCount + neutralCount + negativeCount)) * 100, 100), 5)}%`
           : `${Math.max(Math.min(Math.abs(sentimentScore) * 100, 100), 5)}%`;
 
         return (
