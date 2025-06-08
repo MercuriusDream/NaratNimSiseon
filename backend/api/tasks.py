@@ -3355,110 +3355,200 @@ def process_pdf_text_for_statements(full_text,
 
 def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text, bill_names_list):
     """
-    Use the LLM to segment the transcript into bill-related sections with multithreading.
+    Use the LLM to segment the transcript into bill-related sections with rate limiting.
     Returns a list of dicts with keys: 'a' (bill name), 'b' (start idx), 'e' (end idx), 'c' (confidence/score).
     """
     import json
     try:
-        CHUNK_SIZE = 2000
+        # Use larger chunks for better context and fewer API calls
+        CHUNK_SIZE = 8000  # Increased from 2000 for better context
+        OVERLAP_SIZE = 1000  # Overlap between chunks to catch bill transitions
         total_length = len(segmentation_text)
         
-        # Create chunks
+        # Create overlapping chunks for better segmentation
         chunks = []
-        for chunk_start in range(0, total_length, CHUNK_SIZE):
+        chunk_start = 0
+        while chunk_start < total_length:
             chunk_end = min(chunk_start + CHUNK_SIZE, total_length)
             chunk_text = segmentation_text[chunk_start:chunk_end]
-            chunks.append((chunk_start, chunk_end, chunk_text))
+            
+            # Only add chunk if it has meaningful content
+            if len(chunk_text.strip()) > 500:
+                chunks.append((chunk_start, chunk_end, chunk_text))
+            
+            # Move to next chunk with overlap
+            chunk_start = chunk_end - OVERLAP_SIZE
+            if chunk_end >= total_length:
+                break
         
-        logger.info(f"[Segmentation LLM] Processing {len(chunks)} chunks with multithreading")
+        logger.info(f"[Segmentation LLM] Processing {len(chunks)} overlapping chunks with rate limiting")
         
-        def process_single_chunk(chunk_data):
-            """Process a single chunk with LLM"""
+        def process_single_chunk_with_rate_limit(chunk_data):
+            """Process a single chunk with LLM and rate limiting"""
             chunk_start, chunk_end, chunk_text = chunk_data
             
-            prompt = f"""
-            다음 국회 회의록 텍스트를 법안별로 구분해 주세요. 각 법안 이름과 해당 법안에 해당하는 텍스트의 시작 인덱스(b)와 종료 인덱스(e)를 아래 JSON 배열로 반환하세요.
-            법안 목록: {', '.join(bill_names_list)}
-            텍스트:
-            ---
-            {chunk_text}
-            ---
-            응답 형식 예시:
-            [
-              {{"a": "법안명", "b": 1234, "e": 5678, "c": 0.8}}
-            ]
-            반드시 JSON 배열만 반환하세요.
-            """
+            # Estimate tokens for this chunk
+            estimated_tokens = len(chunk_text) // 3 + 500  # Conservative estimate with overhead
+            
+            # Wait for rate limiter
+            if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+                logger.warning(f"[Segmentation LLM] Rate limit timeout for chunk {chunk_start}-{chunk_end}")
+                return []
+            
+            # Create bill names string for prompt
+            bill_names_str = '\n'.join([f"- {bill}" for bill in bill_names_list[:10]])  # Limit to 10 bills for prompt clarity
+            
+            # Improved prompt with better instructions
+            prompt = f"""국회 회의록에서 특정 법안들의 논의 구간을 찾아주세요.
+
+찾아야 할 법안들:
+{bill_names_str}
+
+회의록 텍스트 (위치 {chunk_start}-{chunk_end}):
+---
+{chunk_text}
+---
+
+다음 조건을 만족하는 법안 논의 구간만 찾아주세요:
+1. 법안 이름이 명시적으로 언급됨
+2. 해당 법안에 대한 실질적 논의나 발언이 있음
+3. 단순 목록 나열이 아닌 구체적 내용 포함
+
+JSON 배열로만 응답하세요:
+[
+  {{"a": "정확한_법안명", "b": 시작위치, "e": 종료위치, "c": 0.9}}
+]
+
+중요사항:
+- "a"는 위 법안 목록에서 정확히 일치하는 이름만 사용
+- "b", "e"는 이 텍스트 블록 내에서의 문자 위치 (0부터 시작)
+- "c"는 확신도 (0.7 이상인 것만 포함)
+- 법안이 언급되지 않으면 빈 배열 []로 응답"""
             
             try:
-                logger.info(f"[Segmentation LLM] Processing chunk {chunk_start}-{chunk_end} of {total_length}")
+                logger.info(f"[Segmentation LLM] Processing chunk {chunk_start}-{chunk_end} ({len(chunk_text)} chars)")
+                
                 response = segmentation_llm.generate_content(prompt)
+                
+                # Record the API usage
+                gemini_rate_limiter.record_request(estimated_tokens)
+                
+                if not response or not response.text:
+                    logger.warning(f"[Segmentation LLM] Empty response for chunk {chunk_start}-{chunk_end}")
+                    return []
+                
                 response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+                
+                # Handle empty or error responses
+                if not response_text or response_text.lower() in ['[]', 'null', 'none']:
+                    logger.info(f"[Segmentation LLM] No segments found in chunk {chunk_start}-{chunk_end}")
+                    return []
                 
                 try:
                     segments = json.loads(response_text)
-                except Exception as e_json:
+                except json.JSONDecodeError as e_json:
                     logger.error(f"[Segmentation LLM] JSON decode error in chunk {chunk_start}-{chunk_end}: {e_json}")
+                    logger.debug(f"Raw response: {response_text[:200]}...")
                     return []
                 
                 if not isinstance(segments, list):
                     logger.warning(f"[Segmentation LLM] Expected list in chunk {chunk_start}-{chunk_end}, got {type(segments)}")
                     return []
                 
+                # Validate and adjust segments
                 chunk_segments = []
                 for seg in segments:
-                    if (isinstance(seg, dict) and 'a' in seg and 'b' in seg and 'e' in seg):
-                        # Adjust indices to be relative to the full text
-                        try:
-                            seg_b = int(seg['b']) + chunk_start
-                            seg_e = int(seg['e']) + chunk_start
-                        except Exception:
-                            continue
-                        if seg_b < seg_e and seg_b >= 0 and seg_e <= total_length:
-                            seg_copy = dict(seg)
-                            seg_copy['b'] = seg_b
-                            seg_copy['e'] = seg_e
-                            chunk_segments.append(seg_copy)
+                    if not isinstance(seg, dict) or 'a' not in seg or 'b' not in seg or 'e' not in seg:
+                        continue
+                    
+                    bill_name = seg['a'].strip()
+                    confidence = float(seg.get('c', 0.5))
+                    
+                    # Skip low confidence segments
+                    if confidence < 0.7:
+                        continue
+                    
+                    # Validate bill name is in our list
+                    if not any(bill_name in provided_bill or provided_bill in bill_name 
+                             for provided_bill in bill_names_list):
+                        logger.debug(f"Bill name '{bill_name}' not found in provided list, skipping")
+                        continue
+                    
+                    try:
+                        seg_b = int(seg['b']) + chunk_start
+                        seg_e = int(seg['e']) + chunk_start
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid indices in segment: {seg}")
+                        continue
+                    
+                    # Validate indices
+                    if seg_b < seg_e and seg_b >= 0 and seg_e <= total_length and (seg_e - seg_b) > 100:
+                        chunk_segments.append({
+                            'a': bill_name,
+                            'b': seg_b,
+                            'e': seg_e,
+                            'c': confidence
+                        })
                 
+                logger.info(f"[Segmentation LLM] Found {len(chunk_segments)} valid segments in chunk {chunk_start}-{chunk_end}")
                 return chunk_segments
                 
             except Exception as e_chunk:
                 logger.error(f"[Segmentation LLM] Error processing chunk {chunk_start}-{chunk_end}: {e_chunk}")
                 return []
         
-        # Process chunks in parallel with ThreadPoolExecutor
+        # Process chunks sequentially to respect rate limits better
         all_segments = []
-        max_workers = min(5, len(chunks))  # Limit concurrent requests to avoid overwhelming API
         
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all chunk processing tasks
-            future_to_chunk = {executor.submit(process_single_chunk, chunk): chunk for chunk in chunks}
-            
-            # Collect results as they complete
-            for future in as_completed(future_to_chunk):
-                chunk_data = future_to_chunk[future]
-                try:
-                    chunk_segments = future.result()
-                    all_segments.extend(chunk_segments)
-                    logger.info(f"[Segmentation LLM] Completed chunk {chunk_data[0]}-{chunk_data[1]}: {len(chunk_segments)} segments")
-                except Exception as exc:
-                    logger.error(f"[Segmentation LLM] Chunk {chunk_data[0]}-{chunk_data[1]} generated exception: {exc}")
+        for i, chunk_data in enumerate(chunks):
+            try:
+                chunk_segments = process_single_chunk_with_rate_limit(chunk_data)
+                all_segments.extend(chunk_segments)
                 
-                # Brief pause between completed requests to respect rate limits
-                time.sleep(0.5)
+                chunk_start, chunk_end = chunk_data[0], chunk_data[1]
+                logger.info(f"[Segmentation LLM] Completed chunk {i+1}/{len(chunks)} ({chunk_start}-{chunk_end}): {len(chunk_segments)} segments")
+                
+                # Rate limiting pause between chunks
+                if i < len(chunks) - 1:  # Don't sleep after the last chunk
+                    time.sleep(2)  # 2 second pause between chunks
+                    
+            except Exception as exc:
+                logger.error(f"[Segmentation LLM] Chunk {chunk_data[0]}-{chunk_data[1]} generated exception: {exc}")
+                continue
         
-        # Remove duplicates/overlaps (keep first by bill name and start index)
+        # Remove overlapping segments from overlapping chunks
         unique_segments = {}
         for seg in all_segments:
-            key = (seg['a'], seg['b'])
-            if key not in unique_segments:
+            # Create a key based on bill name and approximate position
+            bill_name = seg['a']
+            start_pos = seg['b']
+            
+            # Check for overlaps with existing segments for the same bill
+            found_overlap = False
+            for existing_key, existing_seg in unique_segments.items():
+                if (existing_seg['a'] == bill_name and 
+                    abs(existing_seg['b'] - start_pos) < 2000):  # Within 2k chars = likely overlap
+                    # Keep the one with higher confidence
+                    if seg['c'] > existing_seg['c']:
+                        unique_segments[existing_key] = seg
+                    found_overlap = True
+                    break
+            
+            if not found_overlap:
+                key = f"{bill_name}_{start_pos}"
                 unique_segments[key] = seg
         
         valid_segments = list(unique_segments.values())
-        logger.info(f"[Segmentation LLM] Multithreaded processing complete: {len(valid_segments)} unique segments from {len(all_segments)} total")
+        
+        # Sort by position
+        valid_segments.sort(key=lambda x: x['b'])
+        
+        logger.info(f"[Segmentation LLM] Rate-limited processing complete: {len(valid_segments)} unique segments from {len(all_segments)} total")
         
         if not valid_segments:
-            raise ValueError("No valid segments returned by LLM.")
+            logger.warning("No valid segments found by LLM segmentation")
+            return []
+            
         return valid_segments
         
     except Exception as e:
