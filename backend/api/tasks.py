@@ -186,6 +186,9 @@ if not logger.handlers or not any(
     #     f"🐛 IMMEDIATE DEBUG: Logger reconfigured with handlers: {logger.handlers}"
     # )
 
+# Configuration flags
+ENABLE_VOTING_DATA_COLLECTION = getattr(settings, 'ENABLE_VOTING_DATA_COLLECTION', False)
+
 # Configure Gemini API with error handling
 try:
     import google.generativeai as genai
@@ -3601,12 +3604,14 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
             logger.info(f"ℹ️ No updates needed for bill {bill_id}")
 
         # Optionally fetch voting data for this bill
-        if not debug:
+        if not debug and ENABLE_VOTING_DATA_COLLECTION:
             logger.info(f"🔄 Triggering voting data fetch for bill {bill_id}")
             if is_celery_available():
                 fetch_voting_data_for_bill.delay(bill_id, force=force, debug=debug)
             else:
                 fetch_voting_data_for_bill(bill_id, force=force, debug=debug)
+        elif not ENABLE_VOTING_DATA_COLLECTION:
+            logger.info(f"⏸️ Skipping voting data fetch for bill {bill_id} (voting data collection disabled)")
 
     except RequestException as re_exc:
         logger.error(
@@ -3632,6 +3637,11 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
     """Fetch voting data for a specific bill using nojepdqqaweusdfbi API."""
+    
+    if not ENABLE_VOTING_DATA_COLLECTION:
+        logger.info(f"⏸️ Skipping voting data collection for bill {bill_id} (disabled by configuration)")
+        return
+    
     logger.info(
         f"🗳️ Fetching voting data for bill: {bill_id} (force={force}, debug={debug})"
     )
