@@ -36,15 +36,21 @@ class Command(BaseCommand):
             type=str,
             help='Target party to assign to the speaker (optional)',
         )
+        parser.add_argument(
+            '--speaker-code',
+            type=str,
+            help='Specific speaker code to target when multiple speakers have same name (optional)',
+        )
 
     def handle(self, *args, **options):
         dry_run = options.get('dry_run', False)
         revert_only = options.get('revert_only', False)
         speaker_name = options.get('name')
         target_party = options.get('target_party')
+        speaker_code = options.get('speaker_code')
 
         if speaker_name and target_party:
-            self.handle_specific_speaker(speaker_name, target_party, dry_run)
+            self.handle_specific_speaker(speaker_name, target_party, dry_run, speaker_code)
             return
 
         self.stdout.write(
@@ -228,7 +234,7 @@ class Command(BaseCommand):
                     '✅ FIXES COMPLETE - Historical parties reverted, speakers updated, and problematic parties cleaned up'
                 ))
 
-    def handle_specific_speaker(self, speaker_name, target_party, dry_run):
+    def handle_specific_speaker(self, speaker_name, target_party, dry_run, speaker_code=None):
         """Handle updating a specific speaker to a target party"""
         self.stdout.write(
             self.style.SUCCESS(
@@ -237,7 +243,15 @@ class Command(BaseCommand):
 
         try:
             # Direct lookup instead of iteration
-            speaker = Speaker.objects.get(naas_nm=speaker_name)
+            if speaker_code:
+                speaker = Speaker.objects.get(naas_cd=speaker_code)
+                if speaker.naas_nm != speaker_name:
+                    self.stdout.write(
+                        self.style.ERROR(f'   ❌ Speaker code {speaker_code} does not match name {speaker_name}')
+                    )
+                    return
+            else:
+                speaker = Speaker.objects.get(naas_nm=speaker_name)
 
             current_party_name = speaker.get_current_party_name()
             self.stdout.write(f'   Current party: {current_party_name}')
@@ -257,9 +271,15 @@ class Command(BaseCommand):
                 self.style.ERROR(f'   ❌ Speaker not found: {speaker_name}')
             )
         except Speaker.MultipleObjectsReturned:
+            speakers = Speaker.objects.filter(naas_nm=speaker_name)
             self.stdout.write(
                 self.style.ERROR(f'   ❌ Multiple speakers found with name: {speaker_name}')
             )
+            self.stdout.write('   📋 Available speakers:')
+            for speaker in speakers:
+                current_party_name = speaker.get_current_party_name()
+                self.stdout.write(f'      🏷️  Code: {speaker.naas_cd}, Party: {current_party_name}, Era: {speaker.gtelt_eraco}')
+            self.stdout.write('   💡 Use --speaker-code=<code> to specify which speaker')
         except Exception as e:
             self.stdout.write(
                 self.style.ERROR(f'   ❌ Error updating {speaker_name}: {e}')
