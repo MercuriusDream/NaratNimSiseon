@@ -1488,6 +1488,19 @@ def analyze_speech_segment_with_llm(speech_segment,
         response_text_cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
         analysis_json = json.loads(response_text_cleaned)
 
+        # Handle case where LLM returns a list instead of dict
+        if isinstance(analysis_json, list):
+            if len(analysis_json) > 0 and isinstance(analysis_json[0], dict):
+                analysis_json = analysis_json[0]
+            else:
+                logger.warning(f"❌ LLM returned unexpected list format for speech segment analysis")
+                return None
+        
+        # Ensure analysis_json is a dictionary
+        if not isinstance(analysis_json, dict):
+            logger.warning(f"❌ LLM response is not a dictionary: {type(analysis_json)}")
+            return None
+
         speaker_name = analysis_json.get('speaker_name', '').strip()
         speech_content = analysis_json.get('speech_content', '').strip()
         is_valid_member = analysis_json.get('is_valid_member', False)
