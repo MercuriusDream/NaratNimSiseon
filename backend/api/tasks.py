@@ -867,7 +867,7 @@ def fetch_committee_members(committee_name, debug=False):
 
         # Clean committee name - remove any extra whitespace
         committee_name = committee_name.strip()
-        
+
         url = "https://open.assembly.go.kr/portal/openapi/nktulghcadyhmiqxi"
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
@@ -898,14 +898,14 @@ def fetch_committee_members(committee_name, debug=False):
                     result_info = head_info[0].get('RESULT', {})
                     result_code = result_info.get('CODE', '')
                     result_message = result_info.get('MESSAGE', '')
-                    
+
                     if result_code.startswith("INFO-200") or "데이터가 없습니다" in result_message:
                         logger.info(f"ℹ️ No data available for committee: {committee_name}")
                         return []
                     elif result_code.startswith("ERROR"):
                         logger.warning(f"⚠️ API error for committee {committee_name}: {result_code} - {result_message}")
                         return []
-                
+
                 # Try to get data from row field anyway
                 if 'row' in data[api_key_name][0]:
                     members_data = data[api_key_name][0].get('row', [])
@@ -918,12 +918,12 @@ def fetch_committee_members(committee_name, debug=False):
         # Extract member names and other relevant info
         members = []
         unique_names = set()  # To avoid duplicates
-        
+
         for member_data in members_data:
             member_name = member_data.get('HG_NM', '').strip()
             if not member_name or member_name in unique_names:
                 continue
-                
+
             unique_names.add(member_name)
             member_info = {
                 'name': member_name,
@@ -939,7 +939,7 @@ def fetch_committee_members(committee_name, debug=False):
             members.append(member_info)
 
         logger.info(f"✅ Successfully extracted {len(members)} unique committee members for: {committee_name}")
-        
+
         # Log member summary for debugging
         if members:
             member_names = [m['name'] for m in members[:5]]  # First 5 names
@@ -948,7 +948,7 @@ def fetch_committee_members(committee_name, debug=False):
             else:
                 member_summary = ', '.join(member_names)
             logger.info(f"📋 {committee_name} members: {member_summary}")
-        
+
         return members
 
     except requests.exceptions.RequestException as e:
@@ -1094,13 +1094,13 @@ def fetch_session_details(self,
                         session_obj.cmit_nm = cmit_nm
                         updated_fields = True
                         logger.info(f"🔄 Updated session cmit_nm to: {cmit_nm}")
-                    
+
                     # Define institutional/non-individual proposers that should not be looked up
                     institutional_proposers = [
                         '국회본회의', '국회', '본회의', '정부', '대통령', '국무총리', 
                         '행정부', '정부제출', '의장', '부의장', '국회의장', '국회부의장'
                     ]
-                    
+
                     if cmit_nm.endswith('위원회'):
                         logger.info(f"🏛️ Found committee proposer: {cmit_nm} for session {session_id}")
                         if not debug:
@@ -1280,20 +1280,20 @@ def fetch_session_bills(self,
 
                 # Extract proposer information from multiple sources
                 proposer_info = "국회"  # Default fallback
-                
+
                 # First try PROPOSER field from VCONFBILLLIST
                 bill_proposer = bill_item.get('PROPOSER', '').strip()
-                
+
                 # If no PROPOSER, try to get from session's CMIT_NM (from VCONFDETAIL)
                 if not bill_proposer and hasattr(session_obj, 'cmit_nm') and session_obj.cmit_nm:
                     bill_proposer = session_obj.cmit_nm.strip()
-                
+
                 # Define institutional/non-individual proposers that should not be looked up
                 institutional_proposers = [
                     '국회본회의', '국회', '본회의', '정부', '대통령', '국무총리', 
                     '행정부', '정부제출', '의장', '부의장', '국회의장', '국회부의장'
                 ]
-                
+
                 # Always use generic proposer initially, then fetch detailed info from BILLINFODETAIL
                 proposer_info = bill_proposer if bill_proposer else "국회본회의"
                 logger.info(f"📝 Bill {bill_id_api} initial proposer: {proposer_info} - will fetch detailed info from BILLINFODETAIL")
@@ -1484,24 +1484,24 @@ def extract_bill_specific_content(full_text, bill_name):
     try:
         if not full_text or not bill_name:
             return ""
-        
+
         # Clean bill name for better matching
         clean_bill_name = bill_name.strip()
-        
+
         # Create variations of the bill name for searching
         search_terms = [clean_bill_name]
-        
+
         # Add variations without common suffixes
         if "법률안" in clean_bill_name:
             search_terms.append(clean_bill_name.replace("법률안", ""))
         if "일부개정" in clean_bill_name:
             search_terms.append(clean_bill_name.replace("일부개정", ""))
-        
+
         # Extract core bill name (before parentheses if any)
         if "(" in clean_bill_name:
             core_name = clean_bill_name.split("(")[0].strip()
             search_terms.append(core_name)
-        
+
         # Find all mentions of the bill in the text
         bill_positions = []
         for term in search_terms:
@@ -1513,25 +1513,25 @@ def extract_bill_specific_content(full_text, bill_name):
                         break
                     bill_positions.append(found_pos)
                     pos = found_pos + 1
-        
+
         if not bill_positions:
             logger.info(f"No mentions found for bill: {bill_name}")
             return ""
-        
+
         # Find the earliest mention
         earliest_pos = min(bill_positions)
-        
+
         # Extract content from the earliest mention to a reasonable endpoint
         # Look for next bill mention or use chunk size
         start_pos = max(0, earliest_pos - 500)  # Include some context before
-        
+
         # Find a good end point (next bill, end of section, or max length)
         max_segment_length = 15000  # 15k chars max per bill segment
         end_pos = min(len(full_text), start_pos + max_segment_length)
-        
+
         # Try to find a natural break point (like next bill discussion)
         remaining_text = full_text[earliest_pos + len(clean_bill_name):end_pos]
-        
+
         # Look for patterns that might indicate next bill discussion
         next_bill_patterns = ["○", "의안", "법률안", "건의"]
         for pattern in next_bill_patterns:
@@ -1539,12 +1539,12 @@ def extract_bill_specific_content(full_text, bill_name):
             if pattern_pos != -1 and pattern_pos > 1000:  # At least 1k chars into the segment
                 end_pos = earliest_pos + len(clean_bill_name) + pattern_pos
                 break
-        
+
         extracted_content = full_text[start_pos:end_pos].strip()
-        
+
         logger.info(f"Extracted {len(extracted_content)} chars for bill: {bill_name[:50]}...")
         return extracted_content
-        
+
     except Exception as e:
         logger.error(f"❌ Error extracting bill-specific content for '{bill_name}': {e}")
         return ""
@@ -1605,7 +1605,7 @@ def extract_statements_for_bill_segment(bill_text_segment,
 
     # Step 1: Get speech segment indices from LLM
     speech_indices = get_speech_segment_indices_from_llm(bill_text_segment, bill_name, debug)
-    
+
     if not speech_indices:
         logger.info(f"No speech segments found for bill '{bill_name}', trying ◯ fallback")
         return process_single_segment_for_statements_with_splitting(
@@ -1616,11 +1616,11 @@ def extract_statements_for_bill_segment(bill_text_segment,
     for idx_pair in speech_indices:
         start_idx = idx_pair.get('start', 0)
         end_idx = idx_pair.get('end', len(bill_text_segment))
-        
+
         # Validate indices
         start_idx = max(0, min(start_idx, len(bill_text_segment)))
         end_idx = max(start_idx, min(end_idx, len(bill_text_segment)))
-        
+
         if end_idx > start_idx:
             segment_text = bill_text_segment[start_idx:end_idx].strip()
             if segment_text and len(segment_text) > 50:  # Minimum meaningful content
@@ -1735,58 +1735,58 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
     # Batch processing configuration
     MAX_SEGMENTATION_LENGTH = 50000  # 50k chars per batch
     BATCH_OVERLAP = 5000  # 5k character overlap between batches
-    
+
     if len(text_segment) <= MAX_SEGMENTATION_LENGTH:
         # Single batch processing
         return _process_single_segmentation_batch(text_segment, bill_name, 0)
-    
+
     # Multi-batch processing for large texts
     logger.info(f"🔄 Processing large text in batches (max {MAX_SEGMENTATION_LENGTH} chars per batch)")
-    
+
     all_indices = []
     batch_start = 0
     batch_count = 0
-    
+
     while batch_start < len(text_segment):
         batch_end = min(batch_start + MAX_SEGMENTATION_LENGTH, len(text_segment))
         batch_text = text_segment[batch_start:batch_end]
         batch_count += 1
-        
+
         logger.info(f"📦 Processing batch {batch_count}: chars {batch_start}-{batch_end}")
-        
+
         # Process this batch
         batch_indices = _process_single_segmentation_batch(batch_text, bill_name, batch_start)
-        
+
         if batch_indices:
             # Adjust indices to be relative to the full document
             adjusted_indices = []
             for idx_pair in batch_indices:
                 adjusted_start = idx_pair['start'] + batch_start
                 adjusted_end = idx_pair['end'] + batch_start
-                
+
                 # Ensure indices don't exceed the full document length
                 if adjusted_start < len(text_segment) and adjusted_end <= len(text_segment):
                     adjusted_indices.append({'start': adjusted_start, 'end': adjusted_end})
-            
+
             all_indices.extend(adjusted_indices)
             logger.info(f"✅ Batch {batch_count}: Found {len(adjusted_indices)} speech segments")
         else:
             logger.info(f"⚠️ Batch {batch_count}: No speech segments found")
-        
+
         # Move to next batch with overlap
         if batch_end >= len(text_segment):
             break
-            
+
         batch_start = batch_end - BATCH_OVERLAP
-        
+
         # Rate limiting between batches
         if batch_start < len(text_segment):
             logger.info("⏳ Resting 3s before next batch...")
             time.sleep(3)
-    
+
     # Remove overlapping segments and sort by start position
     deduplicated_indices = _deduplicate_speech_segments(all_indices)
-    
+
     logger.info(f"🎉 Batch processing complete: {len(deduplicated_indices)} total speech segments from {batch_count} batches")
     return deduplicated_indices
 
@@ -1796,7 +1796,7 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
     try:
         # Use lightweight model for segmentation
         segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
-        
+
         prompt = f"""
 한국 국회 회의록 텍스트에서 개별 발언자의 발언 구간을 찾아 시작과 끝 인덱스를 알려주세요.
 
@@ -1824,13 +1824,13 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
 """
 
         response = segmentation_model.generate_content(prompt)
-        
+
         if not response or not response.text:
             logger.warning(f"No response from LLM for batch segmentation (offset: {global_offset})")
             return []
 
         response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-        
+
         try:
             indices = json.loads(response_text)
             if isinstance(indices, list):
@@ -1842,17 +1842,17 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
                         # Validate indices are within this batch
                         if 0 <= start < end <= len(text_segment):
                             valid_indices.append({'start': start, 'end': end})
-                
+
                 return valid_indices
             else:
                 logger.warning(f"LLM batch response is not a list: {type(indices)}")
                 return []
-                
+
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error in batch segmentation: {e}")
             logger.debug(f"Raw response: {response_text[:500]}...")
             return []
-            
+
     except Exception as e:
         logger.error(f"Error in batch speech segmentation: {e}")
         return []
@@ -1862,30 +1862,30 @@ def _deduplicate_speech_segments(all_indices):
     """Remove overlapping speech segments and return sorted unique segments."""
     if not all_indices:
         return []
-    
+
     # Sort by start position
     sorted_indices = sorted(all_indices, key=lambda x: x['start'])
-    
+
     deduplicated = []
     last_end = -1
-    
+
     for segment in sorted_indices:
         start = segment['start']
         end = segment['end']
-        
+
         # Skip if this segment overlaps significantly with the previous one
         if start < last_end - 1000:  # Allow small overlap of 1000 chars
             continue
-            
+
         # Adjust start if there's minor overlap
         if start < last_end:
             start = last_end
-            
+
         # Only add if the segment is still meaningful
         if end - start > 50:  # Minimum 50 chars
             deduplicated.append({'start': start, 'end': end})
             last_end = end
-    
+
     logger.info(f"🔧 Deduplicated {len(all_indices)} segments to {len(deduplicated)} unique segments")
     return deduplicated
 
@@ -2377,13 +2377,13 @@ def extract_statements_with_bill_based_chunking(full_text,
             # Process in overlapping batches to ensure we don't miss bill discussions at boundaries
             batch_overlap = 5000  # 5K character overlap between batches
             all_bill_segments = []
-            
+
             for batch_start in range(0, len(full_text), MAX_SEGMENTATION_LENGTH - batch_overlap):
                 batch_end = min(batch_start + MAX_SEGMENTATION_LENGTH, len(full_text))
                 batch_text = full_text[batch_start:batch_end]
-                
+
                 logger.info(f"Processing segmentation batch: chars {batch_start}-{batch_end}")
-                
+
                 batch_segmentation_prompt = f"""
 국회 회의록 텍스트 배치에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
 
@@ -2412,30 +2412,30 @@ def extract_statements_with_bill_based_chunking(full_text,
 - confidence가 0.7 미만인 경우는 포함하지 마세요
 - 배치 경계에서 잘린 논의는 다음 배치에서 처리됩니다
 """
-                
+
                 try:
                     batch_response = segmentation_llm.generate_content(batch_segmentation_prompt)
                     if batch_response and batch_response.text:
                         batch_text_cleaned = batch_response.text.strip().replace("```json", "").replace("```", "").strip()
                         batch_data = json.loads(batch_text_cleaned)
                         batch_segments = batch_data.get("bill_discussion_segments", [])
-                        
+
                         # Adjust indices to be relative to full document
                         for segment in batch_segments:
                             if 'discussion_start_idx' in segment:
                                 segment['discussion_start_idx'] += batch_start
-                        
+
                         all_bill_segments.extend(batch_segments)
                         logger.info(f"Found {len(batch_segments)} bill segments in batch {batch_start}-{batch_end}")
-                    
+
                     # Rate limiting between batches
                     if batch_end < len(full_text):
                         time.sleep(2)
-                        
+
                 except (json.JSONDecodeError, Exception) as e:
                     logger.warning(f"Error processing segmentation batch {batch_start}-{batch_end}: {e}")
                     continue
-            
+
             # Remove duplicates and sort by position
             seen_bills = set()
             unique_segments = []
@@ -2444,7 +2444,7 @@ def extract_statements_with_bill_based_chunking(full_text,
                 if bill_name and bill_name not in seen_bills:
                     seen_bills.add(bill_name)
                     unique_segments.append(segment)
-            
+
             bill_segments_from_llm = unique_segments
             logger.info(f"Batch segmentation completed: {len(bill_segments_from_llm)} unique bill segments identified")
         else:
@@ -2544,14 +2544,14 @@ def extract_statements_with_bill_based_chunking(full_text,
     # If no LLM segments identified, process bills iteratively one by one
     if not sorted_segments_with_text and bill_names_list:
         logger.info(f"No LLM segments found, processing {len(bill_names_list)} bills iteratively")
-        
+
         # Process each bill individually by searching for its discussion in the text
         for bill_name in bill_names_list:
             logger.info(f"🔍 Processing bill iteratively: {bill_name}")
-            
+
             # Try to find bill-specific content in the text
             bill_segment_text = extract_bill_specific_content(full_text, bill_name)
-            
+
             if bill_segment_text and len(bill_segment_text.strip()) > 100:  # Minimum content threshold
                 sorted_segments_with_text.append({
                     "bill_name": bill_name,
@@ -2560,18 +2560,18 @@ def extract_statements_with_bill_based_chunking(full_text,
                 logger.info(f"✅ Found content for bill: {bill_name} ({len(bill_segment_text)} chars)")
             else:
                 logger.info(f"⚠️ No specific content found for bill: {bill_name}, skipping")
-    
+
     # If still no segments and we have bills, create equal segments as last resort
     if not sorted_segments_with_text and bill_names_list:
         logger.warning(f"Creating equal segments for {len(bill_names_list)} bills as last resort")
         text_length = len(full_text)
         segment_size = text_length // len(bill_names_list)
-        
+
         for i, bill_name in enumerate(bill_names_list):
             start_pos = i * segment_size
             end_pos = (i + 1) * segment_size if i < len(bill_names_list) - 1 else text_length
             segment_text = full_text[start_pos:end_pos]
-            
+
             sorted_segments_with_text.append({
                 "bill_name": bill_name,
                 "text": segment_text
@@ -3001,75 +3001,60 @@ def process_pdf_text_for_statements(full_text,
 ---
 
 각 의안에 대한 논의 시작 지점을 알려주세요. JSON 형식 응답:
-{{
-  "bill_discussion_segments": [
-    {{
-      "bill_name_identified": "제공된 목록에서 정확히 일치하는 의안명",
-      "discussion_start_idx": 해당 의안 논의가 시작되는 텍스트 내 문자 위치 (숫자),
-      "confidence": 0.0-1.0 (매칭 확신도)
-    }}
-  ]
-}}
-
-중요한 규칙:
-- "bill_name_identified"는 반드시 제공된 의안 목록에서 정확히 선택해야 합니다
-- 의안명을 줄이거나 변경하지 마세요 (예: "○○법 일부개정법률안" -> "○○법 일부개정법률안")
-- 회의록에서 해당 의안에 대한 실질적 논의가 시작되는 지점을 찾으세요
-- 순서는 회의록에 나타난 순서대로 정렬해주세요
-- confidence가 0.7 미만인 경우는 포함하지 마세요
 """
-            try:
-                seg_response = segmentation_llm.generate_content(
-                    bill_segmentation_prompt)
-                if seg_response and seg_response.text:
-                    seg_text_cleaned = seg_response.text.strip().replace(
-                        "```json", "").replace("```", "").strip()
-                    seg_data = json.loads(seg_text_cleaned)
-                    bill_segments_from_llm = seg_data.get(
-                        "bill_discussion_segments", [])
-                    if bill_segments_from_llm:
-                        logger.info(
-                            f"LLM identified {len(bill_segments_from_llm)} potential bill discussion segments."
-                        )
-                    else:
-                        logger.info(
-                            "LLM did not identify distinct bill segments. Will process full text."
-                        )
+
+        try:
+            seg_response = segmentation_llm.generate_content(
+                bill_segmentation_prompt)
+            if seg_response and seg_response.text:
+                seg_text_cleaned = seg_response.text.strip().replace(
+                    "```json", "").replace("```", "").strip()
+                seg_data = json.loads(seg_text_cleaned)
+                bill_segments_from_llm = seg_data.get(
+                    "bill_discussion_segments", [])
+                if bill_segments_from_llm:
+                    logger.info(
+                        f"LLM identified {len(bill_segments_from_llm)} potential bill discussion segments."
+                    )
                 else:
                     logger.info(
-                        "No response from LLM for bill segmentation. Will process full text."
+                        "LLM did not identify distinct bill segments. Will process full text."
                     )
-            except json.JSONDecodeError as e_json_seg:
-                logger.error(
-                    f"JSON parsing error for bill segmentation response: {e_json_seg}. Using bill names for fallback segmentation."
+            else:
+                logger.info(
+                    "No response from LLM for bill segmentation. Will process full text."
                 )
-                # Create fallback segments using actual bill names
-                if bill_names_list:
-                    text_per_bill = len(full_text) // len(bill_names_list)
-                    for i, bill_name in enumerate(bill_names_list):
-                        start_idx = i * text_per_bill
-                        bill_segments_from_llm.append({
-                            "bill_name_identified": bill_name,
-                            "discussion_start_idx": start_idx,
-                            "confidence": 0.5
-                        })
-                    logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
-            except Exception as e_seg:
-                logger.error(
-                    f"Error during LLM bill segmentation: {e_seg}. Using bill names for fallback segmentation."
-                )
-                logger.exception("Traceback for bill segmentation error:")
-                # Create fallback segments using actual bill names
-                if bill_names_list:
-                    text_per_bill = len(full_text) // len(bill_names_list)
-                    for i, bill_name in enumerate(bill_names_list):
-                        start_idx = i * text_per_bill
-                        bill_segments_from_llm.append({
-                            "bill_name_identified": bill_name,
-                            "discussion_start_idx": start_idx,
-                            "confidence": 0.5
-                        })
-                    logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
+        except json.JSONDecodeError as e_json_seg:
+            logger.error(
+                f"JSON parsing error for bill segmentation response: {e_json_seg}. Using bill names for fallback segmentation."
+            )
+            # Create fallback segments using actual bill names
+            if bill_names_list:
+                text_per_bill = len(full_text) // len(bill_names_list)
+                for i, bill_name in enumerate(bill_names_list):
+                    start_idx = i * text_per_bill
+                    bill_segments_from_llm.append({
+                        "bill_name_identified": bill_name,
+                        "discussion_start_idx": start_idx,
+                        "confidence": 0.5
+                    })
+                logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
+        except Exception as e_seg:
+            logger.error(
+                f"Error during LLM bill segmentation: {e_seg}. Using bill names for fallback segmentation."
+            )
+            logger.exception("Traceback for bill segmentation error:")
+            # Create fallback segments using actual bill names
+            if bill_names_list:
+                text_per_bill = len(full_text) // len(bill_names_list)
+                for i, bill_name in enumerate(bill_names_list):
+                    start_idx = i * text_per_bill
+                    bill_segments_from_llm.append({
+                        "bill_name_identified": bill_name,
+                        "discussion_start_idx": start_idx,
+                        "confidence": 0.5
+                    })
+                logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
 
     # Sort segments by their appearance order in the full_text using their indices
     sorted_segments_with_text = []
@@ -3135,10 +3120,10 @@ def process_pdf_text_for_statements(full_text,
             logger.info(f"No segments identified. Processing {len(bill_names_list)} bills iteratively one by one.")
             for bill_name in bill_names_list:
                 logger.info(f"🔄 Processing individual bill: {bill_name}")
-                
+
                 # Extract content for this specific bill
                 bill_content = extract_bill_specific_content(full_text, bill_name)
-                
+
                 if bill_content and len(bill_content.strip()) > 100:
                     statements_in_bill = extract_statements_for_bill_segment(
                         bill_content, session_id, bill_name, debug)
@@ -3148,7 +3133,7 @@ def process_pdf_text_for_statements(full_text,
                     logger.info(f"✅ Processed {len(statements_in_bill)} statements for bill: {bill_name}")
                 else:
                     logger.info(f"⚠️ No content found for bill: {bill_name}")
-                
+
                 if not debug:
                     time.sleep(1)  # Pause between bills
         else:
@@ -3259,18 +3244,18 @@ def process_extracted_statements_data(statements_data_list,
                         session=session_obj,
                         bill_nm__iexact=assoc_bill_name_from_data
                     ).first()
-                    
+
                     if not associated_bill_obj:
                         # Try partial match by removing common suffixes/prefixes
                         clean_name = assoc_bill_name_from_data.split('(')[0].strip()
                         clean_name = clean_name.replace('의안', '').replace('법률안', '').strip()
-                        
+
                         # Try contains match
                         bill_candidates = Bill.objects.filter(
                             session=session_obj,
                             bill_nm__icontains=clean_name
                         )
-                        
+
                         if bill_candidates.count() == 1:
                             associated_bill_obj = bill_candidates.first()
                             logger.info(f"✅ Found bill match via partial matching: '{assoc_bill_name_from_data}' -> '{associated_bill_obj.bill_nm}'")
@@ -3285,11 +3270,11 @@ def process_extracted_statements_data(statements_data_list,
                                 common_words = len(data_words.intersection(candidate_words))
                                 total_words = len(data_words.union(candidate_words))
                                 similarity = common_words / total_words if total_words > 0 else 0
-                                
+
                                 if similarity > best_score and similarity > 0.5:  # At least 50% similarity
                                     best_score = similarity
                                     best_match = candidate
-                            
+
                             if best_match:
                                 associated_bill_obj = best_match
                                 logger.info(f"✅ Found best bill match (similarity: {best_score:.2f}): '{assoc_bill_name_from_data}' -> '{associated_bill_obj.bill_nm}'")
@@ -3301,7 +3286,7 @@ def process_extracted_statements_data(statements_data_list,
                             logger.warning(f"No bill found for '{assoc_bill_name_from_data}' in session {session_obj.conf_id}")
                     else:
                         logger.info(f"✅ Found exact bill match: '{assoc_bill_name_from_data}'")
-                        
+
                 except Exception as e_bill_find:
                     logger.warning(
                         f"⚠️ Error finding bill '{assoc_bill_name_from_data}' for statement: {e_bill_find}"
@@ -3441,15 +3426,10 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
 
 
 def analyze_single_statement(statement_data_dict, session_id, debug=False):
-    """
-    Analyzes a single statement's text using LLM (generic, no specific bill context passed to LLM).
-    This is used when a statement is not tied to a pre-identified bill segment.
-    Input: statement_data_dict = {'speaker_name': '...', 'text': '...'}
-    Output: Updated statement_data_dict with LLM analysis fields.
-    """
+
     if not model:  # Global 'model'
         logger.warning(
-            "❌ Main LLM ('model') not available. Cannot analyze statement (generic)."
+            " Main LLM ('model') not available. Cannot analyze statement (generic)."
         )
         statement_data_dict.update({
             'sentiment_score': 0.0,
@@ -3550,7 +3530,7 @@ def get_bills_context(session_id):
 
 def create_statement_categories(statement_obj,
                                 policy_categories_list_from_llm):
-    """Create/update Category, Subcategory, and StatementCategory associations for a Statement."""
+    '''Create/update Category, Subcategory, and StatementCategory associations for a Statement.'''
     if not statement_obj or not policy_categories_list_from_llm:
         return
 
@@ -3623,10 +3603,7 @@ def create_statement_categories(statement_obj,
 
 
 def get_or_create_speaker(speaker_name_raw, debug=False):
-    """
-    Get or create speaker. Relies on `fetch_speaker_details` for new speakers.
-    LLM should provide a cleaned name, but this function can handle some variation.
-    """
+    '''Get or create speaker. Relies on `fetch_speaker_details` for new speakers. LLM should provide a cleaned name, but this function can handle some variation.'''
     if not speaker_name_raw or not speaker_name_raw.strip():
         logger.warning(
             "Empty speaker_name_raw provided to get_or_create_speaker.")
@@ -3709,12 +3686,6 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
         return None
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=180)
-def fetch_additional_data_nepjpxkkabqiqpbvk(self,
-                                            force=False,
-                                            debug=False
-                                            ):  # Celery provides 'self'
-    """Fetch additional data using nepjpxkkabqiqpbvk API endpoint."""
     api_endpoint_name = "nepjpxkkabqiqpbvk"  # Store endpoint name for logging
     logger.info(
         f"🔍 Fetching additional data from {api_endpoint_name} API (force={force}, debug={debug})"
@@ -3852,7 +3823,7 @@ def fetch_additional_data_nepjpxkkabqiqpbvk(self,
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
-    """Fetch detailed bill information using BILLINFODETAIL API."""
+    '''Fetch detailed bill information using BILLINFODETAIL API.'''
     logger.info(
         f"📄 Fetching detailed info for bill: {bill_id} (force={force}, debug={debug})"
     )
@@ -3913,7 +3884,7 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
 
         # Update bill with detailed information
         updated_fields = []
-        
+
         # Update bill number if not set or different
         if bill_detail_data.get('BILL_NO') and bill.bill_no != bill_detail_data.get('BILL_NO'):
             bill.bill_no = bill_detail_data.get('BILL_NO')
@@ -3922,12 +3893,12 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
         # Always update proposer information with detailed data from BILLINFODETAIL
         proposer_kind = bill_detail_data.get('PPSR_KIND', '').strip()
         proposer_name = bill_detail_data.get('PPSR', '').strip()
-        
+
         if proposer_name:
             # Replace generic proposers with real proposer data
             current_proposer = bill.proposer
             is_generic_proposer = current_proposer in ['국회본회의', '국회', '본회의'] or any(generic in current_proposer for generic in ['국회본회의', '국회', '본회의'])
-            
+
             if proposer_kind == '의원' and proposer_name:
                 # Individual member proposer - get detailed info
                 detailed_proposer = f"{proposer_name}"
@@ -3948,7 +3919,7 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
                 detailed_proposer = f"{proposer_name} ({proposer_kind})"
             else:
                 detailed_proposer = proposer_name
-            
+
             # Always update if we have better proposer data or if current is generic
             if is_generic_proposer or bill.proposer != detailed_proposer:
                 old_proposer = bill.proposer
@@ -3970,7 +3941,7 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
             logger.info(
                 f"✅ Updated bill {bill_id} with detailed info. Fields updated: {', '.join(updated_fields) if updated_fields else 'forced update'}"
             )
-            
+
             # Log the detailed information
             logger.info(f"📋 Bill Details:")
             logger.info(f"   - Bill Name: {bill_detail_data.get('BILL_NM', 'N/A')}")
@@ -4016,12 +3987,12 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
-    """Fetch voting data for a specific bill using nojepdqqaweusdfbi API."""
-    
+    '''Fetch voting data for a specific bill using nojepdqqaweusdfbi API.'''
+
     if not ENABLE_VOTING_DATA_COLLECTION:
         logger.info(f"⏸️ Skipping voting data collection for bill {bill_id} (disabled by configuration)")
         return
-    
+
     logger.info(
         f"🗳️ Fetching voting data for bill: {bill_id} (force={force}, debug={debug})"
     )
@@ -4087,16 +4058,16 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
         # Prepare data for bulk operations
         voting_records_to_create = []
         voting_records_to_update = []
-        
+
         # Get all speakers at once to avoid repeated database queries
         all_speakers = {speaker.naas_nm: speaker for speaker in Speaker.objects.all()}
-        
+
         # Get existing voting records for this bill
         existing_records = {
             (record.speaker.naas_nm, record.bill_id): record 
             for record in VotingRecord.objects.filter(bill=bill).select_related('speaker')
         }
-        
+
         processed_count = 0
         skipped_count = 0
 
@@ -4156,7 +4127,7 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
                         session=bill.session
                     )
                     voting_records_to_create.append(voting_record)
-                
+
                 processed_count += 1
 
             except Exception as e_vote:
@@ -4167,7 +4138,7 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
         # Perform bulk operations
         created_count = 0
         updated_count = 0
-        
+
         if voting_records_to_create:
             try:
                 VotingRecord.objects.bulk_create(voting_records_to_create, ignore_conflicts=True)
@@ -4175,7 +4146,7 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
                 logger.info(f"✨ Bulk created {created_count} voting records for {bill.bill_nm[:30]}...")
             except Exception as e_bulk_create:
                 logger.error(f"❌ Error in bulk create: {e_bulk_create}")
-        
+
         if voting_records_to_update:
             try:
                 VotingRecord.objects.bulk_update(
