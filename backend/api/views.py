@@ -1565,6 +1565,161 @@ def sentiment_analysis_list(request):
 
 
 @api_view(['GET'])
+def party_analytics(request):
+    """Get analytics data grouped by parties"""
+    try:
+        time_range = request.query_params.get('time_range', 'all')
+        categories = request.query_params.get('categories')
+
+        # Base queryset for statements
+        statements_qs = Statement.objects.filter(session__era_co__in=['제22대', '22']).select_related('speaker', 'session', 'bill')
+
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=365))
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=30))
+
+        # Apply category filter if provided
+        if categories:
+            category_ids = [int(id.strip()) for id in categories.split(',') if id.strip()]
+            statements_qs = statements_qs.filter(categories__category_id__in=category_ids)
+
+        # Get party analytics
+        party_stats = statements_qs.values('speaker__plpt_nm').annotate(
+            party_name=F('speaker__plpt_nm'),
+            statement_count=Count('id'),
+            avg_sentiment=Avg('sentiment_score'),
+            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+        ).filter(statement_count__gt=0).order_by('-statement_count')
+
+        # Clean up party names and add member counts
+        results = []
+        for party in party_stats:
+            if not party['party_name'] or party['party_name'] in ['', ' ', '무소속', '정보없음']:
+                continue
+                
+            member_count = Speaker.objects.filter(
+                plpt_nm__icontains=party['party_name'],
+                gtelt_eraco__icontains='22'
+            ).count()
+            
+            neutral_count = party['statement_count'] - party['positive_count'] - party['negative_count']
+            
+            results.append({
+                'party_name': party['party_name'],
+                'member_count': member_count,
+                'statement_count': party['statement_count'],
+                'avg_sentiment': round(party['avg_sentiment'] or 0, 3),
+                'positive_count': party['positive_count'],
+                'negative_count': party['negative_count'],
+                'neutral_count': neutral_count,
+                'positive_percentage': round((party['positive_count'] / party['statement_count']) * 100, 1) if party['statement_count'] > 0 else 0,
+                'negative_percentage': round((party['negative_count'] / party['statement_count']) * 100, 1) if party['statement_count'] > 0 else 0
+            })
+
+        return Response({
+            'time_range': time_range,
+            'results': results,
+            'total_parties': len(results)
+        })
+
+    except Exception as e:
+        logger.error(f"Error in party analytics: {e}")
+        return Response({'error': 'Failed to fetch party analytics'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def overall_analytics(request):
+    """Get overall system analytics and statistics"""
+    try:
+        time_range = request.query_params.get('time_range', 'all')
+
+        # Base querysets for 22nd Assembly
+        sessions_qs = Session.objects.filter(era_co__in=['제22대', '22'])
+        bills_qs = Bill.objects.filter(session__era_co__in=['제22대', '22'])
+        speakers_qs = Speaker.objects.filter(gtelt_eraco__icontains='22')
+        statements_qs = Statement.objects.filter(session__era_co__in=['제22대', '22'])
+
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=365))
+            sessions_qs = sessions_qs.filter(conf_dt__gte=now.date() - timedelta(days=365))
+            bills_qs = bills_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=365))
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=30))
+            sessions_qs = sessions_qs.filter(conf_dt__gte=now.date() - timedelta(days=30))
+            bills_qs = bills_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=30))
+
+        # Basic counts
+        total_sessions = sessions_qs.count()
+        total_bills = bills_qs.count()
+        total_speakers = speakers_qs.count()
+        total_statements = statements_qs.count()
+
+        # Sentiment analysis
+        sentiment_stats = statements_qs.aggregate(
+            avg_sentiment=Avg('sentiment_score'),
+            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+        )
+
+        avg_sentiment = sentiment_stats['avg_sentiment'] or 0
+        positive_count = sentiment_stats['positive_count'] or 0
+        negative_count = sentiment_stats['negative_count'] or 0
+        neutral_count = total_statements - positive_count - negative_count
+
+        # Recent activity
+        recent_activity = {
+            'recent_sessions': sessions_qs.order_by('-conf_dt')[:5].values('conf_id', 'title', 'conf_dt'),
+            'recent_bills': bills_qs.order_by('-created_at')[:5].values('bill_id', 'bill_nm', 'proposer'),
+            'recent_statements': statements_qs.order_by('-created_at')[:10].select_related('speaker').values(
+                'id', 'speaker__naas_nm', 'text', 'sentiment_score', 'created_at'
+            )
+        }
+
+        # Top parties by activity
+        top_parties = statements_qs.values('speaker__plpt_nm').annotate(
+            party_name=F('speaker__plpt_nm'),
+            statement_count=Count('id'),
+            avg_sentiment=Avg('sentiment_score')
+        ).filter(statement_count__gt=5).order_by('-statement_count')[:10]
+
+        return Response({
+            'time_range': time_range,
+            'overview': {
+                'total_sessions': total_sessions,
+                'total_bills': total_bills,
+                'total_speakers': total_speakers,
+                'total_statements': total_statements
+            },
+            'sentiment_analysis': {
+                'average_sentiment': round(avg_sentiment, 3),
+                'positive_count': positive_count,
+                'negative_count': negative_count,
+                'neutral_count': neutral_count,
+                'positive_percentage': round((positive_count / total_statements) * 100, 1) if total_statements > 0 else 0,
+                'negative_percentage': round((negative_count / total_statements) * 100, 1) if total_statements > 0 else 0
+            },
+            'recent_activity': {
+                'recent_sessions': list(recent_activity['recent_sessions']),
+                'recent_bills': list(recent_activity['recent_bills']),
+                'recent_statements': list(recent_activity['recent_statements'])
+            },
+            'top_parties': list(top_parties)
+        })
+
+    except Exception as e:
+        logger.error(f"Error in overall analytics: {e}")
+        return Response({'error': 'Failed to fetch overall analytics'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
 def home_data(request):
     """Get aggregated data for home page with optimized queries"""
     try:
