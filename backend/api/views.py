@@ -90,9 +90,15 @@ class SessionViewSet(viewsets.ModelViewSet):
             page = self.paginate_queryset(queryset)
             if page is not None:
                 serializer = self.get_serializer(page, many=True)
-                return self.get_paginated_response(serializer.data)
+                paginated_response = self.get_paginated_response(serializer.data)
+                # Ensure the results key contains an array
+                if 'results' in paginated_response.data:
+                    return paginated_response
+                else:
+                    return Response({'results': serializer.data, 'count': len(serializer.data)})
 
             serializer = self.get_serializer(queryset, many=True)
+            # Always return as array, not as paginated object when no pagination
             return Response(serializer.data)
         except Exception as e:
             logger.error(f"Error in SessionViewSet list: {e}")
@@ -167,6 +173,22 @@ class BillViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(created_at__lte=date_to)
 
         return queryset.order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        """Override list to ensure consistent response format"""
+        try:
+            queryset = self.filter_queryset(self.get_queryset())
+            
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error in BillViewSet list: {e}")
+            return Response([], status=200)
 
     @action(detail=True, methods=['get'])
     @api_action_wrapper(log_prefix="Fetching statements for bill",
@@ -1485,6 +1507,58 @@ def party_detail(request, party_id):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
+def sentiment_analysis_list(request):
+    """Get list of sentiment analysis data"""
+    try:
+        time_range = request.query_params.get('time_range', 'all')
+        
+        # Base queryset for statements
+        statements_qs = Statement.objects.select_related('speaker', 'session', 'bill').all()
+        
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=365))
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=30))
+        elif time_range == 'week':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=7))
+
+        # Get sentiment analysis data grouped by different dimensions
+        results = []
+        
+        # By speaker sentiment
+        speaker_sentiment = statements_qs.values(
+            'speaker__naas_nm', 'speaker__plpt_nm'
+        ).annotate(
+            avg_sentiment=Avg('sentiment_score'),
+            statement_count=Count('id'),
+            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+        ).filter(statement_count__gte=3).order_by('-avg_sentiment')[:20]
+
+        for speaker in speaker_sentiment:
+            results.append({
+                'type': 'speaker',
+                'name': speaker['speaker__naas_nm'],
+                'party': speaker['speaker__plpt_nm'],
+                'avg_sentiment': round(speaker['avg_sentiment'] or 0, 3),
+                'statement_count': speaker['statement_count'],
+                'positive_count': speaker['positive_count'],
+                'negative_count': speaker['negative_count']
+            })
+
+        return Response(results)
+
+    except Exception as e:
+        logger.error(f"Error in sentiment_analysis_list: {e}")
+        return Response([], status=200)
+
+
+@api_view(['GET'])
 def home_data(request):
     """Get aggregated data for home page"""
     try:
@@ -1597,10 +1671,11 @@ def home_data(request):
         total_bills = Bill.objects.count()
         total_speakers = Speaker.objects.count()
 
+        # Ensure all arrays are properly formatted
         response_data = {
-            'recent_sessions': sessions_data,
-            'recent_bills': bills_data,
-            'recent_statements': statements_data,
+            'recent_sessions': sessions_data if isinstance(sessions_data, list) else [],
+            'recent_bills': bills_data if isinstance(bills_data, list) else [],
+            'recent_statements': statements_data if isinstance(statements_data, list) else [],
             'overall_stats': {
                 'total_statements': total_statements,
                 'average_sentiment': round(avg_sentiment, 3),
@@ -1608,7 +1683,7 @@ def home_data(request):
                 'neutral_count': neutral_count,
                 'negative_count': negative_count
             },
-            'party_stats': list(party_stats),
+            'party_stats': list(party_stats) if party_stats else [],
             'total_sessions': total_sessions,
             'total_bills': total_bills,
             'total_speakers': total_speakers
