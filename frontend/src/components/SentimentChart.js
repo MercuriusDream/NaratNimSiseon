@@ -1,102 +1,87 @@
 import React from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer
-} from 'recharts';
 
 const SentimentChart = ({ data }) => {
-  // Ensure data is always an array
-  if (!data || !Array.isArray(data)) {
+  if (!data) return null;
+
+  // Handle different data structures
+  let chartData = [];
+
+  if (data.party_rankings) {
+    // Overall sentiment stats data
+    chartData = data.party_rankings.slice(0, 10);
+  } else if (data.party_analysis) {
+    // Bill sentiment data
+    chartData = data.party_analysis;
+  } else if (Array.isArray(data)) {
+    chartData = data;
+  } else {
+    chartData = [data];
+  }
+
+  if (!chartData || chartData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 bg-gray-50 rounded-lg">
-        <p className="text-gray-500">표시할 감성 데이터가 없습니다.</p>
+      <div className="text-center text-gray-600 py-4">
+        표시할 차트 데이터가 없습니다.
       </div>
     );
   }
 
-  // Transform data for the chart
-  const processChartData = () => {
-    // Handle multiple possible data structures
-    let dataArray = [];
-
-    if (Array.isArray(data)) {
-      dataArray = data;
-    } else if (data?.data && Array.isArray(data.data)) {
-      dataArray = data.data;
-    } else if (data?.results && Array.isArray(data.results)) {
-      dataArray = data.results;
-    } else if (data?.party_analysis && Array.isArray(data.party_analysis)) {
-      dataArray = data.party_analysis;
-    } else if (data?.sentiment_summary) {
-      // Handle bill sentiment data structure
-      return [{
-        name: 'Overall',
-        sentiment: data.sentiment_summary.average_sentiment || 0,
-        party: 'All Parties'
-      }];
-    }
-
-    if (dataArray.length === 0) return [];
-
-    return dataArray.map((item, index) => ({
-      name: item.party_name || item.speaker?.naas_nm || item.name || `Item ${index + 1}`,
-      sentiment: parseFloat(item.combined_sentiment || item.avg_sentiment || item.sentiment_score || 0),
-      party: item.party_name || item.speaker?.plpt_nm || 'Unknown Party'
-    }));
-  };
-
-  const chartData = processChartData();
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-white p-4 border border-gray-200 shadow-lg rounded">
-          <p className="font-medium">{label}</p>
-          <p className="text-sm text-gray-600">
-            정당: {data.party || 'Unknown'}
-          </p>
-          <p className="text-sm text-gray-600">
-            감성 점수: {payload[0].value.toFixed(2)}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
   return (
-    <div className="h-96 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={chartData}
-          margin={{
-            top: 20,
-            right: 30,
-            left: 20,
-            bottom: 5,
-          }}
-        >
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" />
-          <YAxis domain={[-1, 1]} />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-          <Bar
-            dataKey="sentiment"
-            name="감성 점수"
-            fill="#4F46E5"
-            radius={[4, 4, 0, 0]}
-          />
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="space-y-4">
+      {chartData.map((item, index) => {
+        const sentimentScore = item.avg_sentiment || item.sentiment_score || item.combined_sentiment || 0;
+        const displayName = item.speaker__plpt_nm?.split('/').pop() || 
+                           item.party_name || 
+                           item.speaker_name || 
+                           item.speaker__naas_nm ||
+                           `항목 ${index + 1}`;
+
+        return (
+          <div key={index} className="border-b pb-4 last:border-b-0">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-medium text-sm">
+                {displayName}
+              </span>
+              <span className={`px-2 py-1 rounded text-xs ${
+                sentimentScore > 0.3
+                  ? 'bg-green-100 text-green-800'
+                  : sentimentScore < -0.3
+                  ? 'bg-red-100 text-red-800'
+                  : 'bg-gray-100 text-gray-800'
+              }`}>
+                {sentimentScore.toFixed(3)}
+              </span>
+            </div>
+
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full ${
+                  sentimentScore > 0.3
+                    ? 'bg-green-500'
+                    : sentimentScore < -0.3
+                    ? 'bg-red-500'
+                    : 'bg-gray-400'
+                }`}
+                style={{
+                  width: `${Math.min(Math.abs(sentimentScore) * 100, 100)}%`
+                }}
+              ></div>
+            </div>
+
+            <div className="text-xs text-gray-600 mt-1 flex space-x-4">
+              {item.statement_count && (
+                <span>발언 수: {item.statement_count}</span>
+              )}
+              {item.positive_count !== undefined && (
+                <span>긍정: {item.positive_count}</span>
+              )}
+              {item.negative_count !== undefined && (
+                <span>부정: {item.negative_count}</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };

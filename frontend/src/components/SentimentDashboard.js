@@ -81,25 +81,53 @@ const SentimentDashboard = ({ billId = null }) => {
             </select>
           </div>
 
-          {sentimentData && (
+          {sentimentData && sentimentData.overall_stats && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {sentimentData.positive_count || 0}
+                  {sentimentData.overall_stats.positive_count || 0}
                 </div>
                 <div className="text-sm text-gray-600">긍정적 발언</div>
+                <div className="text-xs text-gray-500">
+                  ({sentimentData.overall_stats.positive_percentage || 0}%)
+                </div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-gray-600">
-                  {sentimentData.neutral_count || 0}
+                  {sentimentData.overall_stats.neutral_count || 0}
                 </div>
                 <div className="text-sm text-gray-600">중립적 발언</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-red-600">
-                  {sentimentData.negative_count || 0}
+                  {sentimentData.overall_stats.negative_count || 0}
                 </div>
                 <div className="text-sm text-gray-600">부정적 발언</div>
+                <div className="text-xs text-gray-500">
+                  ({sentimentData.overall_stats.negative_percentage || 0}%)
+                </div>
+              </div>
+            </div>
+          )}
+
+          {sentimentData && sentimentData.overall_stats && (
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-gray-900">
+                    {sentimentData.overall_stats.total_statements || 0}
+                  </div>
+                  <div className="text-sm text-gray-600">총 발언 수</div>
+                </div>
+                <div className="text-center">
+                  <div className={`text-lg font-semibold ${
+                    (sentimentData.overall_stats.average_sentiment || 0) > 0 ? 'text-green-600' : 
+                    (sentimentData.overall_stats.average_sentiment || 0) < 0 ? 'text-red-600' : 'text-gray-600'
+                  }`}>
+                    {(sentimentData.overall_stats.average_sentiment || 0).toFixed(3)}
+                  </div>
+                  <div className="text-sm text-gray-600">평균 감성 점수</div>
+                </div>
               </div>
             </div>
           )}
@@ -115,7 +143,53 @@ const SentimentDashboard = ({ billId = null }) => {
         </div>
       )}
 
-      {sentimentData && sentimentData.recent_statements && (
+      {sentimentData && sentimentData.party_rankings && sentimentData.party_rankings.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-4">정당별 감성 순위</h3>
+          <div className="space-y-3">
+            {sentimentData.party_rankings.slice(0, 10).map((party, index) => (
+              <div key={index} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                <div className="flex-1">
+                  <div className="font-medium text-gray-900 text-sm">
+                    {party.speaker__plpt_nm?.split('/').pop() || party.speaker__plpt_nm}
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    발언 수: {party.statement_count} | 긍정: {party.positive_count} | 부정: {party.negative_count}
+                  </div>
+                </div>
+                <div className={`px-3 py-1 rounded text-sm font-medium ${getSentimentColor(party.avg_sentiment)}`}>
+                  {party.avg_sentiment?.toFixed(3)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {sentimentData && sentimentData.active_speakers && sentimentData.active_speakers.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-4">활동적인 발언자</h3>
+          <div className="space-y-3">
+            {sentimentData.active_speakers.slice(0, 10).map((speaker, index) => (
+              <div key={index} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                <div className="flex-1">
+                  <div className="font-medium text-gray-900 text-sm">
+                    {speaker.speaker__naas_nm}
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    {speaker.speaker__plpt_nm?.split('/').pop() || speaker.speaker__plpt_nm} | 발언 수: {speaker.statement_count}
+                  </div>
+                </div>
+                <div className={`px-3 py-1 rounded text-sm font-medium ${getSentimentColor(speaker.avg_sentiment)}`}>
+                  {speaker.avg_sentiment?.toFixed(3)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {sentimentData && sentimentData.recent_statements && sentimentData.recent_statements.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold mb-4">최근 주요 발언</h3>
           <div className="space-y-4">
@@ -135,6 +209,12 @@ const SentimentDashboard = ({ billId = null }) => {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {(!sentimentData || (!sentimentData.overall_stats && !sentimentData.party_analysis)) && !loading && !error && (
+        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-600">
+          표시할 감성 데이터가 없습니다.
         </div>
       )}
     </div>
