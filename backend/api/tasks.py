@@ -12,6 +12,9 @@ import json
 import os  # Keep if used elsewhere or for future Path handling consistency
 import time
 from pathlib import Path
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import queue
 
 logger = logging.getLogger(__name__)
 
@@ -1356,7 +1359,7 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
                                                         session_id,
                                                         bill_name,
                                                         debug=False):
-    """Process a single text segment by splitting at ◯ markers and analyzing each speech individually."""
+    """Process a single text segment by splitting at ◯ markers and analyzing each speech individually with multithreading."""
     if not bill_text_segment:
         return []
 
@@ -1394,25 +1397,90 @@ def process_single_segment_for_statements_with_splitting(bill_text_segment,
         f"Segment sizes: {[len(seg) for seg in speech_segments]} chars"
     )
     
-    all_statements = []
-    
-    # Process each speech segment individually with LLM analysis
-    for i, segment in enumerate(speech_segments):
-        logger.info(f"Processing speech segment {i + 1}/{len(speech_segments)} for bill '{bill_name}' ({len(segment)} chars)")
-        
-        # Analyze this speech segment with LLM (Stage 3)
-        statement_result = analyze_speech_segment_with_llm(segment, session_id, bill_name, debug)
-        if statement_result:
-            all_statements.append(statement_result)
-        
-        if not debug:
-            time.sleep(0.3)  # Brief pause between segments
+    # Process segments with multithreading for LLM calls
+    all_statements = process_speech_segments_multithreaded(
+        speech_segments, session_id, bill_name, debug
+    )
     
     logger.info(
         f"✅ ◯-based processing for '{bill_name}' resulted in {len(all_statements)} statements "
         f"from {len(speech_segments)} speech segments"
     )
     
+    return all_statements
+
+
+def process_speech_segments_multithreaded(speech_segments, session_id, bill_name, debug=False):
+    """Process multiple speech segments concurrently with rate limiting."""
+    if not speech_segments:
+        return []
+    
+    if debug:
+        logger.debug(f"🐛 DEBUG: Would process {len(speech_segments)} segments with multithreading")
+        return []
+    
+    # Rate limiting: 2 seconds between requests means max 30 requests per minute
+    # Use a queue to control request timing
+    rate_limit_queue = queue.Queue()
+    
+    def rate_limited_analyzer(segment, session_id, bill_name, segment_index):
+        """Wrapper for analyze_speech_segment_with_llm with rate limiting."""
+        try:
+            # Wait for rate limit permission
+            rate_limit_queue.get(timeout=30)  # 30 second timeout
+            
+            logger.info(f"Processing speech segment {segment_index + 1}/{len(speech_segments)} for bill '{bill_name}' ({len(segment)} chars)")
+            
+            result = analyze_speech_segment_with_llm(segment, session_id, bill_name, debug)
+            
+            # Schedule next request after 2.1 seconds (slightly above rate limit)
+            threading.Timer(2.1, lambda: rate_limit_queue.put(True)).start()
+            
+            return result, segment_index
+            
+        except Exception as e:
+            logger.error(f"Error processing segment {segment_index}: {e}")
+            # Still need to schedule next request
+            threading.Timer(2.1, lambda: rate_limit_queue.put(True)).start()
+            return None, segment_index
+    
+    # Initialize rate limiting - allow first request immediately
+    rate_limit_queue.put(True)
+    
+    all_statements = []
+    
+    # Use ThreadPoolExecutor with limited workers to respect rate limits
+    # Max 3 workers to allow some parallelism while staying within limits
+    max_workers = min(3, len(speech_segments))
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_index = {
+            executor.submit(rate_limited_analyzer, segment, session_id, bill_name, i): i
+            for i, segment in enumerate(speech_segments)
+        }
+        
+        # Collect results as they complete
+        completed_count = 0
+        for future in as_completed(future_to_index):
+            completed_count += 1
+            try:
+                result, segment_index = future.result(timeout=60)  # 60 second timeout per request
+                if result:
+                    all_statements.append(result)
+                    logger.info(f"✅ Completed segment {segment_index + 1}/{len(speech_segments)} for '{bill_name}'")
+                else:
+                    logger.warning(f"⚠️ No result for segment {segment_index + 1} in '{bill_name}'")
+                    
+            except Exception as e:
+                segment_index = future_to_index[future]
+                logger.error(f"❌ Exception processing segment {segment_index + 1}: {e}")
+            
+            # Log progress
+            if completed_count % 5 == 0 or completed_count == len(speech_segments):
+                logger.info(f"📊 Progress: {completed_count}/{len(speech_segments)} segments completed for '{bill_name}'")
+    
+    logger.info(f"🎉 Multithreaded processing completed for '{bill_name}': {len(all_statements)} valid statements from {len(speech_segments)} segments")
     return all_statements
 
 
@@ -1674,7 +1742,7 @@ def extract_statements_with_bill_based_chunking(full_text,
                                                 debug=False):
     """
     Process full text by first identifying bill segments using LLM,
-    then processing each bill segment in chunks for statement extraction.
+    then processing each bill segment in chunks for statement extraction with multithreading.
     """
     logger.info(
         f"🔄 Using bill-based chunked processing for session: {session_id}")
@@ -1808,9 +1876,9 @@ def extract_statements_with_bill_based_chunking(full_text,
             "text": full_text
         }]
 
-    # Step 3: Process each bill segment in chunks
+    # Step 3: Process each bill segment in chunks with multithreading
     logger.info(
-        f"🔍 Step 2: Processing {len(sorted_segments_with_text)} bill segments in chunks"
+        f"🔍 Step 2: Processing {len(sorted_segments_with_text)} bill segments in chunks with multithreading"
     )
 
     for seg_data in sorted_segments_with_text:
@@ -1821,37 +1889,12 @@ def extract_statements_with_bill_based_chunking(full_text,
             f"--- Processing bill segment: {bill_name_for_seg} ({len(bill_segment_text)} chars) ---"
         )
 
-        # If bill segment is small enough, process directly
-        MAX_CHUNK_LENGTH = 20000  # Use 20K chunks to match speaker detection limit
-        if len(bill_segment_text) <= MAX_CHUNK_LENGTH:
-            # Process as single chunk
-            statements_in_segment = extract_statements_for_bill_segment(
-                bill_segment_text, session_id, bill_name_for_seg, debug)
-            for stmt_data in statements_in_segment:
-                stmt_data['associated_bill_name'] = bill_name_for_seg
-            all_analyzed_statements.extend(statements_in_segment)
-        else:
-            # Split bill segment into chunks and process each
-            bill_chunks = split_text_into_chunks(bill_segment_text,
-                                                 MAX_CHUNK_LENGTH)
-            logger.info(f"Split bill segment into {len(bill_chunks)} chunks")
-
-            for chunk_idx, chunk_text in enumerate(bill_chunks):
-                logger.info(
-                    f"Processing chunk {chunk_idx + 1}/{len(bill_chunks)} for bill {bill_name_for_seg}"
-                )
-
-                chunk_statements = extract_statements_for_bill_segment(
-                    chunk_text, session_id, bill_name_for_seg, debug)
-                for stmt_data in chunk_statements:
-                    stmt_data['associated_bill_name'] = bill_name_for_seg
-                all_analyzed_statements.extend(chunk_statements)
-
-                if not debug:
-                    time.sleep(0.5)  # Brief pause between chunks
-
-        if not debug:
-            time.sleep(1)  # Pause between bill segments
+        # Process with multithreading regardless of size for consistent performance
+        statements_in_segment = extract_statements_for_bill_segment(
+            bill_segment_text, session_id, bill_name_for_seg, debug)
+        for stmt_data in statements_in_segment:
+            stmt_data['associated_bill_name'] = bill_name_for_seg
+        all_analyzed_statements.extend(statements_in_segment)
 
     logger.info(
         f"✅ Bill-based chunked processing for session {session_id} completed: {len(all_analyzed_statements)} statements"
