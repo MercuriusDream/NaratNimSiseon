@@ -28,4 +28,7 @@ urlpatterns = [
     path('trigger-analysis/', views.trigger_statement_analysis, name='trigger-analysis'),
     path('parties-list/', views.parties_list, name='parties-list'),
     path('party-detail/<int:party_id>/', views.party_detail, name='party-detail'),
+    path('analytics/category-sentiment/', views.category_sentiment_analysis, name='category-sentiment-analysis'),
+    path('analytics/overall-sentiment/', views.overall_sentiment_stats, name='overall-sentiment-stats'),
+    path('analytics/sentiment/', views.overall_sentiment_stats, name='sentiment-analysis'),
 ]

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
@@ -19,7 +18,7 @@ function BillDetail() {
     const fetchBillData = async () => {
       try {
         setLoading(true);
-        
+
         // Handle potential missing data gracefully
         const [billRes, statementsRes] = await Promise.all([
           axios.get(`/api/bills/${id}/`),
@@ -27,7 +26,7 @@ function BillDetail() {
         ]);
 
         setBill(billRes.data);
-        
+
         // Handle the statements response structure
         const statementsData = statementsRes.data;
         let statementsArray = [];
@@ -68,7 +67,7 @@ function BillDetail() {
             sentiment_timeline: []
           });
         }
-        
+
       } catch (err) {
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
         console.error('Error fetching bill data:', err);
@@ -169,7 +168,7 @@ function BillDetail() {
       {votingSentiment && (
         <div className="bg-white rounded-lg shadow p-6 mb-8">
           <h2 className="text-2xl font-bold mb-4">투표 및 감성 분석</h2>
-          
+
           {/* Summary Statistics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-blue-50 p-4 rounded-lg">
@@ -226,7 +225,7 @@ function BillDetail() {
                         </span>
                       </div>
                     </div>
-                    
+
                     {/* Individual Members */}
                     {party.members && (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

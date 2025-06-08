@@ -94,6 +94,22 @@ class BillViewSet(viewsets.ModelViewSet):
     queryset = Bill.objects.all()
     serializer_class = BillSerializer
     pagination_class = StandardResultsSetPagination
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Override retrieve to ensure consistent response format"""
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return Response({
+                'status': 'success',
+                'data': serializer.data
+            })
+        except Exception as e:
+            logger.error(f"Error retrieving bill {kwargs.get('pk')}: {e}")
+            return Response({
+                'status': 'error',
+                'message': 'Failed to retrieve bill'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get_queryset(self):
         queryset = super().get_queryset()

@@ -13,16 +13,32 @@ import {
 const SentimentChart = ({ data }) => {
   // Transform data for the chart
   const processChartData = () => {
-    const dataArray = Array.isArray(data) ? data : 
-                     (data?.data && Array.isArray(data.data)) ? data.data : 
-                     (data?.results && Array.isArray(data.results)) ? data.results : [];
+    // Handle multiple possible data structures
+    let dataArray = [];
+    
+    if (Array.isArray(data)) {
+      dataArray = data;
+    } else if (data?.data && Array.isArray(data.data)) {
+      dataArray = data.data;
+    } else if (data?.results && Array.isArray(data.results)) {
+      dataArray = data.results;
+    } else if (data?.party_analysis && Array.isArray(data.party_analysis)) {
+      dataArray = data.party_analysis;
+    } else if (data?.sentiment_summary) {
+      // Handle bill sentiment data structure
+      return [{
+        name: 'Overall',
+        sentiment: data.sentiment_summary.average_sentiment || 0,
+        party: 'All Parties'
+      }];
+    }
 
     if (dataArray.length === 0) return [];
 
-    return dataArray.map(item => ({
-      date: item.date || item.session?.conf_dt || 'Unknown',
-      sentiment: parseFloat(item.sentiment_score || 0),
-      speaker: item.speaker?.naas_nm || 'Unknown Speaker'
+    return dataArray.map((item, index) => ({
+      name: item.party_name || item.speaker?.naas_nm || item.name || `Item ${index + 1}`,
+      sentiment: parseFloat(item.combined_sentiment || item.avg_sentiment || item.sentiment_score || 0),
+      party: item.party_name || item.speaker?.plpt_nm || 'Unknown Party'
     }));
   };
 
@@ -31,11 +47,12 @@ const SentimentChart = ({ data }) => {
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
+      const data = payload[0].payload;
       return (
         <div className="bg-white p-4 border border-gray-200 shadow-lg rounded">
           <p className="font-medium">{label}</p>
           <p className="text-sm text-gray-600">
-            정당: {payload[0].payload.party}
+            정당: {data.party || 'Unknown'}
           </p>
           <p className="text-sm text-gray-600">
             감성 점수: {payload[0].value.toFixed(2)}

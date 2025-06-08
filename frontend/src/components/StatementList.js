@@ -21,14 +21,26 @@ const StatementList = ({ filters = {} }) => {
       });
       
       const response = await api.get(`/api/statements/?${params}`);
-      setStatements(response.data.results || []);
+      
+      // Handle different response structures
+      let statementsData = [];
+      if (response.data.results && Array.isArray(response.data.results)) {
+        statementsData = response.data.results;
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        statementsData = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        statementsData = response.data;
+      }
+      
+      setStatements(statementsData);
       setPagination({
-        count: response.data.count,
+        count: response.data.count || statementsData.length,
         next: response.data.next,
         previous: response.data.previous
       });
     } catch (error) {
       console.error('Error fetching statements:', error);
+      setStatements([]); // Ensure we always have an array
     } finally {
       setLoading(false);
     }
@@ -64,7 +76,7 @@ const StatementList = ({ filters = {} }) => {
       </div>
 
       <div className="space-y-4">
-        {statements.map((statement) => (
+        {Array.isArray(statements) && statements.map((statement) => (
           <div key={statement.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start mb-4">
               <div>
