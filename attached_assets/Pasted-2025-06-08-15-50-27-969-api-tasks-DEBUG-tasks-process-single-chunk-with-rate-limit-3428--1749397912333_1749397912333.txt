@@ -1,0 +1,66 @@
+2025-06-08 15:50:27,969 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3428 - [Segmentation LLM DEBUG] Raw response for chunk 0-11095: [
+  {
+    "bill_name": "검사징계법 일부개정법률안",
+    "start_pos": 35,
+    "end_pos": 173,
+    "confidence": 0.9
+  },
+  {
+    "bill_name": "검사징계법 일부개정법률안",
+    "start_pos": 182,
+    "end_pos": 184,
+    "confidence": 0.9
+  },
+  {
+    "bill_name": "순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한 법률안",
+    "start_pos": 185,
+    "end_pos": 187,
+    "confidence": 0.9
+  },
+  {
+    "bill_name": "윤석열 전 대통령 등에 의한 내란·외환 행위의 진상규명을 위한 특별검사 임명 등에 관한 법률안",
+    "start_pos": 188,
+    "end_pos": 190,
+    "confidence": 0.9
+  },
+  {
+    "bill_name": "김건희와 명태균·건진법사 관련 국정농단 및 불법 선거 개입 사건 등 진상규명을 위한 특별검사 임명 등에 관한 법률안",
+    "start_pos": 191,
+    "end_pos": 193,
+    "confidence": 0.9
+  },
+  {
+    "bill_name": "검사징계법 일부개정법률안",
+    "start_pos": 207,
+    "end_pos": 276,
+    "confidence": 0.9
+  },
+  {
+    "bill_name": "순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한 법률안",
+    "start_pos": 277,
+    "end_pos": 279,
+    "confidence": 0.9
+  },
+  {
+    "bill_name": "윤석열 전 대통령 등에 의한 내란·외환 행위의 진상규명을 위한 특별검사 임명 등에 관한 법률안",
+    "star...
+2025-06-08 15:50:27,969 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '검사징계법 일부개정법률안', skipping
+2025-06-08 15:50:27,969 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '검사징계법 일부개정법률안', skipping
+2025-06-08 15:50:27,970 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,970 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '윤석열 전 대통령 등에 의한 내란·외환 행위의 진상규명을 위한 특별검사 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,971 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '김건희와 명태균·건진법사 관련 국정농단 및 불법 선거 개입 사건 등 진상규명을 위한 특별검사 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,971 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '검사징계법 일부개정법률안', skipping
+2025-06-08 15:50:27,971 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,972 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '윤석열 전 대통령 등에 의한 내란·외환 행위의 진상규명을 위한 특별검사 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,972 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '김건희와 명태균·건진법사 관련 국정농단 및 불법 선거 개입 사건 등 진상규명을 위한 특별검사 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,973 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '검사징계법 일부개정법률안', skipping
+2025-06-08 15:50:27,973 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,973 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '윤석열 전 대통령 등에 의한 내란·외환 행위의 진상규명을 위한 특별검사 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,974 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '김건희와 명태균·건진법사 관련 국정농단 및 불법 선거 개입 사건 등 진상규명을 위한 특별검사 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,974 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '검사징계법 일부개정법률안', skipping
+2025-06-08 15:50:27,974 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,975 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '윤석열 전 대통령 등에 의한 내란·외환 행위의 진상규명을 위한 특별검사 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,975 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '김건희와 명태균·건진법사 관련 국정농단 및 불법 선거 개입 사건 등 진상규명을 위한 특별검사 임명 등에 관한 법률안', skipping
+2025-06-08 15:50:27,975 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '검사징계법 일부개정법률안', skipping
+2025-06-08 15:50:27,976 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '검사징계법 일부개정법률안', skipping
+2025-06-08 15:50:27,976 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3479 - No matching bill found for '순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한 법률안', skipping
