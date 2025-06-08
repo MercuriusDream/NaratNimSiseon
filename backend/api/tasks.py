@@ -3183,7 +3183,7 @@ def process_pdf_text_for_statements(full_text,
 
         # Process bill segmentation with proper batching
         try:
-            bill_segments_from_llm = _process_bill_segmentation_with_batching(
+            bill_segments_from_llm = _process_single_segmentation_batch(
                 segmentation_llm, segmentation_text, bill_names_list
             )
         except json.JSONDecodeError as e_json_seg:
