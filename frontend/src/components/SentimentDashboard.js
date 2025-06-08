@@ -22,7 +22,7 @@ const SentimentDashboard = ({ billId = null }) => {
         const response = await api.get(`/api/bills/${billId}/voting-sentiment/`);
         setSentimentData(response.data);
       } else {
-        const response = await api.get(`/api/analytics/overall-sentiment/?time_range=${timeRange}`);
+        const response = await api.get(`/api/analytics/sentiment/overall/?time_range=${timeRange}`);
         setSentimentData(response.data);
       }
     } catch (err) {

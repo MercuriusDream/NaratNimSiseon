@@ -25,37 +25,20 @@ const Home = () => {
           api.get('/api/analytics/parties/').catch(() => ({ data: { results: [] } }))
         ];
 
-        const [sessionsRes, billsRes, statementsRes, overallStatsRes, partyStatsRes] = await Promise.all(dataPromises);
+        const [sessionsRes, billsRes, statementsRes, homeDataRes, partyStatsRes] = await Promise.all(dataPromises);
 
-        // Extract and limit recent data
-        const recentSessions = (Array.isArray(sessionsRes.data) ? sessionsRes.data : sessionsRes.data?.results || []).slice(0, 5);
-        const recentBills = (Array.isArray(billsRes.data) ? billsRes.data : billsRes.data?.results || []).slice(0, 5);
-        const recentStatements = (Array.isArray(statementsRes.data) ? statementsRes.data : statementsRes.data?.results || []).slice(0, 10);
-        const partyStats = Array.isArray(partyStatsRes.data) ? partyStatsRes.data : partyStatsRes.data?.results || [];
-
-        console.log('Home data response:', {
-          recent_sessions: recentSessions,
-          recent_bills: recentBills,
-          recent_statements: recentStatements,
-          overall_stats: overallStatsRes.data,
-          party_stats: partyStats
-        });
+        // Use home endpoint data if available, otherwise construct from individual endpoints
+        const homeResponse = homeDataRes.data;
 
         setHomeData({
-          recent_sessions: recentSessions,
-          recent_bills: recentBills,
-          recent_statements: recentStatements,
-          overall_stats: overallStatsRes.data || {
-            total_statements: 0,
-            average_sentiment: 0,
-            positive_count: 0,
-            neutral_count: 0,
-            negative_count: 0
-          },
-          party_stats: partyStats,
-          total_sessions: (Array.isArray(sessionsRes.data) ? sessionsRes.data : sessionsRes.data?.results || []).length,
-          total_bills: (Array.isArray(billsRes.data) ? billsRes.data : billsRes.data?.results || []).length,
-          total_speakers: 300 // Default fallback
+          recent_sessions: homeResponse.recent_sessions || sessionsRes.data.results || [],
+          recent_bills: homeResponse.recent_bills || billsRes.data.results || [],
+          recent_statements: homeResponse.recent_statements || statementsRes.data.results || [],
+          overall_stats: homeResponse.overall_stats || {},
+          party_stats: homeResponse.party_stats || partyStatsRes.data.results || [],
+          total_sessions: homeResponse.total_sessions || 0,
+          total_bills: homeResponse.total_bills || 0,
+          total_speakers: homeResponse.total_speakers || 0
         });
       } catch (err) {
         console.error('Error fetching home data:', err);

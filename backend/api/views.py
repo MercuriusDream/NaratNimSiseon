@@ -54,17 +54,24 @@ class SessionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         try:
-            # Filter to only show 22nd Assembly sessions
-            queryset = super().get_queryset().filter(era_co='22')
+            # Filter to show 22nd Assembly sessions first, fallback to all if none found
+            queryset_22 = super().get_queryset().filter(Q(era_co='22') | Q(era_co='제22대'))
+            
+            if not queryset_22.exists():
+                # If no 22nd Assembly data, return all sessions
+                queryset = super().get_queryset()
+            else:
+                queryset = queryset_22
+                
             era_co = self.request.query_params.get('era_co')
             sess = self.request.query_params.get('sess')
             dgr = self.request.query_params.get('dgr')
             date_from = self.request.query_params.get('date_from')
             date_to = self.request.query_params.get('date_to')
 
-            if era_co and era_co != '22':
-                # Only allow 22nd assembly
-                return Session.objects.none()
+            if era_co and era_co not in ['22', '제22대', 'all']:
+                # Filter by specific era if requested
+                queryset = queryset.filter(Q(era_co=era_co) | Q(era_co=f'제{era_co}대'))
             if sess:
                 queryset = queryset.filter(sess=sess)
             if dgr:
@@ -83,7 +90,7 @@ class SessionViewSet(viewsets.ModelViewSet):
             return queryset.order_by('-conf_dt')
         except Exception as e:
             logger.error(f"Error in SessionViewSet get_queryset: {e}")
-            return Session.objects.none()
+            return Session.objects.all().order_by('-conf_dt')  # Return all sessions as fallback
 
     def list(self, request, *args, **kwargs):
         try:
@@ -1717,6 +1724,48 @@ def overall_analytics(request):
     except Exception as e:
         logger.error(f"Error in overall analytics: {e}")
         return Response({'error': 'Failed to fetch overall analytics'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def stats_overview(request):
+    """Get basic statistics overview for DataMetrics component"""
+    try:
+        # Get basic counts for 22nd Assembly
+        sessions_22 = Session.objects.filter(era_co__in=['제22대', '22']).count()
+        bills_22 = Bill.objects.filter(session__era_co__in=['제22대', '22']).count()
+        speakers_22 = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
+        statements_22 = Statement.objects.filter(session__era_co__in=['제22대', '22']).count()
+        parties_22 = Party.objects.filter(assembly_era=22).count()
+
+        # If no 22nd Assembly data, get from any assembly
+        if sessions_22 == 0:
+            sessions_22 = Session.objects.count()
+        if bills_22 == 0:
+            bills_22 = Bill.objects.count()
+        if speakers_22 == 0:
+            speakers_22 = Speaker.objects.count()
+        if statements_22 == 0:
+            statements_22 = Statement.objects.count()
+        if parties_22 == 0:
+            parties_22 = Party.objects.count()
+
+        return Response({
+            'total_sessions': sessions_22,
+            'total_bills': bills_22,
+            'total_speakers': speakers_22,
+            'total_statements': statements_22,
+            'total_parties': parties_22
+        })
+
+    except Exception as e:
+        logger.error(f"Error in stats_overview: {e}")
+        return Response({
+            'total_sessions': 0,
+            'total_bills': 0,
+            'total_speakers': 0,
+            'total_statements': 0,
+            'total_parties': 0
+        }, status=200)
 
 
 @api_view(['GET'])
