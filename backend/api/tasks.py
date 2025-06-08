@@ -3107,9 +3107,8 @@ def process_pdf_text_for_statements(full_text,
             segment_actual_text = full_text[
                 segment_text_start_index:segment_text_end_index]
             sorted_segments_with_text.append({
-                "a":
-                current_seg_info.get("bill_name_identified",
-                                     "Unknown Bill Segment"),
+                "bill_name":
+                current_seg_info.get("a", "Unknown Bill Segment"),
                 "text":
                 segment_actual_text
             })
