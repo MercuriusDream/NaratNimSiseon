@@ -855,6 +855,73 @@ def process_sessions_data(sessions_data, force=False, debug=False):
     )
 
 
+def fetch_committee_members(committee_name, debug=False):
+    """Fetch committee members from nktulghcadyhmiqxi API."""
+    try:
+        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error("ASSEMBLY_API_KEY not configured for fetch_committee_members.")
+            return []
+
+        url = "https://open.assembly.go.kr/portal/openapi/nktulghcadyhmiqxi"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "DEPT_NM": committee_name,
+            "Type": "json",
+            "pSize": 100  # Get up to 100 committee members
+        }
+
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        if debug:
+            logger.debug(
+                f"🐛 DEBUG: Committee members API response for {committee_name}: {json.dumps(data, indent=2, ensure_ascii=False)}"
+            )
+
+        members_data = []
+        api_key_name = 'nktulghcadyhmiqxi'
+        if data and api_key_name in data and isinstance(data[api_key_name], list):
+            if len(data[api_key_name]) > 1 and isinstance(data[api_key_name][1], dict):
+                members_data = data[api_key_name][1].get('row', [])
+            elif len(data[api_key_name]) > 0 and isinstance(data[api_key_name][0], dict):
+                head_info = data[api_key_name][0].get('head')
+                if head_info and head_info[0].get('RESULT', {}).get('CODE', '').startswith("INFO-200"):
+                    logger.info(f"API result for committee members ({committee_name}) indicates no data.")
+                elif 'row' in data[api_key_name][0]:
+                    members_data = data[api_key_name][0].get('row', [])
+
+        if not members_data:
+            logger.info(f"ℹ️ No committee members found for: {committee_name}")
+            return []
+
+        # Extract member names and other relevant info
+        members = []
+        for member_data in members_data:
+            member_info = {
+                'name': member_data.get('HG_NM', ''),
+                'position': member_data.get('JOB_RES_NM', ''),
+                'party': member_data.get('POLY_NM', ''),
+                'constituency': member_data.get('ORIG_NM', ''),
+                'dept_code': member_data.get('DEPT_CD', ''),
+                'dept_name': member_data.get('DEPT_NM', ''),
+                'mona_cd': member_data.get('MONA_CD', '')
+            }
+            if member_info['name']:
+                members.append(member_info)
+
+        logger.info(f"✅ Found {len(members)} committee members for: {committee_name}")
+        return members
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"❌ Network error fetching committee members for {committee_name}: {e}")
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON parsing error for committee members {committee_name}: {e}")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error fetching committee members for {committee_name}: {e}")
+    return []
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_session_details(self,
                           session_id=None,
@@ -979,6 +1046,20 @@ def fetch_session_details(self,
                             'TITLE'):
                     session_obj.title = detail_data_item.get('TITLE')
                     updated_fields = True
+
+                # Process committee information from CMIT_NM
+                cmit_nm = detail_data_item.get('CMIT_NM', '').strip()
+                if cmit_nm and cmit_nm.endswith('위원회'):
+                    logger.info(f"🏛️ Found committee proposer: {cmit_nm} for session {session_id}")
+                    if not debug:
+                        # Fetch committee members for this committee
+                        committee_members = fetch_committee_members(cmit_nm, debug=debug)
+                        if committee_members:
+                            logger.info(f"📋 Found {len(committee_members)} members in {cmit_nm}")
+                            # Store committee information for use in bill processing
+                            # This could be stored in session metadata or processed later
+                elif cmit_nm:
+                    logger.info(f"👤 Found individual proposer: {cmit_nm} for session {session_id}")
 
                 if updated_fields or force:  # Save if fields changed or force is on
                     session_obj.save()
@@ -1137,14 +1218,39 @@ def fetch_session_bills(self,
                     )
                     continue
 
+                # Extract proposer information - could be individual or committee
+                proposer_info = "국회"  # Default fallback
+                bill_proposer = bill_item.get('PROPOSER', '').strip()
+                
+                if bill_proposer:
+                    if bill_proposer.endswith('위원회'):
+                        # Committee proposer - we could fetch committee members here
+                        committee_members = fetch_committee_members(bill_proposer, debug=debug)
+                        if committee_members:
+                            # Format as "위원회명 (위원 X명)"
+                            proposer_info = f"{bill_proposer} (위원 {len(committee_members)}명)"
+                            logger.info(f"📋 Bill {bill_id_api} proposed by committee {bill_proposer} with {len(committee_members)} members")
+                        else:
+                            proposer_info = bill_proposer
+                    else:
+                        # Individual proposer
+                        proposer_info = bill_proposer
+                elif hasattr(session_obj, 'cmit_nm') and session_obj.cmit_nm:
+                    # Use session committee as fallback
+                    proposer_info = session_obj.cmit_nm
+
                 bill_defaults = {
                     'session': session_obj,
                     'bill_nm': bill_item.get('BILL_NM', '제목 없는 의안').strip(),
-                    'link_url': bill_item.get('LINK_URL', '')
+                    'link_url': bill_item.get('LINK_URL', ''),
+                    'proposer': proposer_info
                 }
 
-                # Add other fields like BILL_NO, PROPOSER, PROPOSE_DT if available from VCONFBILLLIST
-                # and if your Bill model supports them.
+                # Add other fields like BILL_NO, PROPOSE_DT if available from VCONFBILLLIST
+                if bill_item.get('BILL_NO'):
+                    bill_defaults['bill_no'] = bill_item.get('BILL_NO')
+                if bill_item.get('PROPOSE_DT'):
+                    bill_defaults['propose_dt'] = bill_item.get('PROPOSE_DT')
 
                 bill_obj, created = Bill.objects.update_or_create(
                     bill_id=
@@ -1154,12 +1260,12 @@ def fetch_session_bills(self,
                 if created:
                     created_count += 1
                     logger.info(
-                        f"✨ Created new bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) for session {session_id}"
+                        f"✨ Created new bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) proposed by {proposer_info} for session {session_id}"
                     )
                 else:  # Bill already existed, update_or_create updated it
                     updated_count += 1
                     logger.info(
-                        f"🔄 Updated existing bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) for session {session_id}"
+                        f"🔄 Updated existing bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) proposed by {proposer_info} for session {session_id}"
                     )
             logger.info(
                 f"🎉 Bills processed for session {session_id}: {created_count} created, {updated_count} updated."

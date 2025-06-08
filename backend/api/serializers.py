@@ -37,10 +37,7 @@ class SpeakerSerializer(serializers.ModelSerializer):
 
 class BillSerializer(serializers.ModelSerializer):
     bill_name = serializers.CharField(source='bill_nm', read_only=True)
-    bill_no = serializers.CharField(source='bill_id', read_only=True)
     session_date = serializers.DateField(source='session.conf_dt', read_only=True)
-    proposer = serializers.SerializerMethodField()
-    propose_dt = serializers.DateField(source='session.conf_dt', read_only=True)
     content = serializers.CharField(source='bill_nm', read_only=True)
     status = serializers.SerializerMethodField()
 
@@ -49,11 +46,8 @@ class BillSerializer(serializers.ModelSerializer):
         fields = ['bill_id', 'bill_nm', 'bill_name', 'bill_no', 'session', 'session_date', 
                  'proposer', 'propose_dt', 'content', 'status', 'link_url', 'created_at', 'updated_at']
 
-    def get_proposer(self, obj):
-        return "국회"  # Default proposer since we don't have this field in the model
-
     def get_status(self, obj):
-        return "pending"  # Default status since we don't have this field in the model
+        return "pending"  # Defaultult status since we don't have this field in the model
 
 
 class StatementSerializer(serializers.ModelSerializer):

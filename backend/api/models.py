@@ -32,7 +32,10 @@ class Bill(models.Model):
     bill_id = models.CharField(max_length=100, primary_key=True, verbose_name=_("의안 ID"))
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='bills', verbose_name=_("관련 회의"))
     bill_nm = models.CharField(max_length=500, help_text=_("의안명"), verbose_name=_("의안명"))
-    link_url = models.URLField(help_text=_("의안 상세 URL"), verbose_name=_("의안 상세 URL"))
+    bill_no = models.CharField(max_length=100, blank=True, help_text=_("의안번호"), verbose_name=_("의안번호"))
+    proposer = models.CharField(max_length=200, default="국회", help_text=_("제안자/제안위원회"), verbose_name=_("제안자"))
+    propose_dt = models.CharField(max_length=50, blank=True, help_text=_("제안일자"), verbose_name=_("제안일자"))
+    link_url = models.URLField(blank=True, help_text=_("의안 상세 URL"), verbose_name=_("의안 상세 URL"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("생성일시"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
 
