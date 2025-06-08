@@ -3382,28 +3382,33 @@ def process_pdf_text_for_statements(full_text,
         segmentation_llm = None
 
     bill_segments_from_llm = []
-    if segmentation_llm and bill_names_list and len(bill_names_list) > 0:
-        logger.info(f"🔍 Getting bill segments with indices for session {session_id}")
+    if segmentation_llm:
+        if bill_names_list and len(bill_names_list) > 0:
+            logger.info(f"🔍 Getting bill segments with indices for session {session_id} (found {len(bill_names_list)} bills)")
 
-        try:
-            bill_segments_from_llm = _process_bill_segmentation_with_batching(
-                segmentation_llm, full_text, bill_names_list
-            )
-        except Exception as e_seg:
-            logger.error(f"Error during LLM bill segmentation: {e_seg}")
-            # Create equal segments as fallback
-            if bill_names_list:
-                text_per_bill = len(full_text) // len(bill_names_list)
-                for i, bill_name in enumerate(bill_names_list):
-                    start_idx = i * text_per_bill
-                    end_idx = (i + 1) * text_per_bill if i < len(bill_names_list) - 1 else len(full_text)
-                    bill_segments_from_llm.append({
-                        "a": bill_name,
-                        "b": start_idx,
-                        "e": end_idx,
-                        "c": 0.5
-                    })
-                logger.info(f"Created {len(bill_segments_from_llm)} equal fallback segments")
+            try:
+                bill_segments_from_llm = _process_bill_segmentation_with_batching(
+                    segmentation_llm, full_text, bill_names_list
+                )
+            except Exception as e_seg:
+                logger.error(f"Error during LLM bill segmentation: {e_seg}")
+                # Create equal segments as fallback
+                if bill_names_list:
+                    text_per_bill = len(full_text) // len(bill_names_list)
+                    for i, bill_name in enumerate(bill_names_list):
+                        start_idx = i * text_per_bill
+                        end_idx = (i + 1) * text_per_bill if i < len(bill_names_list) - 1 else len(full_text)
+                        bill_segments_from_llm.append({
+                            "a": bill_name,
+                            "b": start_idx,
+                            "e": end_idx,
+                            "c": 0.5
+                        })
+                    logger.info(f"Created {len(bill_segments_from_llm)} equal fallback segments")
+        else:
+            logger.info(f"⚠️ No bill names found for session {session_id}, will process entire text as general discussion")
+    else:
+        logger.error(f"❌ Segmentation LLM not available for session {session_id}")
 
 def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text, bill_names_list):
     """
@@ -3697,8 +3702,16 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
     else:
         # Fallback: process entire text if no segments found
         logger.info("No bill segments identified. Processing entire text as general discussion.")
-        statements_from_full_text = extract_statements_with_keyword_fallback(
-            full_text, session_id, debug)
+        
+        # Try LLM-based extraction first
+        if genai and model:
+            logger.info("🔍 Using LLM-based statement extraction for full text")
+            statements_from_full_text = extract_statements_for_bill_segment(
+                full_text, session_id, "General Discussion", debug)
+        else:
+            logger.info("🔍 Using keyword-based fallback extraction")
+            statements_from_full_text = extract_statements_with_keyword_fallback(
+                full_text, session_id, debug)
 
         for stmt_data in statements_from_full_text:
             stmt_data['associated_bill_name'] = "General Discussion"
@@ -3706,12 +3719,17 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
         all_extracted_statements_data.extend(statements_from_full_text)
 
     # Final step: Save all statements to DB
-    logger.info(f"Collected {len(all_extracted_statements_data)} statements for session {session_id}")
+    logger.info(f"📊 Collected {len(all_extracted_statements_data)} statements for session {session_id}")
 
     if not debug and all_extracted_statements_data:
         process_extracted_statements_data(all_extracted_statements_data, session_obj, debug)
+        logger.info(f"✅ Successfully saved {len(all_extracted_statements_data)} statements to database")
     elif debug and all_extracted_statements_data:
         logger.debug(f"🐛 DEBUG: Would save {len(all_extracted_statements_data)} statements")
+    elif not all_extracted_statements_data:
+        logger.warning(f"⚠️ No statements extracted for session {session_id}")
+    else:
+        logger.info(f"ℹ️ Debug mode: skipped saving {len(all_extracted_statements_data)} statements")
 
 
 def process_extracted_statements_data(statements_data_list,
