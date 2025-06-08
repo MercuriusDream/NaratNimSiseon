@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart as RechartsBarChart, Bar } from 'recharts';
 
 const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
   // Transform and validate data
@@ -67,29 +67,42 @@ const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
     }
   }, [data]);
 
-  // For sentiment distribution, create data with three categories
-  const sentimentBarData = React.useMemo(() => {
+  // For sentiment distribution, create line chart data with sentiment scores
+  const sentimentLineData = React.useMemo(() => {
     if (chartData.length === 0) return [];
 
-    // If we have overall sentiment data, create a single entry with three bars
-    if (chartData.length === 1 && (chartData[0].name === "Overall" || chartData[0].name === "전체")) {
-      const item = chartData[0];
-      return [{
-        name: "감성 분포",
-        긍정: item.positive_count || 0,
-        중립: item.neutral_count || (item.statement_count - (item.positive_count || 0) - (item.negative_count || 0)) || 0,
-        부정: item.negative_count || 0
-      }];
-    }
-
-    // For party-wise data, show each party with their sentiment breakdown
+    // For line chart, we want to show sentiment scores from -1.0 to +1.0
     return chartData.map(item => ({
       name: item.name,
-      긍정: item.positive_count || 0,
-      중립: item.neutral_count || 0,
-      부정: item.negative_count || 0
+      sentiment: parseFloat(item.sentiment || 0),
+      positive_count: item.positive_count || 0,
+      negative_count: item.negative_count || 0,
+      neutral_count: item.neutral_count || 0,
+      statement_count: item.statement_count || 0
     }));
   }, [chartData]);
+
+  // Helper function to get color based on sentiment value
+  const getSentimentColor = (sentiment) => {
+    // Normalize sentiment from [-1, 1] to [0, 1]
+    const normalized = Math.max(0, Math.min(1, (sentiment + 1) / 2));
+    
+    if (normalized < 0.5) {
+      // Red to Grey (negative to neutral)
+      const ratio = normalized * 2; // 0 to 1
+      const red = Math.round(239 + (107 - 239) * ratio); // 239 to 107
+      const green = Math.round(68 + (114 - 68) * ratio);  // 68 to 114
+      const blue = Math.round(68 + (128 - 68) * ratio);   // 68 to 128
+      return `rgb(${red}, ${green}, ${blue})`;
+    } else {
+      // Grey to Green (neutral to positive)
+      const ratio = (normalized - 0.5) * 2; // 0 to 1
+      const red = Math.round(107 + (34 - 107) * ratio);   // 107 to 34
+      const green = Math.round(114 + (197 - 114) * ratio); // 114 to 197
+      const blue = Math.round(128 + (94 - 128) * ratio);   // 128 to 94
+      return `rgb(${red}, ${green}, ${blue})`;
+    }
+  };
 
   if (!chartData || chartData.length === 0) {
     return (
@@ -129,21 +142,35 @@ const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
     return null;
   };
 
-  const CustomTooltipThreeBars = ({ active, payload, label }) => {
+  const CustomTooltipLine = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
-      const total = payload.reduce((sum, entry) => sum + entry.value, 0);
+      const data = payload[0].payload;
+      const sentiment = data.sentiment;
+      const sentimentText = sentiment > 0.1 ? '긍정적' : sentiment < -0.1 ? '부정적' : '중립적';
+      
       return (
         <div className="bg-white p-4 border border-gray-200 shadow-lg rounded">
           <p className="font-medium mb-2">{label}</p>
           <div className="space-y-1">
-            {payload.map((entry, index) => (
-              <p key={index} className="text-sm" style={{ color: entry.color }}>
-                {entry.dataKey}: {entry.value}건 ({total > 0 ? ((entry.value / total) * 100).toFixed(1) : 0}%)
-              </p>
-            ))}
-            <p className="text-sm font-medium border-t pt-1 mt-2">
-              총 발언: {total}건
+            <p className="text-sm" style={{ color: getSentimentColor(sentiment) }}>
+              감성 점수: {sentiment.toFixed(3)} ({sentimentText})
             </p>
+            {data.statement_count > 0 && (
+              <>
+                <p className="text-sm text-green-600">
+                  긍정: {data.positive_count}건
+                </p>
+                <p className="text-sm text-gray-600">
+                  중립: {data.neutral_count}건
+                </p>
+                <p className="text-sm text-red-600">
+                  부정: {data.negative_count}건
+                </p>
+                <p className="text-sm font-medium border-t pt-1 mt-2">
+                  총 발언: {data.statement_count}건
+                </p>
+              </>
+            )}
           </div>
         </div>
       );
@@ -155,16 +182,48 @@ const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
       <ResponsiveContainer width="100%" height={300}>
-        <RechartsBarChart data={sentimentBarData} margin={{ top: 15, right: 30, left: 20, bottom: 5 }}>
+        <LineChart data={sentimentLineData} margin={{ top: 15, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" />
-          <YAxis />
-          <Tooltip content={<CustomTooltipThreeBars />} />
+          <YAxis 
+            domain={[-1, 1]} 
+            tickFormatter={(value) => value.toFixed(1)}
+            label={{ value: '감성 점수', angle: -90, position: 'insideLeft' }}
+          />
+          <Tooltip content={<CustomTooltipLine />} />
           <Legend />
-          <Bar dataKey="긍정" fill="#22c55e" name="긍정" />
-          <Bar dataKey="중립" fill="#6b7280" name="중립" />
-          <Bar dataKey="부정" fill="#ef4444" name="부정" />
-        </RechartsBarChart>
+          <Line 
+            type="monotone" 
+            dataKey="sentiment" 
+            stroke="#6b7280"
+            strokeWidth={3}
+            dot={(props) => {
+              const { cx, cy, payload } = props;
+              const color = getSentimentColor(payload.sentiment);
+              return (
+                <circle 
+                  cx={cx} 
+                  cy={cy} 
+                  r={6} 
+                  fill={color} 
+                  stroke={color} 
+                  strokeWidth={2}
+                />
+              );
+            }}
+            name="감성 점수"
+          />
+          {/* Reference lines for sentiment levels */}
+          <Line 
+            type="monotone" 
+            dataKey={() => 0} 
+            stroke="#9ca3af" 
+            strokeDasharray="5 5" 
+            strokeWidth={1}
+            dot={false}
+            name="중립선"
+          />
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );
