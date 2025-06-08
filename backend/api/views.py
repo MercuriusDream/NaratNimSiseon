@@ -82,6 +82,21 @@ class SessionViewSet(viewsets.ModelViewSet):
             logger.error(f"Error in SessionViewSet get_queryset: {e}")
             return Session.objects.none()
 
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.filter_queryset(self.get_queryset())
+            
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error in SessionViewSet list: {e}")
+            return Response([], status=200)
+
     @action(detail=True, methods=['get'])
     @api_action_wrapper(log_prefix="Fetching bills for session",
                         default_error_message='의안 목록을 불러오는 중 오류가 발생했습니다.')
@@ -542,36 +557,88 @@ class PartyViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.error(f"Error triggering additional data fetch: {e}")
 
-            queryset = self.filter_queryset(self.get_queryset())
-            
-            # Paginate the queryset
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True)
-                result = self.get_paginated_response(serializer.data)
-                if fetch_additional:
-                    result.data['additional_data_fetched'] = True
-                return result
+            # Get all parties and enhance with statistics
+            parties = Party.objects.all()
+            party_data = []
 
-            serializer = self.get_serializer(queryset, many=True)
-            data = serializer.data if serializer.data is not None else []
+            for party in parties:
+                # Get basic statistics
+                speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
+                statements = Statement.objects.filter(speaker__plpt_nm__icontains=party.name)
+                
+                # Calculate stats
+                member_count = speakers.count()
+                total_statements = statements.count()
+                avg_sentiment = statements.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
+                
+                # Get recent statements for the party
+                recent_statements = statements.order_by('-created_at')[:5]
+                recent_statements_data = []
+                for stmt in recent_statements:
+                    recent_statements_data.append({
+                        'text': stmt.text[:100] + '...' if len(stmt.text) > 100 else stmt.text,
+                        'sentiment_score': stmt.sentiment_score or 0,
+                        'created_at': stmt.created_at.isoformat() if stmt.created_at else None
+                    })
+                
+                # Get top members by statement count
+                top_members = speakers.annotate(
+                    statement_count=Count('statements'),
+                    avg_sentiment=Avg('statements__sentiment_score')
+                ).filter(statement_count__gt=0).order_by('-statement_count')[:3]
+                
+                top_members_data = []
+                for member in top_members:
+                    top_members_data.append({
+                        'id': member.id,
+                        'naas_nm': member.naas_nm,
+                        'naas_cd': member.naas_cd,
+                        'statement_count': member.statement_count,
+                        'avg_sentiment': member.avg_sentiment or 0
+                    })
 
-            response_data = {
-                'results': data,
-                'count': len(data)
-            }
+                party_info = {
+                    'id': party.id,
+                    'name': party.name,
+                    'description': party.description,
+                    'slogan': party.slogan,
+                    'logo_url': party.logo_url,
+                    'assembly_era': party.assembly_era,
+                    'member_count': member_count,
+                    'total_statements': total_statements,
+                    'avg_sentiment': round(avg_sentiment, 3) if avg_sentiment else 0,
+                    'approved_bills': 0,  # Placeholder
+                    'rejected_bills': 0,  # Placeholder
+                    'recent_statements': recent_statements_data,
+                    'top_members': top_members_data,
+                    'created_at': party.created_at.isoformat() if party.created_at else None,
+                    'updated_at': party.updated_at.isoformat() if party.updated_at else None
+                }
+                
+                if member_count > 0 or total_statements > 0:  # Only include parties with data
+                    party_data.append(party_info)
+
+            # Sort by member count descending
+            party_data.sort(key=lambda x: x['member_count'], reverse=True)
+
+            response_data = party_data
 
             if fetch_additional:
-                response_data['additional_data_fetched'] = True
+                # Return with additional flag in the response
+                return Response({
+                    'results': response_data,
+                    'count': len(response_data),
+                    'additional_data_fetched': True
+                })
 
+            # Return as simple array for compatibility
             return Response(response_data)
 
         except Exception as e:
             logger.error(f"Error in PartyViewSet list: {e}")
-            return Response({
-                'results': [],
-                'count': 0
-            }, status=200)
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return Response([], status=200)
 
 
 class StatementListView(generics.ListAPIView):
