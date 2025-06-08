@@ -1459,192 +1459,197 @@ def process_single_segment_for_statements(bill_text_segment,
 
 
 def analyze_speech_segment_with_llm_batch(speech_segments, session_id, bill_name, debug=False):
-    """Batch analyze multiple speech segments with LLM with rate limiting."""
-    if not model:
-        logger.warning("❌ Main LLM ('model') not available. Cannot analyze speech segments.")
+    """Batch analyze multiple speech segments with LLM - 20 statements per request."""
+    if not genai:
+        logger.warning("❌ Gemini not available. Cannot analyze speech segments.")
         return []
 
     if not speech_segments:
         return []
 
-    logger.info(f"🚀 Rate-limited batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...'")
+    logger.info(f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.0-flash-lite")
     
     # Get assembly members once for the entire batch
     assembly_members = get_all_assembly_members()
     
-    # Process segments with much smaller batches to avoid timeouts
-    results = []
-    max_workers = 1  # Sequential processing to avoid overwhelming free tier
-    batch_size = 5  # Process only 5 segments at a time
+    # Use gemini-2.0-flash-lite for batch processing
+    try:
+        batch_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+    except Exception as e:
+        logger.error(f"Failed to initialize gemini-2.0-flash-lite: {e}")
+        return []
     
-    # Split into smaller batches
+    results = []
+    batch_size = 20  # Process 20 statements per request
+    
+    # Split into batches of 20
     for batch_start in range(0, len(speech_segments), batch_size):
         batch_end = min(batch_start + batch_size, len(speech_segments))
         batch_segments = speech_segments[batch_start:batch_end]
         
         logger.info(f"Processing batch {batch_start//batch_size + 1}/{(len(speech_segments)-1)//batch_size + 1}: segments {batch_start}-{batch_end-1}")
         
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit tasks with rate limiting
-            future_to_segment = {}
-            
-            for i, segment in enumerate(batch_segments):
-                actual_index = batch_start + i
-                
-                # Estimate tokens for this segment (rough estimate: 1 token per 4 characters)
-                estimated_tokens = len(segment) // 4 + 300  # Reduced overhead
-                
-                # Wait if needed before submitting
-                if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
-                    logger.warning(f"Skipping segment {actual_index} due to rate limiting timeout")
-                    continue
-                
-                future = executor.submit(
-                    analyze_single_segment_llm_only_with_rate_limit, 
-                    segment, bill_name, assembly_members, estimated_tokens
-                )
-                future_to_segment[future] = actual_index
-                
-                # Longer delay between submissions for free tier
-                time.sleep(1.0)
-            
-            # Collect results as they complete with timeout
-            for future in as_completed(future_to_segment, timeout=120):  # 2 minute timeout per batch
-                segment_index = future_to_segment[future]
-                try:
-                    result = future.result(timeout=60)  # 1 minute timeout per segment
-                    if result:
-                        result['segment_index'] = segment_index
-                        results.append(result)
-                        logger.debug(f"✅ Processed segment {segment_index}: {result['speaker_name']}")
-                except TimeoutError:
-                    logger.warning(f"⏰ Timeout processing segment {segment_index}")
-                except Exception as e:
-                    logger.error(f"❌ Exception in segment {segment_index}: {e}")
+        # Estimate total tokens for the batch
+        total_chars = sum(len(segment) for segment in batch_segments)
+        estimated_tokens = total_chars // 4 + 1000  # Rough estimate with overhead
         
-        # Rest between batches to avoid overwhelming the API
+        # Wait if needed before submitting
+        if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+            logger.warning(f"Skipping batch {batch_start//batch_size + 1} due to rate limiting timeout")
+            continue
+        
+        # Create batch prompt for 20 statements
+        batch_results = analyze_batch_statements_single_request(
+            batch_model, batch_segments, bill_name, assembly_members, 
+            estimated_tokens, batch_start
+        )
+        
+        results.extend(batch_results)
+        
+        # Record the API usage
+        gemini_rate_limiter.record_request(estimated_tokens)
+        
+        # Brief pause between batches
         if batch_end < len(speech_segments):
-            logger.info(f"Resting 10s before next batch...")
-            time.sleep(10)
+            logger.info(f"Resting 3s before next batch...")
+            time.sleep(3)
     
-    logger.info(f"✅ Rate-limited batch analysis completed: {len(results)} valid statements from {len(speech_segments)} segments")
+    logger.info(f"✅ Batch analysis completed: {len(results)} valid statements from {len(speech_segments)} segments")
     return sorted(results, key=lambda x: x.get('segment_index', 0))
 
 
-def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name, assembly_members, estimated_tokens):
-    """Analyze a single speech segment with LLM and rate limiting."""
-    if not speech_segment or len(speech_segment) < 50:
-        return None
+def analyze_batch_statements_single_request(batch_model, batch_segments, bill_name, assembly_members, estimated_tokens, batch_start_index):
+    """Analyze up to 20 statements in a single API request."""
+    if not batch_segments:
+        return []
 
-    # Simplified prompt to reduce processing time
+    # Create batch prompt for multiple segments
+    segments_text = ""
+    for i, segment in enumerate(batch_segments):
+        segments_text += f"\n--- SEGMENT {i+1} ---\n{segment[:1000]}...\n"  # Limit each segment to 1000 chars
+    
     prompt = f"""
-Analyze this Korean parliament speech segment and return JSON:
+Analyze these {len(batch_segments)} Korean parliament speech segments and return JSON array:
 Bill: "{bill_name[:100]}..."
-Text: "{speech_segment[:800]}..."
 
-Return only valid JSON:
-{{
-  "speaker_name": "speaker name without titles",
-  "speech_content": "actual speech content", 
-  "is_valid_member": true/false,
-  "is_substantial": true/false,
-  "sentiment_score": -1.0 to 1.0,
-  "bill_relevance_score": 0.0 to 1.0
-}}
+Segments:
+{segments_text}
 
-Rules: Real parliament member names only. No procedural speeches. Remove titles like 의원/위원장.
+Return ONLY valid JSON array with {len(batch_segments)} objects:
+[
+  {{
+    "segment_index": 1,
+    "speaker_name": "speaker name without titles",
+    "speech_content": "actual speech content",
+    "is_valid_member": true/false,
+    "is_substantial": true/false,
+    "sentiment_score": -1.0 to 1.0,
+    "bill_relevance_score": 0.0 to 1.0
+  }},
+  ... continue for all {len(batch_segments)} segments
+]
+
+Rules: 
+- Real parliament member names only
+- No procedural speeches 
+- Remove titles like 의원/위원장
+- Must return exactly {len(batch_segments)} objects
+- Use segment_index 1-{len(batch_segments)}
 """
 
     start_time = time.time()
-    try:
-        # Record the request for rate limiting
-        gemini_rate_limiter.record_request(estimated_tokens)
-        
-        # Use shorter timeout for individual requests
-        response = model.generate_content(prompt)
+    try:        
+        response = batch_model.generate_content(prompt)
         
         processing_time = time.time() - start_time
-        if processing_time > 30:  # Log slow requests
-            logger.warning(f"Slow LLM response: {processing_time:.1f}s for {len(speech_segment)} chars")
+        logger.info(f"Batch processing took {processing_time:.1f}s for {len(batch_segments)} segments")
         
         if not response or not response.text:
-            logger.debug(f"Empty response from LLM after {processing_time:.1f}s")
-            return None
+            logger.warning(f"Empty batch response from LLM after {processing_time:.1f}s")
+            return []
 
         response_text_cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
-        analysis_json = json.loads(response_text_cleaned)
-
-        # Handle case where LLM returns a list instead of dict
-        if isinstance(analysis_json, list):
-            if len(analysis_json) > 0 and isinstance(analysis_json[0], dict):
-                analysis_json = analysis_json[0]
-            else:
-                return None
         
-        if not isinstance(analysis_json, dict):
-            return None
+        try:
+            analysis_array = json.loads(response_text_cleaned)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error in batch response: {e}")
+            logger.debug(f"Raw response: {response_text_cleaned[:500]}...")
+            return []
 
-        speaker_name = analysis_json.get('speaker_name', '').strip()
-        speech_content = analysis_json.get('speech_content', '').strip()
-        is_valid_member = analysis_json.get('is_valid_member', False)
-        is_substantial = analysis_json.get('is_substantial', False)
+        if not isinstance(analysis_array, list):
+            logger.warning(f"Expected list but got {type(analysis_array)}")
+            return []
 
-        # Validate speaker name against assembly members
-        is_real_member = False
-        if speaker_name and assembly_members:
-            name_for_matching = speaker_name
-            for title in ['의원', '위원장', '장관', '의장', '부의장']:
-                name_for_matching = name_for_matching.replace(title, '').strip()
-            
-            is_real_member = name_for_matching in assembly_members or speaker_name in assembly_members
-            
-            if not assembly_members:
-                is_real_member = is_valid_member
+        results = []
+        for i, analysis_json in enumerate(analysis_array):
+            if not isinstance(analysis_json, dict):
+                continue
+                
+            speaker_name = analysis_json.get('speaker_name', '').strip()
+            speech_content = analysis_json.get('speech_content', '').strip()
+            is_valid_member = analysis_json.get('is_valid_member', False)
+            is_substantial = analysis_json.get('is_substantial', False)
 
-        # Check if speaker should be ignored
-        should_ignore = any(ignored in speaker_name for ignored in IGNORED_SPEAKERS) if speaker_name else True
+            # Validate speaker name against assembly members
+            is_real_member = False
+            if speaker_name and assembly_members:
+                name_for_matching = speaker_name
+                for title in ['의원', '위원장', '장관', '의장', '부의장']:
+                    name_for_matching = name_for_matching.replace(title, '').strip()
+                
+                is_real_member = name_for_matching in assembly_members or speaker_name in assembly_members
+                
+                if not assembly_members:
+                    is_real_member = is_valid_member
 
-        if not speaker_name or not speech_content or not is_valid_member or not is_substantial or should_ignore or not is_real_member:
-            return None
+            # Check if speaker should be ignored
+            should_ignore = any(ignored in speaker_name for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
-        # Return simplified analysis
-        return {
-            'speaker_name': speaker_name,
-            'text': speech_content,
-            'sentiment_score': analysis_json.get('sentiment_score', 0.0),
-            'sentiment_reason': 'LLM 분석 완료',
-            'bill_relevance_score': analysis_json.get('bill_relevance_score', 0.0),
-            'policy_categories': [],  # Simplified - can be filled later
-            'policy_keywords': [],
-            'bill_specific_keywords': []
-        }
+            if not speaker_name or not speech_content or not is_valid_member or not is_substantial or should_ignore or not is_real_member:
+                continue
+
+            # Return simplified analysis with global segment index
+            results.append({
+                'speaker_name': speaker_name,
+                'text': speech_content,
+                'sentiment_score': analysis_json.get('sentiment_score', 0.0),
+                'sentiment_reason': 'LLM 배치 분석 완료',
+                'bill_relevance_score': analysis_json.get('bill_relevance_score', 0.0),
+                'policy_categories': [],
+                'policy_keywords': [],
+                'bill_specific_keywords': [],
+                'segment_index': batch_start_index + i  # Global index
+            })
+
+        logger.info(f"✅ Batch processed {len(results)} valid statements from {len(batch_segments)} segments")
+        return results
 
     except Exception as e:
         processing_time = time.time() - start_time
         
         # Handle specific timeout errors
         if "504" in str(e) or "Deadline" in str(e):
-            logger.warning(f"⏰ TIMEOUT after {processing_time:.1f}s: {e}")
-            # Wait longer after timeout
+            logger.warning(f"⏰ BATCH TIMEOUT after {processing_time:.1f}s: {e}")
             time.sleep(15)
-            return None
+            return []
         elif "429" in str(e) and "quota" in str(e).lower():
-            logger.warning(f"Rate limit hit during analysis: {e}")
-            # Extract retry delay if available
-            if "retry_delay" in str(e):
-                try:
-                    import re
-                    delay_match = re.search(r'seconds: (\d+)', str(e))
-                    if delay_match:
-                        delay_seconds = int(delay_match.group(1))
-                        logger.info(f"Waiting {delay_seconds} seconds as suggested by API...")
-                        time.sleep(delay_seconds)
-                except:
-                    time.sleep(10)  # Default wait
-            return None
+            logger.warning(f"Rate limit hit during batch analysis: {e}")
+            time.sleep(10)
+            return []
         else:
-            logger.debug(f"Error analyzing segment after {processing_time:.1f}s: {e}")
-            return None
+            logger.error(f"Error in batch analysis after {processing_time:.1f}s: {e}")
+            return []
+
+
+def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name, assembly_members, estimated_tokens):
+    """Legacy function - now redirects to batch processing for consistency."""
+    # For single segment, just use batch processing with 1 item
+    batch_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+    results = analyze_batch_statements_single_request(
+        batch_model, [speech_segment], bill_name, assembly_members, estimated_tokens, 0
+    )
+    return results[0] if results else None
 
 
 def analyze_single_segment_llm_only(speech_segment, bill_name, assembly_members):
