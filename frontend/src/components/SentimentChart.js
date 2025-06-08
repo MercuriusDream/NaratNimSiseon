@@ -71,19 +71,33 @@ const SentimentChart = ({ data, title = "감성 분포" }) => {
   const sentimentDistributionData = React.useMemo(() => {
     if (chartData.length === 0) return [];
 
-    // Create sentiment bins from -1.0 to 1.0
-    const bins = [];
-    const binCount = 10; // 10 bins from -1.0 to 1.0
-    const binSize = 2.0 / binCount; // 0.2 per bin
+    // Find the actual range of sentiment values in the data
+    const sentiments = chartData.map(item => item.sentiment).filter(s => !isNaN(s));
+    if (sentiments.length === 0) return [];
 
+    const minSentiment = Math.min(...sentiments);
+    const maxSentiment = Math.max(...sentiments);
+    
+    // Add some padding to the range (10% on each side)
+    const range = maxSentiment - minSentiment;
+    const padding = Math.max(0.1, range * 0.1); // At least 0.1 padding
+    const adjustedMin = Math.max(-1.0, minSentiment - padding);
+    const adjustedMax = Math.min(1.0, maxSentiment + padding);
+    
+    // Create bins based on actual data range
+    const binCount = 10;
+    const actualRange = adjustedMax - adjustedMin;
+    const binSize = actualRange / binCount;
+    
+    const bins = [];
     for (let i = 0; i < binCount; i++) {
-      const binStart = -1.0 + (i * binSize);
+      const binStart = adjustedMin + (i * binSize);
       const binEnd = binStart + binSize;
       const binCenter = binStart + (binSize / 2);
       
       bins.push({
-        sentimentRange: binCenter.toFixed(1),
-        rangeLabel: `${binStart.toFixed(1)} to ${binEnd.toFixed(1)}`,
+        sentimentRange: binCenter.toFixed(2),
+        rangeLabel: `${binStart.toFixed(2)} to ${binEnd.toFixed(2)}`,
         count: 0,
         binStart,
         binEnd
@@ -93,7 +107,7 @@ const SentimentChart = ({ data, title = "감성 분포" }) => {
     // Count statements in each bin
     chartData.forEach(item => {
       const sentiment = item.sentiment;
-      const statementCount = item.statement_count || 1; // Use statement count if available
+      const statementCount = item.statement_count || 1;
       
       // Find which bin this sentiment falls into
       for (let bin of bins) {
@@ -101,8 +115,8 @@ const SentimentChart = ({ data, title = "감성 분포" }) => {
           bin.count += statementCount;
           break;
         }
-        // Handle edge case for exactly 1.0
-        if (sentiment === 1.0 && bin.binEnd === 1.0) {
+        // Handle edge case for exactly the max value
+        if (sentiment === adjustedMax && bin.binEnd === adjustedMax) {
           bin.count += statementCount;
           break;
         }
@@ -160,7 +174,7 @@ const SentimentChart = ({ data, title = "감성 분포" }) => {
           <p className="font-medium mb-2">감성 범위: {data.rangeLabel}</p>
           <div className="space-y-1">
             <p className="text-sm" style={{ color: getSentimentColor(sentiment) }}>
-              중심 점수: {sentiment} ({sentimentText})
+              중심 점수: {sentiment.toFixed(2)} ({sentimentText})
             </p>
             <p className="text-sm font-medium">
               발언 수: {data.count}건
