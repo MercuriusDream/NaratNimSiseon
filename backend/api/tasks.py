@@ -1092,6 +1092,12 @@ def fetch_session_details(self,
                         updated_fields = True
                         logger.info(f"🔄 Updated session cmit_nm to: {cmit_nm}")
                     
+                    # Define institutional/non-individual proposers that should not be looked up
+                    institutional_proposers = [
+                        '국회본회의', '국회', '본회의', '정부', '대통령', '국무총리', 
+                        '행정부', '정부제출', '의장', '부의장', '국회의장', '국회부의장'
+                    ]
+                    
                     if cmit_nm.endswith('위원회'):
                         logger.info(f"🏛️ Found committee proposer: {cmit_nm} for session {session_id}")
                         if not debug:
@@ -1100,6 +1106,8 @@ def fetch_session_details(self,
                             if committee_members:
                                 logger.info(f"📋 Found {len(committee_members)} members in {cmit_nm}")
                                 # The committee members will be used when processing bills for this session
+                    elif cmit_nm in institutional_proposers or any(inst in cmit_nm for inst in institutional_proposers):
+                        logger.info(f"🏛️ Found institutional proposer: {cmit_nm} for session {session_id} - skipping individual member lookup")
                     else:
                         logger.info(f"👤 Found individual proposer: {cmit_nm} for session {session_id}")
                         # Verify if this is a real assembly member
@@ -1277,6 +1285,12 @@ def fetch_session_bills(self,
                 if not bill_proposer and hasattr(session_obj, 'cmit_nm') and session_obj.cmit_nm:
                     bill_proposer = session_obj.cmit_nm.strip()
                 
+                # Define institutional/non-individual proposers that should not be looked up
+                institutional_proposers = [
+                    '국회본회의', '국회', '본회의', '정부', '대통령', '국무총리', 
+                    '행정부', '정부제출', '의장', '부의장', '국회의장', '국회부의장'
+                ]
+                
                 # Process the proposer information
                 if bill_proposer:
                     if bill_proposer.endswith('위원회'):
@@ -1297,6 +1311,10 @@ def fetch_session_bills(self,
                             # Committee name but no members found
                             proposer_info = bill_proposer
                             logger.warning(f"⚠️ No members found for committee {bill_proposer}")
+                    elif bill_proposer in institutional_proposers or any(inst in bill_proposer for inst in institutional_proposers):
+                        # Institutional proposer - don't try to fetch individual details
+                        proposer_info = bill_proposer
+                        logger.info(f"🏛️ Bill {bill_id_api} proposed by institutional entity: {bill_proposer}")
                     else:
                         # Individual proposer - verify if they're a real assembly member
                         # Try to fetch their details to confirm they exist
