@@ -1793,7 +1793,7 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
 
 
 def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0):
-    """Process a single batch of text for speech segmentation."""
+    """Process a single batch of text for speech segmentation with proper chunking."""
     try:
         # Use lightweight model for segmentation
         segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
@@ -1809,12 +1809,46 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
             logger.warning("Text segment is empty after cleaning")
             return []
 
-        # Limit text length for prompt
-        max_text_length = 8000  # Reduced to 8k chars for better reliability
-        if len(clean_text) > max_text_length:
-            text_for_prompt = clean_text[:max_text_length] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
-        else:
-            text_for_prompt = clean_text
+        # Process in chunks if text is too long
+        max_chunk_size = 12000  # Increased chunk size for better context
+        if len(clean_text) <= max_chunk_size:
+            return _process_text_chunk_for_segmentation(segmentation_model, clean_text, bill_name, 0)
+        
+        # Split into overlapping chunks for better continuity
+        chunk_overlap = 1000  # 1k character overlap
+        all_indices = []
+        
+        for chunk_start in range(0, len(clean_text), max_chunk_size - chunk_overlap):
+            chunk_end = min(chunk_start + max_chunk_size, len(clean_text))
+            chunk_text = clean_text[chunk_start:chunk_end]
+            
+            # Process this chunk
+            chunk_indices = _process_text_chunk_for_segmentation(segmentation_model, chunk_text, bill_name, chunk_start)
+            
+            # Adjust indices to global position and filter overlaps
+            for idx_pair in chunk_indices:
+                global_start = idx_pair['start'] + chunk_start + global_offset
+                global_end = idx_pair['end'] + chunk_start + global_offset
+                
+                # Check for overlaps with existing indices
+                is_overlap = False
+                for existing in all_indices:
+                    if (global_start < existing['end'] and global_end > existing['start']):
+                        is_overlap = True
+                        break
+                
+                if not is_overlap:
+                    all_indices.append({'start': global_start, 'end': global_end})
+            
+            # Rate limiting between chunks
+            if chunk_end < len(clean_text):
+                time.sleep(1)
+        
+        return all_indices
+
+def _process_text_chunk_for_segmentation(model, text_chunk, bill_name, chunk_offset):
+    """Process a single text chunk for speech segmentation."""
+    try:
 
         # Validate bill_name
         safe_bill_name = str(bill_name)[:100] if bill_name else "알 수 없는 의안"
@@ -1824,7 +1858,7 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
 의안: {safe_bill_name}
 
 회의록 텍스트:
-{text_for_prompt}
+{text_chunk}
 
 다음 JSON 형식으로 응답해주세요:
 [
@@ -1834,20 +1868,15 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
 
 규칙:
 - ◯로 시작하는 발언자 구간을 찾으세요
-- start/end는 텍스트 내 문자 위치입니다
+- start/end는 위 텍스트 내에서의 문자 위치입니다
 - 의사진행 발언은 제외하고 의원 발언만 포함
 - 최소 50자 이상의 발언만 포함
 - JSON 배열만 응답하세요"""
 
-        # Validate prompt before sending
-        if len(prompt) < 100:
-            logger.error("Prompt too short, likely malformed")
-            return []
-
-        response = segmentation_model.generate_content(prompt)
+        response = model.generate_content(prompt)
 
         if not response or not response.text:
-            logger.warning(f"No response from LLM for batch segmentation (offset: {global_offset})")
+            logger.warning(f"No response from LLM for chunk segmentation")
             return []
 
         response_text = response.text.strip()
@@ -1857,19 +1886,16 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
 
         # Clean response text
         response_text = response_text.replace("```json", "").replace("```", "").strip()
-        
-        # Log the raw response for debugging
-        logger.debug(f"Raw LLM segmentation response (first 200 chars): {response_text[:200]}...")
 
         # Handle cases where LLM responds with explanation instead of JSON
         error_indicators = ["죄송합니다", "정보가 부족", "텍스트가 제공되지 않았", "분석할 수 없습니다", "텍스트가 없습니다"]
         if any(indicator in response_text for indicator in error_indicators):
-            logger.warning(f"LLM returned explanation instead of JSON segmentation: {response_text[:100]}...")
+            logger.warning(f"LLM returned explanation instead of JSON: {response_text[:100]}...")
             return []
 
         # Validate response has JSON-like structure
         if not ("[" in response_text and "]" in response_text):
-            logger.warning(f"Response doesn't contain JSON array structure: {response_text[:100]}...")
+            logger.warning(f"Response doesn't contain JSON array: {response_text[:100]}...")
             return []
 
         try:
@@ -1880,25 +1906,156 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
                     if isinstance(idx_pair, dict) and 'start' in idx_pair and 'end' in idx_pair:
                         start = int(idx_pair['start'])
                         end = int(idx_pair['end'])
-                        # Validate indices are within this batch
-                        if 0 <= start < end <= len(text_segment):
+                        # Validate indices are within this chunk
+                        if 0 <= start < end <= len(text_chunk):
                             valid_indices.append({'start': start, 'end': end})
 
-                logger.info(f"Successfully extracted {len(valid_indices)} speech segments from LLM")
                 return valid_indices
             else:
-                logger.warning(f"LLM batch response is not a list: {type(indices)}")
+                logger.warning(f"LLM response is not a list: {type(indices)}")
                 return []
 
         except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in batch segmentation: {e}")
-            logger.debug(f"Raw response: {response_text[:500]}...")
+            logger.error(f"JSON decode error in chunk segmentation: {e}")
             return []
 
     except Exception as e:
-        logger.error(f"Error in batch speech segmentation: {e}")
+        logger.error(f"Error in chunk speech segmentation: {e}")
         return []
 
+
+def _process_bill_segmentation_with_batching(segmentation_llm, full_text, bill_names_list):
+    """Process bill segmentation with proper batching for large texts."""
+    if not full_text or len(full_text.strip()) < 500:
+        logger.warning(f"Text too short for bill segmentation (length: {len(full_text) if full_text else 0})")
+        return []
+    
+    if not bill_names_list:
+        logger.warning("No bill names provided for segmentation")
+        return []
+    
+    # Clean and validate inputs
+    clean_text = full_text.strip()
+    safe_bill_names = [str(bill)[:200] for bill in bill_names_list if bill and str(bill).strip()]
+    
+    if not safe_bill_names:
+        logger.warning("No valid bill names after cleaning")
+        return []
+    
+    # Process in batches if text is too long
+    max_batch_size = 80000  # 80k chars for bill segmentation
+    if len(clean_text) <= max_batch_size:
+        return _process_single_bill_segmentation_batch(segmentation_llm, clean_text, safe_bill_names, 0)
+    
+    logger.info(f"Processing bill segmentation in batches (text length: {len(clean_text)})")
+    
+    # Split into overlapping batches
+    batch_overlap = 10000  # 10k character overlap
+    all_segments = []
+    
+    for batch_start in range(0, len(clean_text), max_batch_size - batch_overlap):
+        batch_end = min(batch_start + max_batch_size, len(clean_text))
+        batch_text = clean_text[batch_start:batch_end]
+        
+        logger.info(f"Processing bill segmentation batch: chars {batch_start}-{batch_end}")
+        
+        # Process this batch
+        batch_segments = _process_single_bill_segmentation_batch(
+            segmentation_llm, batch_text, safe_bill_names, batch_start
+        )
+        
+        # Adjust positions to global coordinates and check for duplicates
+        for segment in batch_segments:
+            global_start = segment['b'] + batch_start
+            
+            # Check if we already have this bill
+            existing_bill = next((s for s in all_segments if s['a'] == segment['a']), None)
+            if existing_bill:
+                # Keep the one with higher confidence
+                if segment['c'] > existing_bill['c']:
+                    existing_bill['b'] = global_start
+                    existing_bill['c'] = segment['c']
+            else:
+                all_segments.append({
+                    'a': segment['a'],
+                    'b': global_start,
+                    'c': segment['c']
+                })
+        
+        # Rate limiting between batches
+        if batch_end < len(clean_text):
+            time.sleep(2)
+    
+    logger.info(f"Bill segmentation batching complete: {len(all_segments)} segments found")
+    return all_segments
+
+def _process_single_bill_segmentation_batch(segmentation_llm, text_batch, bill_names, batch_offset):
+    """Process a single batch for bill segmentation."""
+    try:
+        bill_segmentation_prompt = f"""국회 회의록에서 각 의안의 논의 시작점을 찾아주세요.
+
+의안 목록:
+{chr(10).join([f"- {bill}" for bill in bill_names[:15]])}
+
+회의록 텍스트:
+{text_batch[:60000]}
+
+JSON 형식으로 응답:
+{{
+  "bill_segments": [
+    {{
+      "bill_name": "의안명",
+      "start_position": 위치숫자,
+      "confidence": 0.8
+    }}
+  ]
+}}
+
+규칙:
+- 의안명은 위 목록에서 정확히 선택
+- 회의록에서 의안 논의 시작 위치 찾기
+- 신뢰도 0.7 이상만 포함
+- JSON만 응답"""
+
+        response = segmentation_llm.generate_content(bill_segmentation_prompt)
+        
+        if not response or not response.text:
+            logger.warning("No response from LLM for bill segmentation batch")
+            return []
+        
+        response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        
+        if not response_text or not ("{" in response_text and "}" in response_text):
+            logger.warning(f"Invalid response format: {response_text[:100]}...")
+            return []
+        
+        try:
+            data = json.loads(response_text)
+            segments = data.get("bill_segments", [])
+            
+            valid_segments = []
+            for segment in segments:
+                if (isinstance(segment, dict) and 
+                    segment.get('confidence', 0) >= 0.7 and
+                    segment.get('bill_name', '').strip() and
+                    isinstance(segment.get('start_position', -1), (int, float)) and
+                    segment.get('start_position', -1) >= 0):
+                    
+                    valid_segments.append({
+                        'a': segment['bill_name'].strip(),
+                        'b': int(segment['start_position']),
+                        'c': float(segment['confidence'])
+                    })
+            
+            return valid_segments
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON decode error in bill segmentation: {e}")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Error in bill segmentation batch: {e}")
+        return []
 
 def _deduplicate_speech_segments(all_indices):
     """Remove overlapping speech segments and return sorted unique segments."""
@@ -2007,49 +2164,67 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
                                             bill_name, assembly_members,
                                             estimated_tokens,
                                             batch_start_index):
-    """Analyze up to 20 statements in a single API request."""
+    """Analyze up to 20 statements in a single API request with improved batching."""
     if not batch_segments:
         return []
 
+    # Process large segments by chunking them
+    processed_segments = []
+    for segment in batch_segments:
+        if len(segment) > 2000:  # If segment is too large, split it
+            # Split at ◯ markers to preserve speech boundaries
+            sub_segments = segment.split('◯')
+            for i, sub_seg in enumerate(sub_segments):
+                if sub_seg.strip() and len(sub_seg.strip()) > 50:
+                    # Add back the ◯ marker except for first segment
+                    final_seg = ('◯' + sub_seg) if i > 0 else sub_seg
+                    processed_segments.append(final_seg.strip())
+        else:
+            processed_segments.append(segment)
+
+    # Limit to manageable batch size
+    max_segments_per_batch = 15  # Reduced for better reliability
+    if len(processed_segments) > max_segments_per_batch:
+        processed_segments = processed_segments[:max_segments_per_batch]
+
     # Clean and prepare segments
     cleaned_segments = []
-    for i, segment in enumerate(batch_segments):
+    for segment in processed_segments:
         # Remove newlines and clean text
         cleaned_segment = segment.replace('\n', ' ').replace('\r', '').strip()
 
         # Stop at reporting end marker
         report_end_marker = "(보고사항은 끝에 실음)"
         if report_end_marker in cleaned_segment:
-            cleaned_segment = cleaned_segment.split(
-                report_end_marker)[0].strip()
+            cleaned_segment = cleaned_segment.split(report_end_marker)[0].strip()
 
-        # Limit segment length for prompt efficiency
-        if len(cleaned_segment) > 500:
-            cleaned_segment = cleaned_segment[:500] + "..."
+        # Limit segment length but be more generous
+        if len(cleaned_segment) > 1000:
+            cleaned_segment = cleaned_segment[:1000] + "..."
 
-        cleaned_segments.append(cleaned_segment)
+        if cleaned_segment and len(cleaned_segment.strip()) > 20:
+            cleaned_segments.append(cleaned_segment)
 
-    # Validate inputs
-    if not batch_segments:
-        logger.warning("No batch segments provided for analysis")
-        return []
-
-    if not bill_name:
-        bill_name = "알 수 없는 의안"
-
-    # Create batch prompt for multiple segments
-    segments_text = ""
-    for i, segment in enumerate(cleaned_segments):
-        if segment and len(segment.strip()) > 10:
-            segments_text += f"\n--- 구간 {i+1} ---\n{segment}\n"
-
-    # Validate segments_text
-    if not segments_text.strip():
-        logger.warning("No valid segments after cleaning")
+    if not cleaned_segments:
+        logger.warning("No valid segments after cleaning and processing")
         return []
 
     # Create safe bill name
     safe_bill_name = str(bill_name)[:100] if bill_name else "알 수 없는 의안"
+
+    # Create batch prompt for multiple segments
+    segments_text = ""
+    for i, segment in enumerate(cleaned_segments):
+        segments_text += f"\n--- 구간 {i+1} ---\n{segment}\n"
+
+    # Split prompt if too large
+    max_prompt_length = 15000  # Conservative limit
+    if len(segments_text) > max_prompt_length:
+        # Process in smaller sub-batches
+        return _process_large_batch_in_chunks(
+            batch_model, cleaned_segments, bill_name, assembly_members, 
+            estimated_tokens, batch_start_index
+        )
 
     prompt = f"""국회 발언 분석 요청:
 
@@ -2058,11 +2233,11 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
 발언 구간들:
 {segments_text}
 
-다음 JSON 배열로 응답하세요 (정확히 {len(batch_segments)}개 객체):
+다음 JSON 배열로 응답하세요:
 [
   {{
     "segment_index": 1,
-    "speaker_name": "발언자명 (◯에서 추출, 직책 제거)",
+    "speaker_name": "발언자명",
     "start_idx": 0,
     "end_idx": 100,
     "is_valid_member": true,
@@ -2073,35 +2248,53 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
 ]
 
 규칙:
-- 의사진행 발언자는 제외 (의사국장, 사무관, 국장 등)
-- 정부 관계자는 제외 (장관, 차관, 실장 등)
-- 실제 의원만 포함
+- ◯로 시작하는 실제 의원 발언만 포함
+- 의사진행 발언자 제외
 - 발언자명에서 직책 제거
-- start_idx, end_idx는 구간 내 문자 위치
-- 정확히 {len(batch_segments)}개 객체 반환
 - JSON 배열만 응답"""
 
-    # Validate final prompt
-    if len(prompt) < 300:
-        logger.error("Batch analysis prompt too short, likely malformed")
-        return []
+    return _execute_batch_analysis(
+        batch_model, prompt, cleaned_segments, processed_segments, 
+        assembly_members, batch_start_index
+    )
 
+def _process_large_batch_in_chunks(batch_model, segments, bill_name, assembly_members, estimated_tokens, batch_start_index):
+    """Process large batches by splitting into smaller chunks."""
+    chunk_size = 8  # Process 8 segments at a time
+    all_results = []
+    
+    for chunk_start in range(0, len(segments), chunk_size):
+        chunk_end = min(chunk_start + chunk_size, len(segments))
+        chunk_segments = segments[chunk_start:chunk_end]
+        
+        chunk_results = analyze_batch_statements_single_request(
+            batch_model, chunk_segments, bill_name, assembly_members,
+            estimated_tokens // (len(segments) // chunk_size + 1),
+            batch_start_index + chunk_start
+        )
+        
+        all_results.extend(chunk_results)
+        
+        # Brief pause between chunks
+        if chunk_end < len(segments):
+            time.sleep(1)
+    
+    return all_results
+
+def _execute_batch_analysis(batch_model, prompt, cleaned_segments, original_segments, assembly_members, batch_start_index):
+    """Execute the actual batch analysis request."""
     start_time = time.time()
     try:
         response = batch_model.generate_content(prompt)
 
         processing_time = time.time() - start_time
-        logger.info(
-            f"Batch processing took {processing_time:.1f}s for {len(batch_segments)} segments"
-        )
+        logger.info(f"Batch processing took {processing_time:.1f}s for {len(cleaned_segments)} segments")
 
         if not response or not response.text:
-            logger.warning(
-                f"Empty batch response from LLM after {processing_time:.1f}s")
+            logger.warning(f"Empty batch response from LLM after {processing_time:.1f}s")
             return []
 
-        response_text_cleaned = response.text.strip().replace(
-            "```json", "").replace("```", "").strip()
+        response_text_cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
 
         try:
             analysis_array = json.loads(response_text_cleaned)
@@ -2125,107 +2318,56 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
             is_valid_member = analysis_json.get('is_valid_member', False)
             is_substantial = analysis_json.get('is_substantial', False)
 
-            # Extract speech content using indices from original segment
+            # Extract speech content
             speech_content = ""
-            if i < len(
-                    batch_segments) and start_idx >= 0 and end_idx > start_idx:
-                original_segment = batch_segments[i]
-                # Clean original segment for consistent extraction
-                clean_original = original_segment.replace('\n', ' ').replace(
-                    '\r', '').strip()
+            if i < len(original_segments) and start_idx >= 0 and end_idx > start_idx:
+                original_segment = original_segments[i]
+                clean_original = original_segment.replace('\n', ' ').replace('\r', '').strip()
 
-                # Stop at reporting end marker
-                report_end_marker = "(보고사항은 끝에 실음)"
-                if report_end_marker in clean_original:
-                    clean_original = clean_original.split(
-                        report_end_marker)[0].strip()
-
-                # Extract using indices, with bounds checking
+                # Extract using indices with bounds checking
                 actual_end = min(end_idx, len(clean_original))
                 actual_start = min(start_idx, len(clean_original))
-                speech_content = clean_original[actual_start:actual_end].strip(
-                )
+                speech_content = clean_original[actual_start:actual_end].strip()
 
-            # Clean speaker name from titles - comprehensive title removal
+            # Clean speaker name from titles
             if speaker_name:
-                complex_titles = [
-                    '문화체육관광위원장대리', '정무위원장', '법제사법위원회위원장', '예산결산특별위원회위원장',
-                    '국정감사위원장', '기획재정위원장', '교육위원장', '과학기술정보방송통신위원장', '외교통일위원장',
-                    '국방위원장', '행정안전위원장', '농림축산식품해양수산위원장', '산업통상자원중소벤처기업위원장',
-                    '보건복지위원장', '환경노동위원장', '국토교통위원장', '정보위원장', '여성가족위원장',
-                    '위원장대리'
+                titles_to_remove = [
+                    '위원장', '부위원장', '의원', '장관', '차관', '의장', '부의장', 
+                    '의사국장', '사무관', '국장', '서기관', '실장', '청장', '원장', 
+                    '대변인', '비서관', '수석', '정무위원', '간사'
                 ]
-
-                simple_titles = [
-                    '위원장', '부위원장', '의원', '장관', '차관', '의장', '부의장', '의사국장',
-                    '사무관', '국장', '서기관', '실장', '청장', '원장', '대변인', '비서관', '수석',
-                    '정무위원', '간사'
-                ]
-
-                # Remove complex titles first
-                for title in complex_titles:
+                
+                for title in titles_to_remove:
                     speaker_name = speaker_name.replace(title, '').strip()
 
-                # Then remove simple titles
-                for title in simple_titles:
-                    speaker_name = speaker_name.replace(title, '').strip()
+            # Validate speaker
+            is_real_member = speaker_name in assembly_members if assembly_members and speaker_name else is_valid_member
+            
+            should_ignore = any(ignored in speaker_name for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
-            # Validate speaker name against assembly members
-            is_real_member = False
-            if speaker_name and assembly_members:
-                is_real_member = speaker_name in assembly_members
-                if not assembly_members:
-                    is_real_member = is_valid_member
+            if (speaker_name and speech_content and is_valid_member and 
+                is_substantial and not should_ignore and is_real_member):
+                
+                results.append({
+                    'speaker_name': speaker_name,
+                    'text': speech_content,
+                    'sentiment_score': analysis_json.get('sentiment_score', 0.0),
+                    'sentiment_reason': 'LLM 배치 분석 완료',
+                    'bill_relevance_score': analysis_json.get('bill_relevance_score', 0.0),
+                    'policy_categories': [],
+                    'policy_keywords': [],
+                    'bill_specific_keywords': [],
+                    'segment_index': batch_start_index + i
+                })
 
-            # Check if speaker should be ignored (procedural/administrative)
-            procedural_keywords = [
-                '위원장', '부위원장', '위원장대리', '의사국장', '사무관', '국장', '서기관', '실장', '청장',
-                '원장', '대변인', '비서관', '수석', '국무총리', '장관', '차관'
-            ]
-
-            should_ignore = any(
-                ignored in speaker_name
-                for ignored in IGNORED_SPEAKERS) if speaker_name else True
-
-            # Additional check for procedural speakers
-            is_procedural = any(
-                keyword in speaker_name
-                for keyword in procedural_keywords) if speaker_name else False
-
-            if not speaker_name or not speech_content or not is_valid_member or not is_substantial or should_ignore or not is_real_member or is_procedural:
-                continue
-
-            # Return simplified analysis with global segment index
-            results.append({
-                'speaker_name':
-                speaker_name,
-                'text':
-                speech_content,
-                'sentiment_score':
-                analysis_json.get('sentiment_score', 0.0),
-                'sentiment_reason':
-                'LLM 배치 분석 완료',
-                'bill_relevance_score':
-                analysis_json.get('bill_relevance_score', 0.0),
-                'policy_categories': [],
-                'policy_keywords': [],
-                'bill_specific_keywords': [],
-                'segment_index':
-                batch_start_index + i  # Global index
-            })
-
-        logger.info(
-            f"✅ Batch processed {len(results)} valid statements from {len(batch_segments)} segments"
-        )
+        logger.info(f"✅ Batch processed {len(results)} valid statements from {len(cleaned_segments)} segments")
         return results
 
     except Exception as e:
         processing_time = time.time() - start_time
-
-        # Handle specific timeout errors
+        
         if "504" in str(e) or "Deadline" in str(e):
-            logger.warning(
-                f"⏰ BATCH TIMEOUT after {processing_time:.1f}s: {e}")
+            logger.warning(f"⏰ BATCH TIMEOUT after {processing_time:.1f}s: {e}")
             time.sleep(15)
             return []
         elif "429" in str(e) and "quota" in str(e).lower():
@@ -2233,8 +2375,7 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
             time.sleep(10)
             return []
         else:
-            logger.error(
-                f"Error in batch analysis after {processing_time:.1f}s: {e}")
+            logger.error(f"Error in batch analysis after {processing_time:.1f}s: {e}")
             return []
 
 
@@ -3046,109 +3187,10 @@ def process_pdf_text_for_statements(full_text,
             )
             segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
 
-        # Ensure we have actual content for segmentation
-        if not segmentation_text or len(segmentation_text.strip()) < 500:
-            logger.warning(f"Segmentation text too short or empty (length: {len(segmentation_text) if segmentation_text else 0})")
-            bill_segments_from_llm = []
-        else:
-            # Clean and validate text
-            clean_segmentation_text = segmentation_text.strip()
-            if not clean_segmentation_text:
-                logger.warning("Segmentation text is empty after cleaning")
-                bill_segments_from_llm = []
-            else:
-                # Limit text for prompt to prevent overflow
-                text_for_segmentation = clean_segmentation_text[:40000] if len(clean_segmentation_text) > 40000 else clean_segmentation_text
-                
-                # Validate bill names list
-                if not bill_names_list:
-                    logger.warning("No bill names provided for segmentation")
-                    bill_segments_from_llm = []
-                else:
-                    # Create safe bill names list
-                    safe_bill_names = [str(bill)[:200] for bill in bill_names_list if bill and str(bill).strip()]
-                    
-                    if not safe_bill_names:
-                        logger.warning("No valid bill names after cleaning")
-                        bill_segments_from_llm = []
-                    else:
-                        bill_segmentation_prompt = f"""국회 회의록에서 각 의안의 논의 시작점을 찾아주세요.
-
-의안 목록:
-{chr(10).join([f"- {bill}" for bill in safe_bill_names[:10]])}
-
-회의록 텍스트:
-{text_for_segmentation}
-
-JSON 형식으로 응답:
-{{
-  "bill_segments": [
-    {{
-      "bill_name": "의안명",
-      "start_position": 위치숫자,
-      "confidence": 0.8
-    }}
-  ]
-}}
-
-규칙:
-- 의안명은 위 목록에서 선택
-- 회의록에서 의안 논의 시작 위치 찾기
-- 신뢰도 0.7 이상만 포함
-- JSON만 응답"""
-
-                        # Validate final prompt
-                        if len(bill_segmentation_prompt) < 200:
-                            logger.error("Bill segmentation prompt too short")
-                            bill_segments_from_llm = []
-
-        try:
-                            seg_response = segmentation_llm.generate_content(bill_segmentation_prompt)
-                            if seg_response and seg_response.text:
-                                seg_text_cleaned = seg_response.text.strip()
-                                if not seg_text_cleaned:
-                                    logger.warning("Empty response from LLM for bill segmentation")
-                                    bill_segments_from_llm = []
-                                else:
-                                    # Clean response text
-                                    seg_text_cleaned = seg_text_cleaned.replace("```json", "").replace("```", "").strip()
-                                    
-                                    # Validate JSON structure
-                                    if not ("{" in seg_text_cleaned and "}" in seg_text_cleaned):
-                                        logger.warning(f"Response doesn't contain JSON: {seg_text_cleaned[:100]}...")
-                                        bill_segments_from_llm = []
-                                    else:
-                                        try:
-                                            seg_data = json.loads(seg_text_cleaned)
-                                            raw_segments = seg_data.get("bill_segments", [])
-                                            
-                                            # Convert to expected format
-                                            bill_segments_from_llm = []
-                                            for segment in raw_segments:
-                                                if isinstance(segment, dict) and segment.get('confidence', 0) >= 0.7:
-                                                    bill_name = segment.get('bill_name', '').strip()
-                                                    start_pos = segment.get('start_position', -1)
-                                                    confidence = segment.get('confidence', 0.0)
-                                                    
-                                                    if bill_name and isinstance(start_pos, (int, float)) and start_pos >= 0:
-                                                        bill_segments_from_llm.append({
-                                                            "a": bill_name,
-                                                            "b": int(start_pos),
-                                                            "c": float(confidence)
-                                                        })
-                                            
-                                            if bill_segments_from_llm:
-                                                logger.info(f"LLM identified {len(bill_segments_from_llm)} potential bill discussion segments.")
-                                            else:
-                                                logger.info("LLM did not identify distinct bill segments. Will process full text.")
-                                        
-                                        except json.JSONDecodeError as e:
-                                            logger.warning(f"JSON decode error in bill segmentation: {e}")
-                                            logger.debug(f"Raw response: {seg_text_cleaned[:200]}...")
-                                            bill_segments_from_llm = []
-                            else:
-                                logger.info("No response from LLM for bill segmentation. Will process full text.")
-                                bill_segments_from_llm = []
+        # Process bill segmentation with proper batching
+        bill_segments_from_llm = _process_bill_segmentation_with_batching(
+            segmentation_llm, segmentation_text, bill_names_list
+        )
         except json.JSONDecodeError as e_json_seg:
             logger.error(
                 f"JSON parsing error for bill segmentation response: {e_json_seg}. Using bill names for fallback segmentation."
