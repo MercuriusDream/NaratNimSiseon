@@ -2,7 +2,7 @@ import requests
 import pdfplumber
 from celery import shared_task
 from django.conf import settings
-from .models import Session, Bill, Speaker, Statement  # Assuming these models are correctly defined
+from .models import Session, Bill, Speaker, Statement, VotingRecord  # Assuming these models are correctly defined
 from celery.exceptions import MaxRetriesExceededError
 from requests.exceptions import RequestException
 import logging
