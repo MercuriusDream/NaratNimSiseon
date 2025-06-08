@@ -1,0 +1,304 @@
+{
+    "time_range": "all",
+    "overall_stats": {
+        "total_statements": 927,
+        "average_sentiment": -0.157,
+        "positive_count": 55,
+        "neutral_count": 603,
+        "negative_count": 269,
+        "positive_percentage": 5.9,
+        "negative_percentage": 29.0
+    },
+    "party_rankings": [
+        {
+            "speaker__plpt_nm": "열린우리당/민주통합당/더불어민주당/더불어민주당/더불어민주당",
+            "avg_sentiment": 0.26666666666666666,
+            "statement_count": 6,
+            "positive_count": 2,
+            "negative_count": 0
+        },
+        {
+            "speaker__plpt_nm": "한나라당/국민의힘",
+            "avg_sentiment": 0.09090909090909091,
+            "statement_count": 11,
+            "positive_count": 1,
+            "negative_count": 1
+        },
+        {
+            "speaker__plpt_nm": "조국혁신당",
+            "avg_sentiment": 0.08313253012048198,
+            "statement_count": 83,
+            "positive_count": 28,
+            "negative_count": 19
+        },
+        {
+            "speaker__plpt_nm": "한나라당/새누리당/국민의힘",
+            "avg_sentiment": 0.049999999999999996,
+            "statement_count": 12,
+            "positive_count": 0,
+            "negative_count": 0
+        },
+        {
+            "speaker__plpt_nm": "국민의미래",
+            "avg_sentiment": 0.009090909090909089,
+            "statement_count": 11,
+            "positive_count": 1,
+            "negative_count": 1
+        },
+        {
+            "speaker__plpt_nm": "새누리당/미래통합당/국민의힘",
+            "avg_sentiment": -5.551115123125783e-18,
+            "statement_count": 15,
+            "positive_count": 0,
+            "negative_count": 0
+        },
+        {
+            "speaker__plpt_nm": "정보없음",
+            "avg_sentiment": -0.03555555555555555,
+            "statement_count": 45,
+            "positive_count": 0,
+            "negative_count": 4
+        },
+        {
+            "speaker__plpt_nm": "무소속/진보당",
+            "avg_sentiment": -0.042857142857142864,
+            "statement_count": 7,
+            "positive_count": 0,
+            "negative_count": 0
+        },
+        {
+            "speaker__plpt_nm": "신한국당/한나라당",
+            "avg_sentiment": -0.046666666666666676,
+            "statement_count": 15,
+            "positive_count": 0,
+            "negative_count": 4
+        },
+        {
+            "speaker__plpt_nm": "국민의힘",
+            "avg_sentiment": -0.09777777777777778,
+            "statement_count": 45,
+            "positive_count": 1,
+            "negative_count": 8
+        },
+        {
+            "speaker__plpt_nm": "민주통합당/더불어민주당",
+            "avg_sentiment": -0.11666666666666664,
+            "statement_count": 12,
+            "positive_count": 0,
+            "negative_count": 1
+        },
+        {
+            "speaker__plpt_nm": "새누리당/새누리당/미래통합당/국민의힘",
+            "avg_sentiment": -0.12222222222222223,
+            "statement_count": 9,
+            "positive_count": 0,
+            "negative_count": 2
+        },
+        {
+            "speaker__plpt_nm": "미래통합당/국민의힘",
+            "avg_sentiment": -0.12558139534883717,
+            "statement_count": 86,
+            "positive_count": 4,
+            "negative_count": 20
+        },
+        {
+            "speaker__plpt_nm": "더불어민주당/더불어민주당/새로운미래",
+            "avg_sentiment": -0.14285714285714285,
+            "statement_count": 7,
+            "positive_count": 0,
+            "negative_count": 1
+        },
+        {
+            "speaker__plpt_nm": "국민의힘/국민의힘",
+            "avg_sentiment": -0.16923076923076924,
+            "statement_count": 26,
+            "positive_count": 0,
+            "negative_count": 4
+        },
+        {
+            "speaker__plpt_nm": "더불어민주당/더불어민주당",
+            "avg_sentiment": -0.1916666666666666,
+            "statement_count": 168,
+            "positive_count": 10,
+            "negative_count": 57
+        },
+        {
+            "speaker__plpt_nm": "민주정의당/민주자유당",
+            "avg_sentiment": -0.20000000000000004,
+            "statement_count": 12,
+            "positive_count": 0,
+            "negative_count": 3
+        },
+        {
+            "speaker__plpt_nm": "대한독립촉성국민회",
+            "avg_sentiment": -0.21666666666666667,
+            "statement_count": 6,
+            "positive_count": 0,
+            "negative_count": 2
+        },
+        {
+            "speaker__plpt_nm": "민주통합당/더불어민주당/더불어민주당/더불어민주당",
+            "avg_sentiment": -0.2216216216216216,
+            "statement_count": 37,
+            "positive_count": 0,
+            "negative_count": 12
+        },
+        {
+            "speaker__plpt_nm": "민주통합당/더불어민주당/더불어민주당",
+            "avg_sentiment": -0.2222222222222222,
+            "statement_count": 18,
+            "positive_count": 1,
+            "negative_count": 6
+        },
+        {
+            "speaker__plpt_nm": "더불어민주연합",
+            "avg_sentiment": -0.2547169811320755,
+            "statement_count": 53,
+            "positive_count": 1,
+            "negative_count": 23
+        },
+        {
+            "speaker__plpt_nm": "더불어민주당",
+            "avg_sentiment": -0.26761363636363633,
+            "statement_count": 176,
+            "positive_count": 3,
+            "negative_count": 67
+        },
+        {
+            "speaker__plpt_nm": "더불어민주당/더불어민주당/더불어민주당",
+            "avg_sentiment": -0.375,
+            "statement_count": 24,
+            "positive_count": 2,
+            "negative_count": 15
+        },
+        {
+            "speaker__plpt_nm": "더불어시민당/더불어민주당",
+            "avg_sentiment": -0.4428571428571428,
+            "statement_count": 28,
+            "positive_count": 0,
+            "negative_count": 16
+        }
+    ],
+    "active_speakers": [
+        {
+            "speaker__naas_nm": "이용우",
+            "speaker__plpt_nm": "더불어민주당",
+            "avg_sentiment": -0.26301369863013696,
+            "statement_count": 73
+        },
+        {
+            "speaker__naas_nm": "박성재",
+            "speaker__plpt_nm": "정보없음",
+            "avg_sentiment": -0.0047619047619047615,
+            "statement_count": 42
+        },
+        {
+            "speaker__naas_nm": "강경숙",
+            "speaker__plpt_nm": "조국혁신당",
+            "avg_sentiment": 0.5710526315789471,
+            "statement_count": 38
+        },
+        {
+            "speaker__naas_nm": "조계원",
+            "speaker__plpt_nm": "더불어민주당",
+            "avg_sentiment": -0.3885714285714286,
+            "statement_count": 35
+        },
+        {
+            "speaker__naas_nm": "임미애",
+            "speaker__plpt_nm": "더불어민주연합",
+            "avg_sentiment": -0.13333333333333333,
+            "statement_count": 27
+        },
+        {
+            "speaker__naas_nm": "주철현",
+            "speaker__plpt_nm": "더불어민주당/더불어민주당",
+            "avg_sentiment": -0.29259259259259257,
+            "statement_count": 27
+        },
+        {
+            "speaker__naas_nm": "장동혁",
+            "speaker__plpt_nm": "국민의힘/국민의힘",
+            "avg_sentiment": -0.16923076923076924,
+            "statement_count": 26
+        },
+        {
+            "speaker__naas_nm": "박성준",
+            "speaker__plpt_nm": "더불어민주당/더불어민주당",
+            "avg_sentiment": -0.08750000000000001,
+            "statement_count": 24
+        },
+        {
+            "speaker__naas_nm": "김병주",
+            "speaker__plpt_nm": "더불어시민당/더불어민주당",
+            "avg_sentiment": -0.4666666666666666,
+            "statement_count": 24
+        },
+        {
+            "speaker__naas_nm": "장경태",
+            "speaker__plpt_nm": "더불어민주당/더불어민주당",
+            "avg_sentiment": -0.20869565217391303,
+            "statement_count": 23
+        },
+        {
+            "speaker__naas_nm": "박은정",
+            "speaker__plpt_nm": "조국혁신당",
+            "avg_sentiment": -0.5478260869565218,
+            "statement_count": 23
+        },
+        {
+            "speaker__naas_nm": "최형두",
+            "speaker__plpt_nm": "미래통합당/국민의힘",
+            "avg_sentiment": -0.21739130434782608,
+            "statement_count": 23
+        },
+        {
+            "speaker__naas_nm": "박수민",
+            "speaker__plpt_nm": "국민의힘",
+            "avg_sentiment": -1.3877787807814458e-18,
+            "statement_count": 20
+        },
+        {
+            "speaker__naas_nm": "차규근",
+            "speaker__plpt_nm": "조국혁신당",
+            "avg_sentiment": -0.075,
+            "statement_count": 20
+        },
+        {
+            "speaker__naas_nm": "서범수",
+            "speaker__plpt_nm": "미래통합당/국민의힘",
+            "avg_sentiment": -0.04,
+            "statement_count": 20
+        },
+        {
+            "speaker__naas_nm": "양부남",
+            "speaker__plpt_nm": "더불어민주당",
+            "avg_sentiment": -0.1473684210526316,
+            "statement_count": 19
+        },
+        {
+            "speaker__naas_nm": "한정애",
+            "speaker__plpt_nm": "민주통합당/더불어민주당/더불어민주당/더불어민주당",
+            "avg_sentiment": -0.17368421052631577,
+            "statement_count": 19
+        },
+        {
+            "speaker__naas_nm": "이언주",
+            "speaker__plpt_nm": "민주통합당/더불어민주당/더불어민주당",
+            "avg_sentiment": -0.2222222222222222,
+            "statement_count": 18
+        },
+        {
+            "speaker__naas_nm": "박범계",
+            "speaker__plpt_nm": "민주통합당/더불어민주당/더불어민주당/더불어민주당",
+            "avg_sentiment": -0.28235294117647064,
+            "statement_count": 17
+        },
+        {
+            "speaker__naas_nm": "장철민",
+            "speaker__plpt_nm": "더불어민주당/더불어민주당",
+            "avg_sentiment": -0.31764705882352945,
+            "statement_count": 17
+        }
+    ]
+}
