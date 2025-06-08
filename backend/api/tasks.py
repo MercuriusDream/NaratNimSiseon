@@ -1803,33 +1803,46 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
             logger.warning(f"Text segment too short or empty for segmentation (length: {len(text_segment) if text_segment else 0})")
             return []
 
+        # Clean and validate text
+        clean_text = text_segment.strip()
+        if not clean_text:
+            logger.warning("Text segment is empty after cleaning")
+            return []
+
         # Limit text length for prompt
-        max_text_length = 10000  # 10k chars max for segmentation prompt
-        if len(text_segment) > max_text_length:
-            text_for_prompt = text_segment[:max_text_length] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
+        max_text_length = 8000  # Reduced to 8k chars for better reliability
+        if len(clean_text) > max_text_length:
+            text_for_prompt = clean_text[:max_text_length] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
         else:
-            text_for_prompt = text_segment
+            text_for_prompt = clean_text
 
-        prompt = f"""한국 국회 회의록 텍스트에서 개별 발언자의 발언 구간을 찾아 시작과 끝 인덱스를 알려주세요.
+        # Validate bill_name
+        safe_bill_name = str(bill_name)[:100] if bill_name else "알 수 없는 의안"
 
-의안: "{bill_name[:100]}..."
+        prompt = f"""한국 국회 회의록에서 개별 발언자의 발언 구간을 찾아주세요.
+
+의안: {safe_bill_name}
 
 회의록 텍스트:
 {text_for_prompt}
 
-각 발언자의 발언 시작과 끝 위치를 JSON 배열로 반환해주세요:
+다음 JSON 형식으로 응답해주세요:
 [
   {{"start": 0, "end": 150}},
   {{"start": 151, "end": 300}}
 ]
 
 규칙:
-- ◯ 마커로 시작하는 발언자별 구간을 찾으세요
-- start/end는 위 텍스트 내에서의 문자 위치 (0부터 시작)
-- 의사진행 발언(의사국장, 국장 등)은 제외
-- 실질적 의원 발언만 포함
-- 최소 50자 이상의 의미있는 발언만 포함
-- JSON 배열만 응답하고 다른 설명은 하지 마세요"""
+- ◯로 시작하는 발언자 구간을 찾으세요
+- start/end는 텍스트 내 문자 위치입니다
+- 의사진행 발언은 제외하고 의원 발언만 포함
+- 최소 50자 이상의 발언만 포함
+- JSON 배열만 응답하세요"""
+
+        # Validate prompt before sending
+        if len(prompt) < 100:
+            logger.error("Prompt too short, likely malformed")
+            return []
 
         response = segmentation_model.generate_content(prompt)
 
@@ -1837,14 +1850,26 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
             logger.warning(f"No response from LLM for batch segmentation (offset: {global_offset})")
             return []
 
-        response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        response_text = response.text.strip()
+        if not response_text:
+            logger.warning("Empty response text from LLM")
+            return []
+
+        # Clean response text
+        response_text = response_text.replace("```json", "").replace("```", "").strip()
         
         # Log the raw response for debugging
         logger.debug(f"Raw LLM segmentation response (first 200 chars): {response_text[:200]}...")
 
         # Handle cases where LLM responds with explanation instead of JSON
-        if "죄송합니다" in response_text or "정보가 부족" in response_text or "텍스트가 제공되지 않았" in response_text:
-            logger.warning(f"LLM returned explanation instead of JSON segmentation. This indicates prompt issue.")
+        error_indicators = ["죄송합니다", "정보가 부족", "텍스트가 제공되지 않았", "분석할 수 없습니다", "텍스트가 없습니다"]
+        if any(indicator in response_text for indicator in error_indicators):
+            logger.warning(f"LLM returned explanation instead of JSON segmentation: {response_text[:100]}...")
+            return []
+
+        # Validate response has JSON-like structure
+        if not ("[" in response_text and "]" in response_text):
+            logger.warning(f"Response doesn't contain JSON array structure: {response_text[:100]}...")
             return []
 
         try:
@@ -2004,47 +2029,62 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
 
         cleaned_segments.append(cleaned_segment)
 
+    # Validate inputs
+    if not batch_segments:
+        logger.warning("No batch segments provided for analysis")
+        return []
+
+    if not bill_name:
+        bill_name = "알 수 없는 의안"
+
     # Create batch prompt for multiple segments
     segments_text = ""
     for i, segment in enumerate(cleaned_segments):
-        segments_text += f"\n--- SEGMENT {i+1} ---\n{segment}\n"
+        if segment and len(segment.strip()) > 10:
+            segments_text += f"\n--- 구간 {i+1} ---\n{segment}\n"
 
-    prompt = f"""
-Analyze these {len(batch_segments)} Korean parliament speech segments and return JSON array:
-Bill: "{bill_name[:100]}..."
+    # Validate segments_text
+    if not segments_text.strip():
+        logger.warning("No valid segments after cleaning")
+        return []
 
-Segments:
+    # Create safe bill name
+    safe_bill_name = str(bill_name)[:100] if bill_name else "알 수 없는 의안"
+
+    prompt = f"""국회 발언 분석 요청:
+
+의안: {safe_bill_name}
+
+발언 구간들:
 {segments_text}
 
-Return ONLY valid JSON array with {len(batch_segments)} objects:
+다음 JSON 배열로 응답하세요 (정확히 {len(batch_segments)}개 객체):
 [
   {{
     "segment_index": 1,
-    "speaker_name": "clean speaker name extracted from ◯ patterns (e.g., from '◯의사국장 김승묵' extract '김승묵')",
+    "speaker_name": "발언자명 (◯에서 추출, 직책 제거)",
     "start_idx": 0,
     "end_idx": 100,
-    "is_valid_member": true/false,
-    "is_substantial": true/false,
-    "sentiment_score": -1.0 to 1.0,
-    "bill_relevance_score": 0.0 to 1.0
-  }},
-  ... continue for all {len(batch_segments)} segments
+    "is_valid_member": true,
+    "is_substantial": true,
+    "sentiment_score": 0.0,
+    "bill_relevance_score": 0.5
+  }}
 ]
 
-CRITICAL EXCLUSION RULES:
-- EXCLUDE procedural/administrative speakers: 의사국장, 사무관, 국장, 서기관
-- EXCLUDE non-member roles: 국무총리, 장관, 차관, 실장, 청장, 원장, 대변인, 비서관, 수석
-- ONLY INCLUDE actual 의원 (parliament members) who can legally vote
-- Extract clean name but validate against actual voting members only
-- Procedural announcements, meeting management, and administrative content should be marked is_substantial=false
+규칙:
+- 의사진행 발언자는 제외 (의사국장, 사무관, 국장 등)
+- 정부 관계자는 제외 (장관, 차관, 실장 등)
+- 실제 의원만 포함
+- 발언자명에서 직책 제거
+- start_idx, end_idx는 구간 내 문자 위치
+- 정확히 {len(batch_segments)}개 객체 반환
+- JSON 배열만 응답"""
 
-Real parliament member validation:
-- Must be actual 의원 (voting member)
-- Clean all titles: 의원, 위원장, 위원장대리, 의사국장, 사무관, 국장 etc.
-- start_idx and end_idx should represent character positions in the original segment
-- Must return exactly {len(batch_segments)} objects
-- Use segment_index 1-{len(batch_segments)}
-"""
+    # Validate final prompt
+    if len(prompt) < 300:
+        logger.error("Batch analysis prompt too short, likely malformed")
+        return []
 
     start_time = time.time()
     try:
@@ -3011,65 +3051,104 @@ def process_pdf_text_for_statements(full_text,
             logger.warning(f"Segmentation text too short or empty (length: {len(segmentation_text) if segmentation_text else 0})")
             bill_segments_from_llm = []
         else:
-            # Limit text for prompt to prevent overflow
-            text_for_segmentation = segmentation_text[:50000] if len(segmentation_text) > 50000 else segmentation_text
-            
-            bill_segmentation_prompt = f"""다음 국회 회의록에서 각 의안의 논의 시작점을 찾아 JSON으로 응답해주세요.
+            # Clean and validate text
+            clean_segmentation_text = segmentation_text.strip()
+            if not clean_segmentation_text:
+                logger.warning("Segmentation text is empty after cleaning")
+                bill_segments_from_llm = []
+            else:
+                # Limit text for prompt to prevent overflow
+                text_for_segmentation = clean_segmentation_text[:40000] if len(clean_segmentation_text) > 40000 else clean_segmentation_text
+                
+                # Validate bill names list
+                if not bill_names_list:
+                    logger.warning("No bill names provided for segmentation")
+                    bill_segments_from_llm = []
+                else:
+                    # Create safe bill names list
+                    safe_bill_names = [str(bill)[:200] for bill in bill_names_list if bill and str(bill).strip()]
+                    
+                    if not safe_bill_names:
+                        logger.warning("No valid bill names after cleaning")
+                        bill_segments_from_llm = []
+                    else:
+                        bill_segmentation_prompt = f"""국회 회의록에서 각 의안의 논의 시작점을 찾아주세요.
 
 의안 목록:
-{chr(10).join([f"- {bill}" for bill in bill_names_list])}
+{chr(10).join([f"- {bill}" for bill in safe_bill_names[:10]])}
 
 회의록 텍스트:
 {text_for_segmentation}
 
-다음 JSON 형식으로 응답하세요:
+JSON 형식으로 응답:
 {{
   "bill_segments": [
     {{
-      "bill_name": "정확한 의안명",
-      "start_position": 시작위치숫자,
+      "bill_name": "의안명",
+      "start_position": 위치숫자,
       "confidence": 0.8
     }}
   ]
 }}
 
 규칙:
-- 의안명은 제공된 목록에서 정확히 선택
-- 회의록에서 의안이 처음 언급되는 위치를 찾으세요
+- 의안명은 위 목록에서 선택
+- 회의록에서 의안 논의 시작 위치 찾기
 - 신뢰도 0.7 이상만 포함
-- JSON만 응답하고 설명 없이"""
+- JSON만 응답"""
+
+                        # Validate final prompt
+                        if len(bill_segmentation_prompt) < 200:
+                            logger.error("Bill segmentation prompt too short")
+                            bill_segments_from_llm = []
 
         try:
-            seg_response = segmentation_llm.generate_content(
-                bill_segmentation_prompt)
-            if seg_response and seg_response.text:
-                seg_text_cleaned = seg_response.text.strip().replace(
-                    "```json", "").replace("```", "").strip()
-                seg_data = json.loads(seg_text_cleaned)
-                raw_segments = seg_data.get("bill_segments", [])
-                
-                # Convert to expected format
-                bill_segments_from_llm = []
-                for segment in raw_segments:
-                    if segment.get('confidence', 0) >= 0.7:
-                        bill_segments_from_llm.append({
-                            "a": segment.get('bill_name', ''),
-                            "b": segment.get('start_position', -1),
-                            "c": segment.get('confidence', 0.0)
-                        })
-                
-                if bill_segments_from_llm:
-                    logger.info(
-                        f"LLM identified {len(bill_segments_from_llm)} potential bill discussion segments."
-                    )
-                else:
-                    logger.info(
-                        "LLM did not identify distinct bill segments. Will process full text."
-                    )
-            else:
-                logger.info(
-                    "No response from LLM for bill segmentation. Will process full text."
-                )
+                            seg_response = segmentation_llm.generate_content(bill_segmentation_prompt)
+                            if seg_response and seg_response.text:
+                                seg_text_cleaned = seg_response.text.strip()
+                                if not seg_text_cleaned:
+                                    logger.warning("Empty response from LLM for bill segmentation")
+                                    bill_segments_from_llm = []
+                                else:
+                                    # Clean response text
+                                    seg_text_cleaned = seg_text_cleaned.replace("```json", "").replace("```", "").strip()
+                                    
+                                    # Validate JSON structure
+                                    if not ("{" in seg_text_cleaned and "}" in seg_text_cleaned):
+                                        logger.warning(f"Response doesn't contain JSON: {seg_text_cleaned[:100]}...")
+                                        bill_segments_from_llm = []
+                                    else:
+                                        try:
+                                            seg_data = json.loads(seg_text_cleaned)
+                                            raw_segments = seg_data.get("bill_segments", [])
+                                            
+                                            # Convert to expected format
+                                            bill_segments_from_llm = []
+                                            for segment in raw_segments:
+                                                if isinstance(segment, dict) and segment.get('confidence', 0) >= 0.7:
+                                                    bill_name = segment.get('bill_name', '').strip()
+                                                    start_pos = segment.get('start_position', -1)
+                                                    confidence = segment.get('confidence', 0.0)
+                                                    
+                                                    if bill_name and isinstance(start_pos, (int, float)) and start_pos >= 0:
+                                                        bill_segments_from_llm.append({
+                                                            "a": bill_name,
+                                                            "b": int(start_pos),
+                                                            "c": float(confidence)
+                                                        })
+                                            
+                                            if bill_segments_from_llm:
+                                                logger.info(f"LLM identified {len(bill_segments_from_llm)} potential bill discussion segments.")
+                                            else:
+                                                logger.info("LLM did not identify distinct bill segments. Will process full text.")
+                                        
+                                        except json.JSONDecodeError as e:
+                                            logger.warning(f"JSON decode error in bill segmentation: {e}")
+                                            logger.debug(f"Raw response: {seg_text_cleaned[:200]}...")
+                                            bill_segments_from_llm = []
+                            else:
+                                logger.info("No response from LLM for bill segmentation. Will process full text.")
+                                bill_segments_from_llm = []
         except json.JSONDecodeError as e_json_seg:
             logger.error(
                 f"JSON parsing error for bill segmentation response: {e_json_seg}. Using bill names for fallback segmentation."
