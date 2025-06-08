@@ -2232,14 +2232,30 @@ def extract_statements_with_bill_based_chunking(full_text,
                 segment_actual_text
             })
 
-    # If no segments identified, create one segment with first bill name or generic
+    # If no segments identified, create segments for each bill or one segment with actual bill name
     if not sorted_segments_with_text:
-        bill_name_fallback = bill_names_list[
-            0] if bill_names_list else "General Discussion"
-        sorted_segments_with_text = [{
-            "bill_name": bill_name_fallback,
-            "text": full_text
-        }]
+        if bill_names_list and len(bill_names_list) > 0:
+            # Create segments for each known bill, dividing text equally
+            text_length = len(full_text)
+            segment_size = text_length // len(bill_names_list)
+            
+            for i, bill_name in enumerate(bill_names_list):
+                start_pos = i * segment_size
+                end_pos = (i + 1) * segment_size if i < len(bill_names_list) - 1 else text_length
+                segment_text = full_text[start_pos:end_pos]
+                
+                sorted_segments_with_text.append({
+                    "bill_name": bill_name,
+                    "text": segment_text
+                })
+                logger.info(f"Created fallback segment for bill: {bill_name} ({len(segment_text)} chars)")
+        else:
+            # Only use "General Discussion" as absolute last resort
+            sorted_segments_with_text = [{
+                "bill_name": "General Discussion",
+                "text": full_text
+            }]
+            logger.warning("No bill names available, using 'General Discussion' as fallback")
 
     # Step 3: Process each bill segment in chunks with multithreading
     logger.info(
@@ -2654,7 +2670,9 @@ def process_pdf_text_for_statements(full_text,
 
         bill_segmentation_prompt = f"""
 국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
-다음은 이 회의에서 논의된 의안 목록입니다: {", ".join(bill_names_list)}
+
+제공된 의안 목록:
+{chr(10).join([f"- {bill}" for bill in bill_names_list])}
 
 회의록 텍스트:
 ---
@@ -2665,17 +2683,19 @@ def process_pdf_text_for_statements(full_text,
 {{
   "bill_discussion_segments": [
     {{
-      "bill_name_identified": "LLM이 식별한 의안명 (목록에 있는 이름과 최대한 일치)",
+      "bill_name_identified": "제공된 목록에서 정확히 일치하는 의안명",
       "discussion_start_idx": 해당 의안 논의가 시작되는 텍스트 내 문자 위치 (숫자),
-      "relevance_to_provided_list": 0.0-1.0 (제공된 의안 목록과의 관련성 추정치)
+      "confidence": 0.0-1.0 (매칭 확신도)
     }}
-  ],
-  "general_discussion_idx": 특정 의안에 해당하지 않는 일반 토론 시작 지점의 문자 위치 (숫자, 있을 경우)
+  ]
 }}
 
-- "bill_name_identified"는 제공된 의안 목록에 있는 이름 중 하나와 일치하거나 매우 유사해야 합니다.
-- "discussion_start_idx"는 회의록 텍스트 내에서의 정확한 문자 위치를 나타내야 합니다.
-- 순서는 회의록에 나타난 순서대로 정렬해주세요.
+중요한 규칙:
+- "bill_name_identified"는 반드시 제공된 의안 목록에서 정확히 선택해야 합니다
+- 의안명을 줄이거나 변경하지 마세요 (예: "○○법 일부개정법률안" -> "○○법 일부개정법률안")
+- 회의록에서 해당 의안에 대한 실질적 논의가 시작되는 지점을 찾으세요
+- 순서는 회의록에 나타난 순서대로 정렬해주세요
+- confidence가 0.7 미만인 경우는 포함하지 마세요
 """
         try:
             seg_response = segmentation_llm.generate_content(
@@ -2701,13 +2721,35 @@ def process_pdf_text_for_statements(full_text,
                 )
         except json.JSONDecodeError as e_json_seg:
             logger.error(
-                f"JSON parsing error for bill segmentation response: {e_json_seg}. Processing full text."
+                f"JSON parsing error for bill segmentation response: {e_json_seg}. Using bill names for fallback segmentation."
             )
+            # Create fallback segments using actual bill names
+            if bill_names_list:
+                text_per_bill = len(segmentation_text) // len(bill_names_list)
+                for i, bill_name in enumerate(bill_names_list):
+                    start_idx = i * text_per_bill
+                    bill_segments_from_llm.append({
+                        "bill_name_identified": bill_name,
+                        "discussion_start_idx": start_idx,
+                        "confidence": 0.5
+                    })
+                logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
         except Exception as e_seg:
             logger.error(
-                f"Error during LLM bill segmentation: {e_seg}. Processing full text."
+                f"Error during LLM bill segmentation: {e_seg}. Using bill names for fallback segmentation."
             )
             logger.exception("Traceback for bill segmentation error:")
+            # Create fallback segments using actual bill names
+            if bill_names_list:
+                text_per_bill = len(segmentation_text) // len(bill_names_list)
+                for i, bill_name in enumerate(bill_names_list):
+                    start_idx = i * text_per_bill
+                    bill_segments_from_llm.append({
+                        "bill_name_identified": bill_name,
+                        "discussion_start_idx": start_idx,
+                        "confidence": 0.5
+                    })
+                logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
 
     # Sort segments by their appearance order in the full_text using their indices
     sorted_segments_with_text = []
