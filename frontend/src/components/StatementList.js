@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
-const StatementList = ({ filters = {} }) => {
+const StatementList = ({ filters = {}, sessionId, billId }) => {
   const [statements, setStatements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
 
