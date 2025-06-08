@@ -53,10 +53,13 @@ def api_action_wrapper(default_error_message="오류가 발생했습니다.",
 
 
 def format_conf_id(session_id):
-    """Format session ID to the required 6-digit zero-filled format for API calls"""
+    """Format session ID to the required N-prefixed 6-digit format for API calls"""
     if session_id is None:
         return None
-    return str(session_id).strip().zfill(6)
+    # Remove any existing 'N' prefix and convert to string
+    clean_id = str(session_id).replace('N', '').strip()
+    # Zero-fill to 6 digits and add N prefix
+    return f"N{clean_id.zfill(6)}"
 
 
 class DataCollector:
@@ -108,7 +111,7 @@ class DataCollector:
             }
 
             if session_id:
-                params['CONF_ID'] = str(session_id).zfill(6)
+                params['CONF_ID'] = format_conf_id(session_id)
 
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()

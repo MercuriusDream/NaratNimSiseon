@@ -79,8 +79,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR('❌ ASSEMBLY_API_KEY not configured'))
             return
         
-        # Format session ID properly (6 digits)
-        formatted_conf_id = str(session_id).zfill(6)
+        # Format session ID properly (N prefix with 6 digits)
+        from api.tasks import format_conf_id
+        formatted_conf_id = format_conf_id(session_id)
         
         url = "https://open.assembly.go.kr/portal/openapi/VCONFBILLLIST"
         params = {

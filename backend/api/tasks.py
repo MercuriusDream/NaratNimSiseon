@@ -270,8 +270,11 @@ def celery_or_sync(func):
 
 
 def format_conf_id(conf_id):
-    """Format CONF_ID to be zero-filled to 6 digits."""
-    return str(conf_id).zfill(6)
+    """Format CONF_ID to use N prefix with zero-filled 6 digits."""
+    # Remove any existing 'N' prefix and convert to string
+    clean_id = str(conf_id).replace('N', '').strip()
+    # Zero-fill to 6 digits and add N prefix
+    return f"N{clean_id.zfill(6)}"
 
 
 def fetch_speaker_details(speaker_name):
