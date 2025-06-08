@@ -25,6 +25,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.db import models
 from django.db.models import F
+from django.db import connection
 
 logger = logging.getLogger(__name__)
 
@@ -54,15 +55,18 @@ class SessionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         try:
-            # Filter to show 22nd Assembly sessions first, fallback to all if none found
-            queryset_22 = super().get_queryset().filter(Q(era_co='22') | Q(era_co='제22대'))
+            # Optimize query with prefetch_related and select_related
+            base_queryset = super().get_queryset().select_related().prefetch_related('statements', 'bills')
+            
+            # Filter to show 22nd Assembly sessions first
+            queryset_22 = base_queryset.filter(Q(era_co='22') | Q(era_co='제22대'))
             
             if not queryset_22.exists():
-                # If no 22nd Assembly data, return all sessions
-                queryset = super().get_queryset()
+                queryset = base_queryset
             else:
                 queryset = queryset_22
                 
+            # Apply filters
             era_co = self.request.query_params.get('era_co')
             sess = self.request.query_params.get('sess')
             dgr = self.request.query_params.get('dgr')
@@ -70,7 +74,6 @@ class SessionViewSet(viewsets.ModelViewSet):
             date_to = self.request.query_params.get('date_to')
 
             if era_co and era_co not in ['22', '제22대', 'all']:
-                # Filter by specific era if requested
                 queryset = queryset.filter(Q(era_co=era_co) | Q(era_co=f'제{era_co}대'))
             if sess:
                 queryset = queryset.filter(sess=sess)
@@ -90,7 +93,7 @@ class SessionViewSet(viewsets.ModelViewSet):
             return queryset.order_by('-conf_dt')
         except Exception as e:
             logger.error(f"Error in SessionViewSet get_queryset: {e}")
-            return Session.objects.all().order_by('-conf_dt')  # Return all sessions as fallback
+            return Session.objects.select_related().order_by('-conf_dt')
 
     def list(self, request, *args, **kwargs):
         try:
@@ -169,7 +172,9 @@ class BillViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        # Optimize with select_related and prefetch_related
+        queryset = super().get_queryset().select_related('session').prefetch_related('statements')
+        
         bill_name = self.request.query_params.get('bill_name')
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
@@ -594,49 +599,28 @@ class PartyViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.error(f"Error triggering additional data fetch: {e}")
 
-            # Get 22nd Assembly parties with optimized queries
-            parties = Party.objects.filter(assembly_era=22).prefetch_related('current_members')
+            # Single optimized query to get all party statistics
+            from django.db.models import Case, When, IntegerField, Value
+            
+            party_stats = Party.objects.filter(assembly_era=22).annotate(
+                member_count=Count(
+                    'current_members',
+                    filter=Q(current_members__gtelt_eraco__icontains='22'),
+                    distinct=True
+                ),
+                total_statements=Count(
+                    'current_members__statements',
+                    filter=Q(current_members__statements__session__era_co__in=['22', '제22대']),
+                    distinct=True
+                ),
+                avg_sentiment=Avg(
+                    'current_members__statements__sentiment_score',
+                    filter=Q(current_members__statements__session__era_co__in=['22', '제22대'])
+                )
+            ).order_by('-member_count')
+
             party_data = []
-
-            # Pre-compute aggregated data for all parties at once
-            party_stats = {}
-            
-            # Get speaker counts per party
-            speaker_counts = Speaker.objects.filter(
-                gtelt_eraco__icontains='22'
-            ).values('plpt_nm').annotate(
-                count=Count('naas_cd')
-            )
-            
-            for stat in speaker_counts:
-                party_name = stat['plpt_nm']
-                for party in parties:
-                    if party.name in party_name:
-                        party_stats[party.id] = party_stats.get(party.id, {})
-                        party_stats[party.id]['member_count'] = stat['count']
-
-            # Get statement stats per party
-            statement_stats = Statement.objects.filter(
-                speaker__gtelt_eraco__icontains='22'
-            ).values('speaker__plpt_nm').annotate(
-                count=Count('id'),
-                avg_sentiment=Avg('sentiment_score')
-            )
-            
-            for stat in statement_stats:
-                party_name = stat['speaker__plpt_nm']
-                for party in parties:
-                    if party.name in party_name:
-                        party_stats[party.id] = party_stats.get(party.id, {})
-                        party_stats[party.id]['total_statements'] = stat['count']
-                        party_stats[party.id]['avg_sentiment'] = stat['avg_sentiment'] or 0
-
-            for party in parties:
-                stats = party_stats.get(party.id, {})
-                member_count = stats.get('member_count', 0)
-                total_statements = stats.get('total_statements', 0)
-                avg_sentiment = stats.get('avg_sentiment', 0)
-
+            for party in party_stats:
                 party_info = {
                     'id': party.id,
                     'name': party.name,
@@ -644,22 +628,19 @@ class PartyViewSet(viewsets.ModelViewSet):
                     'slogan': party.slogan,
                     'logo_url': party.logo_url,
                     'assembly_era': party.assembly_era,
-                    'member_count': member_count,
-                    'total_statements': total_statements,
-                    'avg_sentiment': round(avg_sentiment, 3),
-                    'approved_bills': 0,  # Placeholder
-                    'rejected_bills': 0,  # Placeholder
-                    'recent_statements': [],  # Simplified for performance
-                    'top_members': [],  # Simplified for performance
+                    'member_count': party.member_count,
+                    'total_statements': party.total_statements,
+                    'avg_sentiment': round(party.avg_sentiment or 0, 3),
+                    'approved_bills': 0,
+                    'rejected_bills': 0,
+                    'recent_statements': [],
+                    'top_members': [],
                     'created_at': party.created_at.isoformat() if party.created_at else None,
                     'updated_at': party.updated_at.isoformat() if party.updated_at else None
                 }
 
-                if member_count > 0 or total_statements > 0:
+                if party.member_count > 0 or party.total_statements > 0:
                     party_data.append(party_info)
-
-            # Sort by member count descending
-            party_data.sort(key=lambda x: x['member_count'], reverse=True)
 
             if fetch_additional:
                 return Response({
@@ -1772,23 +1753,95 @@ def stats_overview(request):
 def home_data(request):
     """Get aggregated data for home page with optimized queries"""
     try:
-        # Use select_related and prefetch_related for optimal queries
-        # Try 22nd Assembly first
-        era_filter = Q(era_co='제22대') | Q(era_co='22')
+        # Use single aggregated query for all counts
+        from django.db.models import Subquery, OuterRef
         
-        # Get recent sessions with optimized query
-        recent_sessions = Session.objects.filter(era_filter).annotate(
-            statement_count=Count('statements'),
-            bill_count=Count('bills')
+        # Get all data in a single optimized query
+        era_filter = Q(era_co__in=['제22대', '22'])
+        
+        # Recent sessions with aggregated data
+        recent_sessions = Session.objects.filter(era_filter).select_related().prefetch_related(
+            'statements', 'bills'
+        ).annotate(
+            statement_count=Count('statements', distinct=True),
+            bill_count=Count('bills', distinct=True)
         ).order_by('-conf_dt')[:5]
 
-        # If no 22nd Assembly data, get from any assembly
+        # If no 22nd Assembly data, fallback
         if not recent_sessions.exists():
-            recent_sessions = Session.objects.annotate(
-                statement_count=Count('statements'),
-                bill_count=Count('bills')
+            recent_sessions = Session.objects.select_related().prefetch_related(
+                'statements', 'bills'
+            ).annotate(
+                statement_count=Count('statements', distinct=True),
+                bill_count=Count('bills', distinct=True)
             ).order_by('-conf_dt')[:5]
 
+        # Recent bills with statement counts
+        recent_bills = Bill.objects.filter(
+            session__era_co__in=['제22대', '22']
+        ).select_related('session').annotate(
+            statement_count=Count('statements')
+        ).order_by('-created_at')[:5]
+
+        if not recent_bills.exists():
+            recent_bills = Bill.objects.select_related('session').annotate(
+                statement_count=Count('statements')
+            ).order_by('-created_at')[:5]
+
+        # Recent statements
+        recent_statements = Statement.objects.filter(
+            session__era_co__in=['제22대', '22']
+        ).select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
+
+        if not recent_statements.exists():
+            recent_statements = Statement.objects.select_related(
+                'speaker', 'session', 'bill'
+            ).order_by('-created_at')[:10]
+
+        # Get all statistics in single queries
+        stats_queries = {
+            'sentiment': Statement.objects.filter(session__era_co__in=['제22대', '22']).aggregate(
+                total_count=Count('id'),
+                avg_sentiment=Avg('sentiment_score'),
+                positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+                negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+            ),
+            'counts': {
+                'sessions': Session.objects.filter(era_co__in=['제22대', '22']).count(),
+                'bills': Bill.objects.filter(session__era_co__in=['제22대', '22']).count(),
+                'speakers': Speaker.objects.filter(gtelt_eraco__icontains='22').count()
+            },
+            'party_stats': Statement.objects.filter(
+                session__era_co__in=['제22대', '22'],
+                speaker__plpt_nm__isnull=False
+            ).exclude(
+                speaker__plpt_nm__in=['', ' ', '무소속', '정보없음', 'None']
+            ).values('speaker__plpt_nm').annotate(
+                party_name=F('speaker__plpt_nm'),
+                statement_count=Count('id'),
+                avg_sentiment=Avg('sentiment_score'),
+                member_count=Count('speaker__naas_cd', distinct=True)
+            ).filter(statement_count__gt=5).order_by('-statement_count')[:8]
+        }
+
+        # Fallback for sentiment stats if no 22nd Assembly data
+        if stats_queries['sentiment']['total_count'] == 0:
+            stats_queries['sentiment'] = Statement.objects.aggregate(
+                total_count=Count('id'),
+                avg_sentiment=Avg('sentiment_score'),
+                positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+                negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+            )
+
+        # Fallback for counts if no 22nd Assembly data
+        if stats_queries['counts']['sessions'] == 0:
+            stats_queries['counts'] = {
+                'sessions': Session.objects.count(),
+                'bills': Bill.objects.count(),
+                'speakers': Speaker.objects.count()
+            }
+
+        # Process data
         sessions_data = [{
             'id': session.conf_id,
             'title': session.title or f'제{session.era_co}대 {session.sess}회 {session.dgr}차',
@@ -1797,16 +1850,6 @@ def home_data(request):
             'statement_count': session.statement_count,
             'bill_count': session.bill_count
         } for session in recent_sessions]
-
-        # Get recent bills with optimized query
-        recent_bills = Bill.objects.filter(session__era_co__in=['제22대', '22']).select_related('session').annotate(
-            statement_count=Count('statements')
-        ).order_by('-created_at')[:5]
-
-        if not recent_bills.exists():
-            recent_bills = Bill.objects.select_related('session').annotate(
-                statement_count=Count('statements')
-            ).order_by('-created_at')[:5]
 
         bills_data = [{
             'id': bill.bill_id,
@@ -1818,14 +1861,6 @@ def home_data(request):
             ),
             'statement_count': bill.statement_count
         } for bill in recent_bills]
-
-        # Get recent statements with optimized query
-        recent_statements = Statement.objects.filter(
-            session__era_co__in=['제22대', '22']
-        ).select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
-
-        if not recent_statements.exists():
-            recent_statements = Statement.objects.select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
 
         statements_data = [{
             'id': statement.id,
@@ -1840,73 +1875,18 @@ def home_data(request):
             'created_at': statement.created_at.isoformat() if statement.created_at else None
         } for statement in recent_statements]
 
-        # Get sentiment stats in single query
-        sentiment_stats = Statement.objects.filter(session__era_co__in=['제22대', '22']).aggregate(
-            total_count=Count('id'),
-            avg_sentiment=Avg('sentiment_score'),
-            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-        )
-
-        # If no 22nd Assembly data, get from any assembly
-        if sentiment_stats['total_count'] == 0:
-            sentiment_stats = Statement.objects.aggregate(
-                total_count=Count('id'),
-                avg_sentiment=Avg('sentiment_score'),
-                positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-                negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-            )
-
+        # Calculate sentiment data
+        sentiment_stats = stats_queries['sentiment']
         total_statements = sentiment_stats['total_count'] or 0
         avg_sentiment = sentiment_stats['avg_sentiment'] or 0
         positive_count = sentiment_stats['positive_count'] or 0
         negative_count = sentiment_stats['negative_count'] or 0
         neutral_count = total_statements - positive_count - negative_count
 
-        # Get party statistics with optimized query
-        party_stats = Statement.objects.filter(
-            session__era_co__in=['제22대', '22'],
-            speaker__plpt_nm__isnull=False
-        ).exclude(
-            speaker__plpt_nm__in=['', ' ', '무소속', '정보없음', 'None', '대한독립촉성국민회', '민주자유당', '민주정의당']
-        ).values('speaker__plpt_nm').annotate(
-            party_name=F('speaker__plpt_nm'),
-            statement_count=Count('id'),
-            avg_sentiment=Avg('sentiment_score')
-        ).filter(statement_count__gt=5).order_by('-statement_count')[:8]
-
-        if not party_stats:
-            party_stats = Statement.objects.filter(
-                speaker__plpt_nm__isnull=False
-            ).exclude(
-                speaker__plpt_nm__in=['', ' ', '무소속', '정보없음', 'None', '대한독립촉성국민회', '민주자유당', '민주정의당']
-            ).values('speaker__plpt_nm').annotate(
-                party_name=F('speaker__plpt_nm'),
-                statement_count=Count('id'),
-                avg_sentiment=Avg('sentiment_score')
-            ).filter(statement_count__gt=5).order_by('-statement_count')[:8]
-
-        # Add member counts efficiently
+        # Process party stats
+        party_stats = list(stats_queries['party_stats'])
         for party in party_stats:
-            member_count = Speaker.objects.filter(
-                plpt_nm__icontains=party['party_name'],
-                gtelt_eraco__icontains='22'
-            ).count()
-            if member_count == 0:
-                member_count = Speaker.objects.filter(plpt_nm__icontains=party['party_name']).count()
-            party['member_count'] = member_count
             party['avg_sentiment'] = round(party['avg_sentiment'] or 0, 3)
-
-        # Get basic counts efficiently
-        counts = {
-            'sessions_22': Session.objects.filter(era_co__in=['제22대', '22']).count(),
-            'bills_22': Bill.objects.filter(session__era_co__in=['제22대', '22']).count(),
-            'speakers_22': Speaker.objects.filter(gtelt_eraco__icontains='22').count()
-        }
-
-        total_sessions = counts['sessions_22'] if counts['sessions_22'] > 0 else Session.objects.count()
-        total_bills = counts['bills_22'] if counts['bills_22'] > 0 else Bill.objects.count()
-        total_speakers = counts['speakers_22'] if counts['speakers_22'] > 0 else Speaker.objects.count()
 
         return Response({
             'recent_sessions': sessions_data,
@@ -1919,17 +1899,16 @@ def home_data(request):
                 'neutral_count': neutral_count,
                 'negative_count': negative_count
             },
-            'party_stats': list(party_stats),
-            'total_sessions': total_sessions,
-            'total_bills': total_bills,
-            'total_speakers': total_speakers
+            'party_stats': party_stats,
+            'total_sessions': stats_queries['counts']['sessions'],
+            'total_bills': stats_queries['counts']['bills'],
+            'total_speakers': stats_queries['counts']['speakers']
         })
 
     except Exception as e:
         logger.error(f"Error in home_data view: {e}")
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        # Return consistent empty data structure
         return Response({
             'recent_sessions': [],
             'recent_bills': [],
