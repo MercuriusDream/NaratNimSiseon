@@ -1618,6 +1618,96 @@ def sentiment_analysis_list(request):
 
 
 @api_view(['GET'])
+def session_sentiment_by_party(request, session_id):
+    """Get sentiment analysis by party for a specific session"""
+    try:
+        session = get_object_or_404(Session, conf_id=session_id)
+        
+        # Get statements for this session
+        statements = Statement.objects.filter(
+            session=session,
+            sentiment_score__isnull=False
+        ).select_related('speaker')
+
+        if not statements.exists():
+            return Response({
+                'session': {
+                    'id': session.conf_id,
+                    'title': session.title,
+                    'date': session.conf_dt
+                },
+                'party_sentiment': [],
+                'total_statements': 0
+            })
+
+        # Group by party and calculate sentiment
+        party_sentiment = {}
+        
+        for statement in statements:
+            party_name = statement.speaker.get_current_party_name()
+            
+            # Skip invalid parties
+            if not party_name or party_name in ['정보없음', '', ' ', '무소속']:
+                continue
+                
+            if party_name not in party_sentiment:
+                party_sentiment[party_name] = {
+                    'party_name': party_name,
+                    'statements': [],
+                    'statement_count': 0,
+                    'avg_sentiment': 0,
+                    'positive_count': 0,
+                    'negative_count': 0,
+                    'neutral_count': 0
+                }
+            
+            party_sentiment[party_name]['statements'].append(statement.sentiment_score)
+            party_sentiment[party_name]['statement_count'] += 1
+            
+            if statement.sentiment_score > 0.3:
+                party_sentiment[party_name]['positive_count'] += 1
+            elif statement.sentiment_score < -0.3:
+                party_sentiment[party_name]['negative_count'] += 1
+            else:
+                party_sentiment[party_name]['neutral_count'] += 1
+
+        # Calculate averages
+        results = []
+        for party_data in party_sentiment.values():
+            if party_data['statements']:
+                party_data['avg_sentiment'] = round(
+                    sum(party_data['statements']) / len(party_data['statements']), 3
+                )
+                del party_data['statements']  # Remove raw data
+                results.append(party_data)
+
+        # Sort by average sentiment
+        results.sort(key=lambda x: x['avg_sentiment'], reverse=True)
+
+        return Response({
+            'session': {
+                'id': session.conf_id,
+                'title': session.title,
+                'date': session.conf_dt
+            },
+            'party_sentiment': results,
+            'total_statements': statements.count()
+        })
+
+    except Exception as e:
+        logger.error(f"Error in session_sentiment_by_party: {e}")
+        return Response({
+            'session': {
+                'id': session_id,
+                'title': None,
+                'date': None
+            },
+            'party_sentiment': [],
+            'total_statements': 0
+        }, status=200)
+
+
+@api_view(['GET'])
 def party_analytics(request):
     """Get analytics data grouped by parties"""
     try:

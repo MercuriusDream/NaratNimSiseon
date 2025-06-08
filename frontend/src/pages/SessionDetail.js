@@ -11,18 +11,20 @@ function SessionDetail() {
   const [statements, setStatements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sentimentData, setSentimentData] = useState(null);
 
   useEffect(() => {
     const fetchSessionData = async () => {
       try {
         setLoading(true);
-        const [sessionRes, statementsRes] = await Promise.all([
+        const [sessionRes, statementsRes, sentimentRes] = await Promise.all([
           axios.get(`/api/sessions/${id}/`),
-          axios.get(`/api/sessions/${id}/statements/`)
+          axios.get(`/api/sessions/${id}/statements/`),
+          axios.get(`/api/sessions/${id}/sentiment_by_party/`)
         ]);
 
         setSession(sessionRes.data);
-        
+
         // Handle different response formats for statements
         let statementsData = [];
         if (Array.isArray(statementsRes.data)) {
@@ -32,8 +34,9 @@ function SessionDetail() {
         } else if (statementsRes.data && Array.isArray(statementsRes.data.results)) {
           statementsData = statementsRes.data.results;
         }
-        
+
         setStatements(statementsData);
+        setSentimentData(sentimentRes.data);
       } catch (err) {
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
         console.error('Error fetching session data:', err);
@@ -106,7 +109,7 @@ function SessionDetail() {
           {/* Sentiment Analysis */}
           <div className="bg-white rounded-lg shadow p-6 mb-8">
             <h2 className="text-2xl font-bold mb-4">감성 분석 결과</h2>
-            <SentimentChart data={statements} />
+            <SentimentChart data={sentimentData} />
           </div>
 
           {/* Statements List */}

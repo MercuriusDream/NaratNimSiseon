@@ -54,4 +54,5 @@ urlpatterns = [
     path('parties-list/', views.parties_list, name='parties-list'),
     path('parties/<int:party_id>/detail/', views.party_detail, name='party-detail-extended'),
     path('sentiment-analysis/', views.sentiment_analysis_list, name='sentiment-analysis-list'),
+    path('sessions/<str:session_id>/sentiment-by-party/', views.session_sentiment_by_party, name='session-sentiment-by-party'),
 ]

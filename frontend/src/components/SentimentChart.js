@@ -1,79 +1,46 @@
 import React from 'react';
 
-const SentimentChart = ({ data }) => {
-  if (!data) return null;
+const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
+  // Transform and validate data
+  const chartData = React.useMemo(() => {
+    if (!data) return [];
 
-  // Handle different data structures
-  let chartData = [];
+    let processedData = [];
 
-  if (data && typeof data === 'object') {
-    if (data.party_rankings && Array.isArray(data.party_rankings)) {
-      // Overall sentiment stats data with party rankings
-      chartData = data.party_rankings.slice(0, 10);
+    // Handle different data structures
+    if (Array.isArray(data)) {
+      processedData = data;
+    } else if (data.party_sentiment && Array.isArray(data.party_sentiment)) {
+      processedData = data.party_sentiment;
+    } else if (data.results && Array.isArray(data.results)) {
+      processedData = data.results;
     } else if (data.party_analysis && Array.isArray(data.party_analysis)) {
-      // Bill sentiment data
-      chartData = data.party_analysis;
-    } else if (Array.isArray(data)) {
-      chartData = data;
-    } else {
-      // Handle overall_stats object by creating a summary chart
-      const totalStatements = data.total_statements || 0;
-      const positiveCount = data.positive_count || 0;
-      const neutralCount = data.neutral_count || 0;
-      const negativeCount = data.negative_count || 0;
-
-      if (totalStatements > 0) {
-        // Calculate proportions as percentages
-        const positiveScore = positiveCount / totalStatements;
-        const neutralScore = neutralCount / totalStatements;
-        const negativeScore = negativeCount / totalStatements;
-
-        chartData = [
-          {
-            speaker__plpt_nm: '긍정적 발언',
-            party_name: '긍정적 발언',
-            avg_sentiment: positiveScore,
-            sentiment_score: positiveScore,
-            statement_count: positiveCount,
-            positive_count: positiveCount,
-            negative_count: 0,
-            proportion: (positiveScore * 100).toFixed(1) + '%',
-            isDistribution: true,
-            distributionType: 'positive'
-          },
-          {
-            speaker__plpt_nm: '중립적 발언',
-            party_name: '중립적 발언',
-            statement_count: neutralCount,
-            positive_count: 0,
-            negative_count: 0,
-            proportion: (neutralScore * 100).toFixed(1) + '%',
-            avg_sentiment: neutralScore,
-            isDistribution: true,
-            distributionType: 'neutral'
-          },
-          {
-            speaker__plpt_nm: '부정적 발언',
-            party_name: '부정적 발언',
-            avg_sentiment: -negativeScore,
-            sentiment_score: -negativeScore,
-            statement_count: negativeCount,
-            positive_count: 0,
-            negative_count: negativeCount,
-            proportion: (negativeScore * 100).toFixed(1) + '%',
-            isDistribution: true,
-            distributionType: 'negative'
-          }
-        ].filter(item => item.statement_count > 0); // Only show categories with data
-      } else {
-        chartData = [];
-      }
+      processedData = data.party_analysis;
+    } else if (data.sentiment_summary) {
+      // Handle single sentiment summary
+      return [{
+        name: "Overall",
+        sentiment: data.sentiment_summary.average_sentiment || 0,
+        party: "All Parties"
+      }];
     }
-  } else if (Array.isArray(data)) {
-    chartData = data;
-  } else {
-    chartData = [];
-  }
+
+    if (processedData.length === 0) return [];
+
+    return processedData.map((item, index) => ({
+      name: item.party_name || 
+            item.speaker?.naas_nm || 
+            item.name || 
+            `Item ${index + 1}`,
+      sentiment: parseFloat(item.combined_sentiment || item.avg_sentiment || item.sentiment_score || 0),
+      party: item.party_name || 
+             item.speaker?.plpt_nm || 
+             "Unknown Party",
+      statement_count: item.statement_count || 0,
+      positive_count: item.positive_count || 0,
+      negative_count: item.negative_count || 0
+    }));
+  }, [data]);
 
   if (!chartData || chartData.length === 0) {
     // Show a default empty state chart instead of just text
@@ -113,71 +80,57 @@ const SentimentChart = ({ data }) => {
     }
   };
 
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-4 border border-gray-200 shadow-lg rounded">
+          <p className="font-medium">{label}</p>
+          <p className="text-sm text-gray-600">정당: {data.party || "Unknown"}</p>
+          <p className="text-sm text-gray-600">감성 점수: {payload[0].value.toFixed(2)}</p>
+          {data.statement_count && (
+            <p className="text-sm text-gray-600">총 발언: {data.statement_count}건</p>
+          )}
+          {data.positive_count !== undefined && (
+            <p className="text-sm text-green-600">긍정: {data.positive_count}건</p>
+          )}
+          {data.negative_count !== undefined && (
+            <p className="text-sm text-red-600">부정: {data.negative_count}건</p>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const barData = chartData.map(item => ({
+    name: item.name,
+    value: item.sentiment,
+    party: item.party,
+    statement_count: item.statement_count,
+    positive_count: item.positive_count,
+    negative_count: item.negative_count
+  }));
+
+  const BarChart = () => {
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={barData} margin={{ top: 15, right: 30, left: 20, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="name" />
+          <YAxis />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend />
+          <Bar dataKey="value" fill="#8884d8" />
+        </BarChart>
+      </ResponsiveContainer>
+    );
+  };
+
   return (
     <div className="space-y-4">
-      {chartData.map((item, index) => {
-        const sentimentScore = item.avg_sentiment || item.sentiment_score || item.combined_sentiment || 0;
-        const displayName = item.speaker__plpt_nm?.split('/').pop() || 
-                           item.party_name || 
-                           item.speaker_name || 
-                           item.speaker__naas_nm ||
-                           `항목 ${index + 1}`;
-        const positiveCount = data.positive_count || 0;
-        const neutralCount = data.neutral_count || 0;
-        const negativeCount = data.negative_count || 0;
-
-        const isDistribution = item.isDistribution;
-        const barColor = isDistribution 
-          ? getDistributionColor(item.distributionType)
-          : getSentimentColor(sentimentScore);
-        const barWidth = isDistribution 
-          ? `${Math.max(Math.min((item.statement_count / (positiveCount + neutralCount + negativeCount)) * 100, 100), 5)}%`
-          : `${Math.max(Math.min(Math.abs(sentimentScore) * 100, 100), 5)}%`;
-
-        return (
-          <div key={index} className="border-b pb-4 last:border-b-0">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-medium text-sm">
-                {displayName}
-              </span>
-              <div 
-                className="px-2 py-1 rounded text-xs text-white font-medium"
-                style={{ backgroundColor: barColor }}
-              >
-                {isDistribution 
-                  ? item.proportion
-                  : sentimentScore.toFixed(3)
-                }
-              </div>
-            </div>
-
-            <div className="w-full bg-gray-200 rounded-full h-3 relative">
-              <div
-                className={`h-3 rounded-full transition-all duration-300`}
-                style={{
-                  width: barWidth,
-                  backgroundColor: barColor
-                }}
-              ></div>
-            </div>
-
-            <div className="text-xs text-gray-600 mt-1 flex space-x-4">
-              {item.statement_count && (
-                <span>발언 수: {item.statement_count}건</span>
-              )}
-              {item.proportion && (
-                <span>비율: {item.proportion}</span>
-              )}
-              {item.positive_count !== undefined && item.positive_count > 0 && (
-                <span>긍정: {item.positive_count}건</span>
-              )}
-              {item.negative_count !== undefined && item.negative_count > 0 && (
-                <span>부정: {item.negative_count}건</span>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      <h2>{title}</h2>
+      <BarChart />
     </div>
   );
 };
