@@ -1234,21 +1234,14 @@ def get_all_assembly_members():
     """Fetch and cache all assembly member names from ALLNAMEMBER API."""
     global _assembly_members_cache, _cache_timestamp
     
-    # Use cache if it exists and is less than 1 week old
+    # Use cache if it's less than 1 week old
     if (_assembly_members_cache is not None and _cache_timestamp is not None and 
         time.time() - _cache_timestamp < 604800):
-        logger.debug(f"Using cached assembly members ({len(_assembly_members_cache)} members)")
+        logger.info(f"Using cached assembly members ({len(_assembly_members_cache)} members)")
         return _assembly_members_cache
-    
-    # If cache is empty but recent timestamp exists, return empty set to avoid repeated calls
-    if (_cache_timestamp is not None and 
-        time.time() - _cache_timestamp < 300):  # 5 minutes cooldown for failed attempts
-        logger.debug("Recent cache attempt failed, using cooldown period")
-        return _assembly_members_cache or set()
     
     if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
         logger.error("ASSEMBLY_API_KEY not configured for get_all_assembly_members.")
-        _cache_timestamp = time.time()  # Set timestamp to prevent repeated attempts
         return set()
 
     try:
@@ -1289,7 +1282,7 @@ def get_all_assembly_members():
                 
             page += 1
         
-        # Cache the results - always set both cache and timestamp together
+        # Cache the results
         _assembly_members_cache = all_members
         _cache_timestamp = time.time()
         
@@ -1298,10 +1291,7 @@ def get_all_assembly_members():
         
     except Exception as e:
         logger.error(f"❌ Error fetching assembly members: {e}")
-        # Set timestamp even on failure to prevent immediate retry
-        _cache_timestamp = time.time()
-        # Return existing cache if available, otherwise empty set
-        return _assembly_members_cache or set()
+        return set()
 
 
 # Filter to ignore non-의원 speakers - only 의원 can vote legally
