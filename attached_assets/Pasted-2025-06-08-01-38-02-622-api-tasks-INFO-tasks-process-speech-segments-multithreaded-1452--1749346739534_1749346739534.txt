@@ -1,0 +1,19 @@
+2025-06-08 01:38:02,622 - api.tasks - INFO - tasks - process_speech_segments_multithreaded - 1452 - 🚀 Processing 118 speech segments in parallel batch for bill 'General Discussion'
+2025-06-08 01:38:02,622 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 1488 - 🚀 Batch analyzing 118 speech segments for bill 'General Discussion...' using gemini-2.0-flash-lite
+2025-06-08 01:38:02,622 - api.tasks - ERROR - tasks - get_all_assembly_members - 1316 - ❌ Error fetching assembly members from database: connection already closed
+2025-06-08 01:38:02,622 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 1510 - Processing batch 1/6: segments 0-19
+2025-06-08 01:38:11,674 - api.tasks - INFO - tasks - analyze_batch_statements_single_request - 1613 - Batch processing took 9.1s for 20 segments
+2025-06-08 01:38:11,674 - api.tasks - INFO - tasks - analyze_batch_statements_single_request - 1709 - ✅ Batch processed 0 valid statements from 20 segments
+2025-06-08 01:38:11,674 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 1537 - Resting 3s before next batch...
+2025-06-08 01:38:14,674 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 1510 - Processing batch 2/6: segments 20-39
+2025-06-08 01:38:23,544 - api.tasks - INFO - tasks - analyze_batch_statements_single_request - 1613 - Batch processing took 8.9s for 20 segments
+2025-06-08 01:38:23,545 - api.tasks - INFO - tasks - analyze_batch_statements_single_request - 1709 - ✅ Batch processed 0 valid statements from 20 segments
+2025-06-08 01:38:23,545 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 1537 - Resting 3s before next batch...
+2025-06-08 01:38:26,545 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 1510 - Processing batch 3/6: segments 40-59
+2025-06-08 01:38:35,810 - api.tasks - INFO - tasks - analyze_batch_statements_single_request - 1613 - Batch processing took 9.3s for 20 segments
+2025-06-08 01:38:35,811 - api.tasks - INFO - tasks - analyze_batch_statements_single_request - 1709 - ✅ Batch processed 0 valid statements from 20 segments
+2025-06-08 01:38:35,811 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 1537 - Resting 3s before next batch...
+2025-06-08 01:38:38,811 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 1510 - Processing batch 4/6: segments 60-79
+2025-06-08 01:38:48,048 - api.tasks - INFO - tasks - analyze_batch_statements_single_request - 1613 - Batch processing took 9.2s for 20 segments
+2025-06-08 01:38:48,048 - api.tasks - INFO - tasks - analyze_batch_statements_single_request - 1709 - ✅ Batch processed 0 valid statements from 20 segments
+2025-06-08 01:38:48,048 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 1537 - Resting 3s before next batch...
