@@ -16,8 +16,82 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import concurrent.futures
 import queue
+from collections import deque
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+
+class GeminiRateLimiter:
+    """Rate limiter for Gemini API calls to respect token limits"""
+    
+    def __init__(self, max_tokens_per_minute=12000, max_requests_per_minute=15):
+        """
+        Initialize rate limiter with conservative limits for free tier
+        max_tokens_per_minute: Conservative estimate (12K vs 15K limit)
+        max_requests_per_minute: Conservative request limit
+        """
+        self.max_tokens_per_minute = max_tokens_per_minute
+        self.max_requests_per_minute = max_requests_per_minute
+        self.token_usage = deque()  # Store (timestamp, token_count) tuples
+        self.request_times = deque()  # Store request timestamps
+        self.lock = threading.Lock()
+        
+    def _cleanup_old_records(self):
+        """Remove records older than 1 minute"""
+        cutoff_time = datetime.now() - timedelta(minutes=1)
+        
+        # Clean token usage records
+        while self.token_usage and self.token_usage[0][0] < cutoff_time:
+            self.token_usage.popleft()
+            
+        # Clean request time records
+        while self.request_times and self.request_times[0] < cutoff_time:
+            self.request_times.popleft()
+    
+    def can_make_request(self, estimated_tokens=1000):
+        """Check if we can make a request without hitting limits"""
+        with self.lock:
+            self._cleanup_old_records()
+            
+            # Check request count limit
+            if len(self.request_times) >= self.max_requests_per_minute:
+                return False, "Request limit reached"
+            
+            # Check token limit
+            current_tokens = sum(count for _, count in self.token_usage)
+            if current_tokens + estimated_tokens > self.max_tokens_per_minute:
+                return False, f"Token limit would be exceeded ({current_tokens} + {estimated_tokens} > {self.max_tokens_per_minute})"
+            
+            return True, "OK"
+    
+    def record_request(self, actual_tokens=1000):
+        """Record a completed request"""
+        with self.lock:
+            now = datetime.now()
+            self.request_times.append(now)
+            self.token_usage.append((now, actual_tokens))
+            self._cleanup_old_records()
+    
+    def wait_if_needed(self, estimated_tokens=1000):
+        """Wait if necessary to respect rate limits"""
+        max_wait_time = 65  # Maximum wait time in seconds
+        wait_start = time.time()
+        
+        while time.time() - wait_start < max_wait_time:
+            can_proceed, reason = self.can_make_request(estimated_tokens)
+            if can_proceed:
+                return True
+            
+            logger.info(f"Rate limit hit: {reason}. Waiting 5 seconds...")
+            time.sleep(5)
+        
+        logger.warning(f"Max wait time ({max_wait_time}s) exceeded for rate limiting")
+        return False
+
+
+# Global rate limiter instance
+gemini_rate_limiter = GeminiRateLimiter()
 
 
 def with_db_retry(func, max_retries=3):
@@ -1385,7 +1459,7 @@ def process_single_segment_for_statements(bill_text_segment,
 
 
 def analyze_speech_segment_with_llm_batch(speech_segments, session_id, bill_name, debug=False):
-    """Batch analyze multiple speech segments with LLM without database operations."""
+    """Batch analyze multiple speech segments with LLM with rate limiting."""
     if not model:
         logger.warning("❌ Main LLM ('model') not available. Cannot analyze speech segments.")
         return []
@@ -1393,19 +1467,36 @@ def analyze_speech_segment_with_llm_batch(speech_segments, session_id, bill_name
     if not speech_segments:
         return []
 
-    logger.info(f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name}'")
+    logger.info(f"🚀 Rate-limited batch analyzing {len(speech_segments)} speech segments for bill '{bill_name}'")
     
     # Get assembly members once for the entire batch
     assembly_members = get_all_assembly_members()
     
-    # Process all segments in parallel using ThreadPoolExecutor
+    # Process segments with rate limiting - use fewer workers for free tier
     results = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        # Submit all LLM tasks
-        future_to_segment = {
-            executor.submit(analyze_single_segment_llm_only, segment, bill_name, assembly_members): i 
-            for i, segment in enumerate(speech_segments)
-        }
+    max_workers = min(3, len(speech_segments))  # Limit concurrent requests for free tier
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit tasks with rate limiting
+        future_to_segment = {}
+        
+        for i, segment in enumerate(speech_segments):
+            # Estimate tokens for this segment (rough estimate: 1 token per 4 characters)
+            estimated_tokens = len(segment) // 4 + 500  # Add overhead for prompt
+            
+            # Wait if needed before submitting
+            if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+                logger.warning(f"Skipping segment {i} due to rate limiting timeout")
+                continue
+            
+            future = executor.submit(
+                analyze_single_segment_llm_only_with_rate_limit, 
+                segment, bill_name, assembly_members, estimated_tokens
+            )
+            future_to_segment[future] = i
+            
+            # Small delay between submissions to spread load
+            time.sleep(0.5)
         
         # Collect results as they complete
         for future in as_completed(future_to_segment):
@@ -1418,12 +1509,12 @@ def analyze_speech_segment_with_llm_batch(speech_segments, session_id, bill_name
             except Exception as e:
                 logger.error(f"❌ Exception in batch segment {segment_index}: {e}")
     
-    logger.info(f"✅ Batch analysis completed: {len(results)} valid statements from {len(speech_segments)} segments")
+    logger.info(f"✅ Rate-limited batch analysis completed: {len(results)} valid statements from {len(speech_segments)} segments")
     return sorted(results, key=lambda x: x.get('segment_index', 0))
 
 
-def analyze_single_segment_llm_only(speech_segment, bill_name, assembly_members):
-    """Analyze a single speech segment with LLM only - no database operations."""
+def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name, assembly_members, estimated_tokens):
+    """Analyze a single speech segment with LLM and rate limiting."""
     if not speech_segment or len(speech_segment) < 50:
         return None
 
@@ -1465,6 +1556,9 @@ def analyze_single_segment_llm_only(speech_segment, bill_name, assembly_members)
 """
 
     try:
+        # Record the request for rate limiting
+        gemini_rate_limiter.record_request(estimated_tokens)
+        
         response = model.generate_content(prompt)
         if not response or not response.text:
             return None
@@ -1518,8 +1612,32 @@ def analyze_single_segment_llm_only(speech_segment, bill_name, assembly_members)
         }
 
     except Exception as e:
-        logger.debug(f"Error analyzing segment: {e}")
-        return None
+        # Handle specific rate limit errors
+        if "429" in str(e) and "quota" in str(e).lower():
+            logger.warning(f"Rate limit hit during analysis: {e}")
+            # Extract retry delay if available
+            if "retry_delay" in str(e):
+                try:
+                    import re
+                    delay_match = re.search(r'seconds: (\d+)', str(e))
+                    if delay_match:
+                        delay_seconds = int(delay_match.group(1))
+                        logger.info(f"Waiting {delay_seconds} seconds as suggested by API...")
+                        time.sleep(delay_seconds)
+                except:
+                    time.sleep(10)  # Default wait
+            return None
+        else:
+            logger.debug(f"Error analyzing segment: {e}")
+            return None
+
+
+def analyze_single_segment_llm_only(speech_segment, bill_name, assembly_members):
+    """Legacy function - calls rate-limited version with estimated tokens."""
+    estimated_tokens = len(speech_segment) // 4 + 500
+    return analyze_single_segment_llm_only_with_rate_limit(
+        speech_segment, bill_name, assembly_members, estimated_tokens
+    )
 
 
 def analyze_speech_segment_with_llm(speech_segment, session_id, bill_name, debug=False):
