@@ -356,85 +356,137 @@ def fetch_additional_data_nepjpxkkabqiqpbvk(self=None,
                                             force=False,
                                             debug=False):
     """Fetch additional data using nepjpxkkabqiqpbvk API endpoint."""
+    api_endpoint_name = "nepjpxkkabqiqpbvk"  # Store endpoint name for logging
+    logger.info(
+        f"🔍 Fetching additional data from {api_endpoint_name} API (force={force}, debug={debug})"
+    )
+
     try:
-        if debug:
+        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error(
+                f"ASSEMBLY_API_KEY not configured for {api_endpoint_name}.")
+            return
+
+        url = f"https://open.assembly.go.kr/portal/openapi/{api_endpoint_name}"
+
+        all_items = []
+        current_page = 1
+        page_size = 100  # Adjust as per API limit, usually 100 or 1000
+        max_pages = 10  # Safety break for pagination
+
+        while current_page <= max_pages:
+            params = {
+                "KEY": settings.ASSEMBLY_API_KEY,
+                "Type": "json",
+                "pIndex": current_page,
+                "pSize": page_size
+                # Add other API-specific parameters if needed (e.g., date range, DAE_NUM)
+            }
             logger.info(
-                f"🐛 DEBUG: Fetching additional data using nepjpxkkabqiqpbvk API"
+                f"Fetching page {current_page} from {api_endpoint_name} with params: {params}"
+            )
+            if debug:
+                logger.debug(
+                    f"🐛 DEBUG: Would fetch page {current_page} from {api_endpoint_name} (skipping actual call in debug mode)."
+                )
+                # Provide mock data for testing in debug mode
+                items_on_page = [{"MOCK_FIELD": f"Mock item {current_page}-{i}"} for i in range(3)] if current_page == 1 else []
+            else:
+                response = requests.get(url, params=params, timeout=60)
+                response.raise_for_status()
+                data = response.json()
+
+                items_on_page = []
+                if data and api_endpoint_name in data and isinstance(
+                        data[api_endpoint_name], list):
+                    if len(data[api_endpoint_name]) > 1 and isinstance(
+                            data[api_endpoint_name][1], dict):
+                        items_on_page = data[api_endpoint_name][1].get('row', [])
+                    elif len(data[api_endpoint_name]) > 0 and isinstance(
+                            data[api_endpoint_name][0], dict):
+                        head_info = data[api_endpoint_name][0].get('head')
+                        if head_info and head_info[0].get('RESULT', {}).get(
+                                'CODE', '').startswith("INFO-200"):  # No more data
+                            logger.info(
+                                f"API result for {api_endpoint_name} (page {current_page}) indicates no more data."
+                            )
+                            break  # End pagination
+                        elif 'row' in data[api_endpoint_name][0]:
+                            items_on_page = data[api_endpoint_name][0].get(
+                                'row', [])
+
+            if not items_on_page:
+                logger.info(
+                    f"No items found on page {current_page} for {api_endpoint_name}. Ending pagination."
+                )
+                break  # End pagination if no items or API indicates end of data
+
+            all_items.extend(items_on_page)
+            logger.info(
+                f"Fetched {len(items_on_page)} items from page {current_page}. Total so far: {len(all_items)}."
             )
 
-        url = "https://open.assembly.go.kr/portal/openapi/nepjpxkkabqiqpbvk"
-        params = {
-            "KEY": settings.ASSEMBLY_API_KEY,
-            "Type": "json",
-            "pIndex": 1,
-            "pSize": 100
-        }
+            # Check if this was the last page (e.g., if less items than pSize returned)
+            if len(items_on_page) < page_size:
+                logger.info(
+                    "Fetched less items than page size, assuming last page.")
+                break
 
-        logger.info(f"🔍 Fetching additional data from nepjpxkkabqiqpbvk API")
-        response = requests.get(url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+            current_page += 1
+            if not debug: time.sleep(1)  # Be respectful
 
-        logger.info(
-            f"📊 nepjpxkkabqiqpbvk API response structure: {list(data.keys()) if data else 'Empty response'}"
-        )
-
-        if debug:
+        if not all_items:
             logger.info(
-                f"🐛 DEBUG: Full nepjpxkkabqiqpbvk response: {json.dumps(data, indent=2, ensure_ascii=False)}"
+                f"ℹ️  No data items found from {api_endpoint_name} API after checking pages."
             )
-
-        # Extract data based on API structure
-        additional_data = None
-        if 'nepjpxkkabqiqpbvk' in data and len(data['nepjpxkkabqiqpbvk']) > 1:
-            additional_data = data['nepjpxkkabqiqpbvk'][1].get('row', [])
-        elif 'nepjpxkkabqiqpbvk' in data and len(
-                data['nepjpxkkabqiqpbvk']) > 0:
-            additional_data = data['nepjpxkkabqiqpbvk'][0].get('row', [])
-        elif 'row' in data:
-            additional_data = data['row']
-
-        if not additional_data:
-            logger.info(
-                f"ℹ️  No additional data found from nepjpxkkabqiqpbvk API")
             return
 
         logger.info(
-            f"✅ Found {len(additional_data)} records from nepjpxkkabqiqpbvk API"
+            f"✅ Found a total of {len(all_items)} items from {api_endpoint_name} API."
         )
 
-        # Process the additional data (customize based on what the API returns)
         processed_count = 0
-        for item in additional_data:
+        # Placeholder: Actual processing logic depends on the data from 'nepjpxkkabqiqpbvk'
+        # Example: if items are bill proposals, committee activities, member updates, etc.
+        for item in all_items:
             try:
-                if debug:
-                    logger.info(f"🐛 DEBUG: Processing item: {item}")
-                else:
-                    # Process the item based on its structure
-                    # This will depend on what nepjpxkkabqiqpbvk actually returns
-                    processed_count += 1
-
-            except Exception as e:
-                logger.error(f"❌ Error processing nepjpxkkabqiqpbvk item: {e}")
+                # EXAMPLE: item_id = item.get('UNIQUE_ID_FIELD')
+                # if not item_id: continue
+                # YourModel.objects.update_or_create(api_id=item_id, defaults={...})
+                logger.debug(
+                    f"Processing item (placeholder): {str(item)[:200]}...")
+                processed_count += 1
+            except Exception as e_item:
+                logger.error(
+                    f"❌ Error processing item from {api_endpoint_name}: {e_item}. Item: {str(item)[:100]}"
+                )
                 continue
 
         logger.info(
-            f"🎉 Processed {processed_count} items from nepjpxkkabqiqpbvk API")
+            f"🎉 Processed {processed_count} items from {api_endpoint_name} API."
+        )
 
+    except RequestException as re_exc:
+        logger.error(
+            f"Request error fetching from {api_endpoint_name} API: {re_exc}")
+        try:
+            self.retry(exc=re_exc)
+        except MaxRetriesExceededError:
+            logger.error(f"Max retries for {api_endpoint_name} fetch.")
+    except json.JSONDecodeError as json_e:
+        logger.error(
+            f"JSON decode error from {api_endpoint_name} API: {json_e}")
     except Exception as e:
-        if isinstance(e, RequestException):
-            if self:
-                try:
-                    self.retry(exc=e)
-                except MaxRetriesExceededError:
-                    logger.error(
-                        f"Max retries exceeded for nepjpxkkabqiqpbvk fetch")
-                    raise
-            else:
-                logger.error("Sync execution failed, no retry available")
-                raise
-        logger.error(f"❌ Error fetching from nepjpxkkabqiqpbvk API: {e}")
-        raise
+        logger.error(
+            f"❌ Unexpected error fetching/processing from {api_endpoint_name} API: {e}"
+        )
+        logger.exception(f"Full traceback for {api_endpoint_name} error:")
+        try:
+            self.retry(exc=e)
+        except MaxRetriesExceededError:
+            logger.error(
+                f"Max retries after unexpected error for {api_endpoint_name}.")
+
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -1357,6 +1409,7 @@ def fetch_session_bills(self,
 
             created_count = 0
             updated_count = 0
+            bill_id_api_list = []
             for bill_item in bills_data_list:
                 bill_id_api = bill_item.get('BILL_ID')
                 if not bill_id_api:
@@ -1387,12 +1440,8 @@ def fetch_session_bills(self,
 
                 bill_defaults = {
                     'session': session_obj,
-                    'bill_nm': bill_item.get('BILL_NM', '제목 없는 의안').strip(),
-                    'link_url': bill_item.get('LINK_URL', ''),
-                    'proposer': proposer_info
+                    'bill_nm': bill_item.get('BILL_NM', ''),
                 }
-
-                # Add other fields like BILL_NO, PROPOSE_DT if available from VCONFBILLLIST
                 if bill_item.get('BILL_NO'):
                     bill_defaults['bill_no'] = bill_item.get('BILL_NO')
                 if bill_item.get('PROPOSE_DT'):
@@ -3306,131 +3355,67 @@ def process_pdf_text_for_statements(full_text,
 
 def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text, bill_names_list):
     """
-    Use the LLM to segment the transcript into bill-related sections with threading.
+    Use the LLM to segment the transcript into bill-related sections.
     Returns a list of dicts with keys: 'a' (bill name), 'b' (start idx), 'e' (end idx), 'c' (confidence/score).
     """
     import json
-    import threading
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    
-    def process_chunk(chunk_start, chunk_end, chunk_text):
-        """Process a single chunk and return segments with adjusted indices."""
-        prompt = f"""
-        다음 국회 회의록 텍스트를 법안별로 구분해 주세요. 각 법안 이름과 해당 법안에 해당하는 텍스트의 시작 인덱스(b)와 종료 인덱스(e)를 아래 JSON 배열로 반환하세요.
-        법안 목록: {', '.join(bill_names_list)}
-        텍스트:
-        ---
-        {chunk_text}
-        ---
-        응답 형식 예시:
-        [
-          {{"a": "법안명", "b": 1234, "e": 5678, "c": 0.8}}
-        ]
-        반드시 JSON 배열만 반환하세요.
-        """
-        
-        logger.info(f"🧵 [Threading] Processing chunk {chunk_start}-{chunk_end} of {len(segmentation_text)}")
-        
-        try:
-            # Wait for rate limit before making request
-            if not gemini_rate_limiter.wait_if_needed(len(chunk_text) // 4 + 500):
-                logger.warning(f"Rate limit timeout for chunk {chunk_start}-{chunk_end}")
-                return []
-                
-            response = segmentation_llm.generate_content(prompt)
-            gemini_rate_limiter.record_request(len(chunk_text) // 4 + 500)
-            
-            if not response or not response.text:
-                logger.warning(f"Empty response for chunk {chunk_start}-{chunk_end}")
-                return []
-                
-            response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
-            
-            try:
-                segments = json.loads(response_text)
-            except Exception as e_json:
-                logger.error(f"[Threading] JSON decode error in chunk {chunk_start}-{chunk_end}: {e_json}")
-                return []
-                
-            if not isinstance(segments, list):
-                logger.warning(f"[Threading] Expected list in chunk {chunk_start}-{chunk_end}, got {type(segments)}")
-                return []
-                
-            chunk_segments = []
-            for seg in segments:
-                if (isinstance(seg, dict) and 'a' in seg and 'b' in seg and 'e' in seg):
-                    try:
-                        seg_b = int(seg['b']) + chunk_start
-                        seg_e = int(seg['e']) + chunk_start
-                        
-                        if seg_b < seg_e and seg_b >= 0 and seg_e <= len(segmentation_text):
-                            seg_copy = dict(seg)
-                            seg_copy['b'] = seg_b
-                            seg_copy['e'] = seg_e
-                            chunk_segments.append(seg_copy)
-                    except Exception:
-                        continue
-                        
-            logger.info(f"✅ [Threading] Chunk {chunk_start}-{chunk_end} processed: {len(chunk_segments)} segments")
-            return chunk_segments
-            
-        except Exception as e:
-            logger.error(f"❌ [Threading] Error processing chunk {chunk_start}-{chunk_end}: {e}")
-            return []
-    
     try:
         CHUNK_SIZE = 2000
-        MAX_WORKERS = 3  # Limit concurrent API calls to respect rate limits
         total_length = len(segmentation_text)
-        
-        # Create chunk tasks
-        chunk_tasks = []
+        all_segments = []
         for chunk_start in range(0, total_length, CHUNK_SIZE):
             chunk_end = min(chunk_start + CHUNK_SIZE, total_length)
             chunk_text = segmentation_text[chunk_start:chunk_end]
-            chunk_tasks.append((chunk_start, chunk_end, chunk_text))
-        
-        logger.info(f"🚀 [Threading] Starting parallel processing of {len(chunk_tasks)} chunks with {MAX_WORKERS} workers")
-        
-        all_segments = []
-        
-        # Process chunks in parallel
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            # Submit all tasks
-            future_to_chunk = {
-                executor.submit(process_chunk, chunk_start, chunk_end, chunk_text): (chunk_start, chunk_end)
-                for chunk_start, chunk_end, chunk_text in chunk_tasks
-            }
-            
-            # Collect results as they complete
-            for future in as_completed(future_to_chunk):
-                chunk_start, chunk_end = future_to_chunk[future]
-                try:
-                    chunk_segments = future.result()
-                    all_segments.extend(chunk_segments)
-                except Exception as e:
-                    logger.error(f"❌ [Threading] Future exception for chunk {chunk_start}-{chunk_end}: {e}")
-        
-        logger.info(f"🎉 [Threading] Parallel processing complete: {len(all_segments)} total segments")
-        
+            prompt = f"""
+            다음 국회 회의록 텍스트를 법안별로 구분해 주세요. 각 법안 이름과 해당 법안에 해당하는 텍스트의 시작 인덱스(b)와 종료 인덱스(e)를 아래 JSON 배열로 반환하세요.
+            법안 목록: {', '.join(bill_names_list)}
+            텍스트:
+            ---
+            {chunk_text}
+            ---
+            응답 형식 예시:
+            [
+              {{"a": "법안명", "b": 1234, "e": 5678, "c": 0.8}}
+            ]
+            반드시 JSON 배열만 반환하세요.
+            """
+            logger.info(f"[Segmentation LLM] Processing chunk {chunk_start}-{chunk_end} of {total_length}")
+            response = segmentation_llm.generate_content(prompt)
+            response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+            try:
+                segments = json.loads(response_text)
+            except Exception as e_json:
+                logger.error(f"[Segmentation LLM] JSON decode error in chunk {chunk_start}-{chunk_end}: {e_json}")
+                continue
+            if not isinstance(segments, list):
+                logger.warning(f"[Segmentation LLM] Expected list in chunk {chunk_start}-{chunk_end}, got {type(segments)}")
+                continue
+            for seg in segments:
+                if (isinstance(seg, dict) and 'a' in seg and 'b' in seg and 'e' in seg):
+                    # Adjust indices to be relative to the full text
+                    try:
+                        seg_b = int(seg['b']) + chunk_start
+                        seg_e = int(seg['e']) + chunk_start
+                    except Exception:
+                        continue
+                    if seg_b < seg_e and seg_b >= 0 and seg_e <= total_length:
+                        seg_copy = dict(seg)
+                        seg_copy['b'] = seg_b
+                        seg_copy['e'] = seg_e
+                        all_segments.append(seg_copy)
         # Remove duplicates/overlaps (keep first by bill name and start index)
         unique_segments = {}
         for seg in all_segments:
             key = (seg['a'], seg['b'])
             if key not in unique_segments:
                 unique_segments[key] = seg
-        
         valid_segments = list(unique_segments.values())
-        logger.info(f"📊 [Threading] Deduplicated to {len(valid_segments)} unique segments")
-        
         if not valid_segments:
-            raise ValueError("No valid segments returned by threaded LLM processing.")
-            
+            raise ValueError("No valid segments returned by LLM.")
         return valid_segments
-        
     except Exception as e:
-        logger.error(f"❌ Error in threaded bill segmentation LLM: {e}")
-        logger.exception("Traceback for threaded bill segmentation LLM error:")
+        logger.error(f"❌ Error in bill segmentation LLM: {e}")
+        logger.exception("Traceback for bill segmentation LLM error:")
         return []
 
     # Sort segments by their appearance order in the full_text using their indices
@@ -3439,56 +3424,30 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
         valid_segments_for_sort = []
         for seg_info in bill_segments_from_llm:
             start_idx = seg_info.get("b")
-            end_idx = seg_info.get("e")
-            
-            if start_idx is not None and isinstance(start_idx, int) and 0 <= start_idx < len(full_text):
-                # Validate end index
-                if end_idx is not None and isinstance(end_idx, int) and end_idx > start_idx and end_idx <= len(full_text):
-                    seg_info['e'] = end_idx
-                else:
-                    # If no valid end index, use next segment's start or end of text
-                    seg_info['e'] = len(full_text)
-                
+            if start_idx is not None and isinstance(
+                    start_idx, int) and 0 <= start_idx < len(full_text):
                 seg_info['b'] = start_idx
                 valid_segments_for_sort.append(seg_info)
 
         # Sort by start_index
         valid_segments_for_sort.sort(key=lambda x: x['b'])
 
-        # Adjust end indices to prevent overlaps
-        for i, current_seg_info in enumerate(valid_segments_for_sort):
-            if i + 1 < len(valid_segments_for_sort):
-                next_start = valid_segments_for_sort[i + 1]['b']
-                # Ensure current segment doesn't overlap with next
-                if current_seg_info['e'] > next_start:
-                    current_seg_info['e'] = next_start
-
-        # Now define the actual text for each segment using precise indices
+        # Now define the actual text for each segment
         for current_seg_info in valid_segments_for_sort:
             segment_text_start_index = current_seg_info['b']
-            segment_text_end_index = current_seg_info['e']
-            
-            # Final validation
-            if (segment_text_start_index < 0 or 
-                segment_text_end_index > len(full_text) or 
-                segment_text_start_index >= segment_text_end_index):
-                logger.warning(f"Invalid indices for bill segment: start={segment_text_start_index}, end={segment_text_end_index}")
+            segment_text_end_index = current_seg_info.get('e', len(full_text))
+            # Ensure indices are valid
+            if not isinstance(segment_text_start_index, int) or not isinstance(segment_text_end_index, int):
                 continue
-                
+            if segment_text_start_index < 0 or segment_text_end_index > len(full_text) or segment_text_start_index >= segment_text_end_index:
+                continue
             segment_actual_text = full_text[segment_text_start_index:segment_text_end_index]
-            bill_name = current_seg_info.get("a", "Unknown Bill Segment")
-            
             sorted_segments_with_text.append({
-                "bill_name": bill_name,
-                "text": segment_actual_text,
-                "start_index": segment_text_start_index,
-                "end_index": segment_text_end_index
+                "bill_name": current_seg_info.get("a", "Unknown Bill Segment"),
+                "text": segment_actual_text
             })
-            
-            logger.info(f"📍 Bill segment '{bill_name}': chars {segment_text_start_index}-{segment_text_end_index} ({len(segment_actual_text)} chars)")
-            
         logger.info(
-            f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance with precise boundaries."
+            f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance."
         )
 
     if sorted_segments_with_text:
@@ -3498,32 +3457,16 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
         for seg_data in sorted_segments_with_text:
             bill_name_for_seg = seg_data["bill_name"]
             text_of_segment = seg_data["text"]
-            segment_start = seg_data.get("start_index", 0)
-            segment_end = seg_data.get("end_index", len(full_text))
-            
             logger.info(
                 f"--- Processing segment for Bill: {bill_name_for_seg} ({len(text_of_segment)} chars) ---"
             )
-            logger.info(f"    📍 Position in full text: {segment_start}-{segment_end}")
 
             # This function returns a list of DICTS, where each dict has speaker, text, and LLM analysis fields
             statements_in_segment = extract_statements_for_bill_segment(
                 text_of_segment, session_id, bill_name_for_seg, debug)
-            
             for stmt_data in statements_in_segment:
-                stmt_data['associated_bill_name'] = bill_name_for_seg
-                stmt_data['bill_segment_start'] = segment_start
-                stmt_data['bill_segment_end'] = segment_end
-                # Calculate approximate position of statement within the bill segment
-                if 'text' in stmt_data:
-                    stmt_text = stmt_data['text']
-                    # Find the statement's position within the segment
-                    stmt_pos_in_segment = text_of_segment.find(stmt_text[:100])  # Use first 100 chars for matching
-                    if stmt_pos_in_segment >= 0:
-                        stmt_data['statement_position_in_full_text'] = segment_start + stmt_pos_in_segment
-                    else:
-                        stmt_data['statement_position_in_full_text'] = segment_start
-                        
+                stmt_data[
+                    'associated_bill_name'] = bill_name_for_seg  # Add association
             all_extracted_statements_data.extend(statements_in_segment)
             if not debug:
                 time.sleep(1)  # Pause between processing major segments
@@ -3652,11 +3595,9 @@ def process_extracted_statements_data(statements_data_list,
                 continue
 
             associated_bill_obj = None
-            assoc_bill_name_from_data = stmt_data.get('associated_bill_name')
-            bill_segment_start = stmt_data.get('bill_segment_start')
-            bill_segment_end = stmt_data.get('bill_segment_end')
-            statement_position = stmt_data.get('statement_position_in_full_text')
-            
+            assoc_bill_name_from_data = stmt_data.get(
+                'associated_bill_name'
+            )  # Set during segmentation/full_text processing
             if assoc_bill_name_from_data and assoc_bill_name_from_data not in [
                     "General Discussion / Full Transcript",
                     "Unknown Bill Segment",
@@ -3711,10 +3652,6 @@ def process_extracted_statements_data(statements_data_list,
                             logger.warning(f"No bill found for '{assoc_bill_name_from_data}' in session {session_obj.conf_id}")
                     else:
                         logger.info(f"✅ Found exact bill match: '{assoc_bill_name_from_data}'")
-
-                    # Log the bill matching with position information
-                    if associated_bill_obj and bill_segment_start is not None:
-                        logger.info(f"📍 Statement by {speaker_name} matched to bill '{associated_bill_obj.bill_nm}' at position {statement_position} (segment: {bill_segment_start}-{bill_segment_end})")
 
                 except Exception as e_bill_find:
                     logger.warning(
@@ -3919,24 +3856,6 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
     if debug and statements:
         logger.debug(f"Sample regex statement: {statements[0]}")
     return statements
-
-
-def validate_bill_statement_association(statement_position, bill_segments):
-    """
-    Validate which bill a statement should be associated with based on its position in the full text.
-    Returns the bill name that contains the statement position.
-    """
-    if statement_position is None or not bill_segments:
-        return None
-        
-    for segment in bill_segments:
-        start_pos = segment.get('start_index', segment.get('b', 0))
-        end_pos = segment.get('end_index', segment.get('e', float('inf')))
-        
-        if start_pos <= statement_position < end_pos:
-            return segment.get('bill_name', segment.get('a'))
-    
-    return None
 
 
 def analyze_single_statement(statement_data_dict, session_id, debug=False):
