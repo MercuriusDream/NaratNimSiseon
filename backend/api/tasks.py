@@ -1467,47 +1467,65 @@ def analyze_speech_segment_with_llm_batch(speech_segments, session_id, bill_name
     if not speech_segments:
         return []
 
-    logger.info(f"🚀 Rate-limited batch analyzing {len(speech_segments)} speech segments for bill '{bill_name}'")
+    logger.info(f"🚀 Rate-limited batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...'")
     
     # Get assembly members once for the entire batch
     assembly_members = get_all_assembly_members()
     
-    # Process segments with rate limiting - use fewer workers for free tier
+    # Process segments with much smaller batches to avoid timeouts
     results = []
-    max_workers = min(3, len(speech_segments))  # Limit concurrent requests for free tier
+    max_workers = 1  # Sequential processing to avoid overwhelming free tier
+    batch_size = 5  # Process only 5 segments at a time
     
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit tasks with rate limiting
-        future_to_segment = {}
+    # Split into smaller batches
+    for batch_start in range(0, len(speech_segments), batch_size):
+        batch_end = min(batch_start + batch_size, len(speech_segments))
+        batch_segments = speech_segments[batch_start:batch_end]
         
-        for i, segment in enumerate(speech_segments):
-            # Estimate tokens for this segment (rough estimate: 1 token per 4 characters)
-            estimated_tokens = len(segment) // 4 + 500  # Add overhead for prompt
-            
-            # Wait if needed before submitting
-            if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
-                logger.warning(f"Skipping segment {i} due to rate limiting timeout")
-                continue
-            
-            future = executor.submit(
-                analyze_single_segment_llm_only_with_rate_limit, 
-                segment, bill_name, assembly_members, estimated_tokens
-            )
-            future_to_segment[future] = i
-            
-            # Small delay between submissions to spread load
-            time.sleep(0.5)
+        logger.info(f"Processing batch {batch_start//batch_size + 1}/{(len(speech_segments)-1)//batch_size + 1}: segments {batch_start}-{batch_end-1}")
         
-        # Collect results as they complete
-        for future in as_completed(future_to_segment):
-            segment_index = future_to_segment[future]
-            try:
-                result = future.result()
-                if result:
-                    result['segment_index'] = segment_index
-                    results.append(result)
-            except Exception as e:
-                logger.error(f"❌ Exception in batch segment {segment_index}: {e}")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit tasks with rate limiting
+            future_to_segment = {}
+            
+            for i, segment in enumerate(batch_segments):
+                actual_index = batch_start + i
+                
+                # Estimate tokens for this segment (rough estimate: 1 token per 4 characters)
+                estimated_tokens = len(segment) // 4 + 300  # Reduced overhead
+                
+                # Wait if needed before submitting
+                if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+                    logger.warning(f"Skipping segment {actual_index} due to rate limiting timeout")
+                    continue
+                
+                future = executor.submit(
+                    analyze_single_segment_llm_only_with_rate_limit, 
+                    segment, bill_name, assembly_members, estimated_tokens
+                )
+                future_to_segment[future] = actual_index
+                
+                # Longer delay between submissions for free tier
+                time.sleep(1.0)
+            
+            # Collect results as they complete with timeout
+            for future in as_completed(future_to_segment, timeout=120):  # 2 minute timeout per batch
+                segment_index = future_to_segment[future]
+                try:
+                    result = future.result(timeout=60)  # 1 minute timeout per segment
+                    if result:
+                        result['segment_index'] = segment_index
+                        results.append(result)
+                        logger.debug(f"✅ Processed segment {segment_index}: {result['speaker_name']}")
+                except TimeoutError:
+                    logger.warning(f"⏰ Timeout processing segment {segment_index}")
+                except Exception as e:
+                    logger.error(f"❌ Exception in segment {segment_index}: {e}")
+        
+        # Rest between batches to avoid overwhelming the API
+        if batch_end < len(speech_segments):
+            logger.info(f"Resting 10s before next batch...")
+            time.sleep(10)
     
     logger.info(f"✅ Rate-limited batch analysis completed: {len(results)} valid statements from {len(speech_segments)} segments")
     return sorted(results, key=lambda x: x.get('segment_index', 0))
@@ -1518,49 +1536,39 @@ def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name, a
     if not speech_segment or len(speech_segment) < 50:
         return None
 
+    # Simplified prompt to reduce processing time
     prompt = f"""
-국회 회의록 발언 분석:
-논의 중인 의안: "{bill_name}"
-발언 세그먼트:
----
-{speech_segment}
----
+Analyze this Korean parliament speech segment and return JSON:
+Bill: "{bill_name[:100]}..."
+Text: "{speech_segment[:800]}..."
 
-위 텍스트에서 발언자와 발언 내용을 분석하여 다음 JSON 형식으로 제공해주세요:
+Return only valid JSON:
 {{
-  "speaker_name": "발언자 실명 (◯ 다음에 나오는 이름에서 직함 제거, 예: '김철수')",
-  "speech_content": "발언자 이름 부분을 제거한 실제 발언 내용",
-  "is_valid_member": true/false (실제 국회의원으로 판단되는지),
-  "is_substantial": true/false (정책/의안 관련 실질적 발언인지),
-  "sentiment_score": -1.0 부터 1.0 사이의 감성 점수,
-  "sentiment_reason": "감성 판단 근거 (간략히)",
-  "bill_relevance_score": 0.0 부터 1.0 사이의 의안 관련성 점수,
-  "policy_categories": [
-    {{
-      "main_category": "주요 정책 분야 (경제, 복지, 교육, 외교안보, 환경, 법제, 과학기술, 문화, 농림, 국토교통, 행정, 기타)",
-      "sub_category": "세부 정책 분야",
-      "confidence": 0.0-1.0
-    }}
-  ],
-  "key_policy_phrases": ["핵심 정책 관련 어구 최대 5개"],
-  "bill_specific_keywords": ["'{bill_name}' 관련 직접 키워드 최대 3개"]
+  "speaker_name": "speaker name without titles",
+  "speech_content": "actual speech content", 
+  "is_valid_member": true/false,
+  "is_substantial": true/false,
+  "sentiment_score": -1.0 to 1.0,
+  "bill_relevance_score": 0.0 to 1.0
 }}
 
-기준:
-1. speaker_name: ◯ 다음 이름에서 '의원', '위원장', '장관' 등 직함 제거
-2. speech_content: 발언자 표시 부분 제거 후 실제 발언 내용만
-3. is_valid_member: 실제 국회의원 이름인지 판단
-4. is_substantial: 단순 인사/절차가 아닌 정책 논의인지
-5. 의장, 위원장의 사회 발언은 is_substantial: false
-6. bill_relevance_score: 명시된 의안과의 직접적 관련성
+Rules: Real parliament member names only. No procedural speeches. Remove titles like 의원/위원장.
 """
 
+    start_time = time.time()
     try:
         # Record the request for rate limiting
         gemini_rate_limiter.record_request(estimated_tokens)
         
+        # Use shorter timeout for individual requests
         response = model.generate_content(prompt)
+        
+        processing_time = time.time() - start_time
+        if processing_time > 30:  # Log slow requests
+            logger.warning(f"Slow LLM response: {processing_time:.1f}s for {len(speech_segment)} chars")
+        
         if not response or not response.text:
+            logger.debug(f"Empty response from LLM after {processing_time:.1f}s")
             return None
 
         response_text_cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
@@ -1599,21 +1607,28 @@ def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name, a
         if not speaker_name or not speech_content or not is_valid_member or not is_substantial or should_ignore or not is_real_member:
             return None
 
-        # Return the complete analysis
+        # Return simplified analysis
         return {
             'speaker_name': speaker_name,
             'text': speech_content,
             'sentiment_score': analysis_json.get('sentiment_score', 0.0),
-            'sentiment_reason': analysis_json.get('sentiment_reason', 'LLM 분석 완료'),
+            'sentiment_reason': 'LLM 분석 완료',
             'bill_relevance_score': analysis_json.get('bill_relevance_score', 0.0),
-            'policy_categories': analysis_json.get('policy_categories', []),
-            'policy_keywords': analysis_json.get('key_policy_phrases', []),
-            'bill_specific_keywords': analysis_json.get('bill_specific_keywords', [])
+            'policy_categories': [],  # Simplified - can be filled later
+            'policy_keywords': [],
+            'bill_specific_keywords': []
         }
 
     except Exception as e:
-        # Handle specific rate limit errors
-        if "429" in str(e) and "quota" in str(e).lower():
+        processing_time = time.time() - start_time
+        
+        # Handle specific timeout errors
+        if "504" in str(e) or "Deadline" in str(e):
+            logger.warning(f"⏰ TIMEOUT after {processing_time:.1f}s: {e}")
+            # Wait longer after timeout
+            time.sleep(15)
+            return None
+        elif "429" in str(e) and "quota" in str(e).lower():
             logger.warning(f"Rate limit hit during analysis: {e}")
             # Extract retry delay if available
             if "retry_delay" in str(e):
@@ -1628,7 +1643,7 @@ def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name, a
                     time.sleep(10)  # Default wait
             return None
         else:
-            logger.debug(f"Error analyzing segment: {e}")
+            logger.debug(f"Error analyzing segment after {processing_time:.1f}s: {e}")
             return None
 
 
