@@ -3551,15 +3551,37 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
 
         try:
             data = json.loads(response_text)
-            segments = data.get('segments', [])
+            
+            # Handle different response structures
+            segments = []
+            if isinstance(data, dict):
+                segments = data.get('segments', [])
+            elif isinstance(data, list):
+                # If LLM returned a list directly
+                segments = data
+            else:
+                logger.warning(f"Unexpected data type from LLM: {type(data)}")
+                return []
+
+            # Validate segments is a list
+            if not isinstance(segments, list):
+                logger.warning(f"Segments is not a list: {type(segments)}")
+                return []
 
             # NOTE: start_idx and end_idx below are expected to be precise Python string indices (0-based, inclusive start, exclusive end)
             valid_segments = []
             seen_bills = set()
+            
             for seg in segments:
+                # Ensure seg is a dictionary
+                if not isinstance(seg, dict):
+                    logger.warning(f"Segment is not a dict: {type(seg)} - {seg}")
+                    continue
+                    
                 bill_name = seg.get('bill_name')
-                if bill_name in seen_bills:
+                if not bill_name or bill_name in seen_bills:
                     continue  # Only allow one segment per bill
+                    
                 # Find exact match or use fuzzy matching to get original bill name
                 matched_bill_name = None
                 if bill_name in bill_names_list:
@@ -3582,24 +3604,29 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
                                 break
 
                 if matched_bill_name and matched_bill_name not in seen_bills:
-                    start_idx = int(seg.get('start_index', 0)) + offset
-                    end_idx = int(seg.get('end_index', 0)) + offset
-                    # These should be PRECISE indices in text_chunk (0-based, [start_idx:end_idx])
-                    if start_idx < end_idx and (end_idx - start_idx) > 200:
-                        valid_segments.append({
-                            'a': matched_bill_name,  # Always use the original bill name
-                            'b': start_idx,
-                            'e': end_idx
-                        })
-                        seen_bills.add(matched_bill_name)
-                        if bill_name != matched_bill_name:
-                            logger.info(f"Mapped LLM response '{bill_name}' to original bill '{matched_bill_name}'")
+                    try:
+                        start_idx = int(seg.get('start_index', 0)) + offset
+                        end_idx = int(seg.get('end_index', 0)) + offset
+                        # These should be PRECISE indices in text_chunk (0-based, [start_idx:end_idx])
+                        if start_idx < end_idx and (end_idx - start_idx) > 200:
+                            valid_segments.append({
+                                'a': matched_bill_name,  # Always use the original bill name
+                                'b': start_idx,
+                                'e': end_idx
+                            })
+                            seen_bills.add(matched_bill_name)
+                            if bill_name != matched_bill_name:
+                                logger.info(f"Mapped LLM response '{bill_name}' to original bill '{matched_bill_name}'")
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Error processing indices for segment {bill_name}: {e}")
+                        continue
                 elif not matched_bill_name:
                     logger.debug(f"Could not match LLM response '{bill_name}' to any original bill name")
             return valid_segments
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             logger.error(f"Error parsing segmentation response: {e}")
+            logger.debug(f"Raw response that caused error: {response_text[:500]}...")
             return []
 
     except Exception as e:
