@@ -590,7 +590,7 @@ class PartyViewSet(viewsets.ModelViewSet):
                 top_members_data = []
                 for member in top_members:
                     top_members_data.append({
-                        'id': member.id,
+                        'id': member.naas_cd,  # Use naas_cd as the primary key
                         'naas_nm': member.naas_nm,
                         'naas_cd': member.naas_cd,
                         'statement_count': member.statement_count,
