@@ -200,6 +200,9 @@ class Command(BaseCommand):
             self.stdout.write('\n💾 Step 4: Applying changes...')
             
             # Create/update Party objects for 22nd Assembly
+            total_parties = len([p for p, d in consolidated_data.items() if len(d['speakers']) > 0])
+            processed_parties = 0
+            
             for party_name, data in consolidated_data.items():
                 if len(data['speakers']) > 0:
                     party, created = Party.objects.get_or_create(
@@ -217,27 +220,41 @@ class Command(BaseCommand):
                         party.save()
                         self.stdout.write(f'   🔄 Updated party: {party_name}')
                     
-                    # Update speaker records
+                    # Update speaker records in bulk
+                    speakers_list = list(data['speakers'])
                     speakers_updated = 0
-                    for speaker in data['speakers']:
-                        # Update current party
-                        speaker.current_party = party
-                        
-                        # Clean up plpt_nm to only show the consolidated party
-                        speaker.plpt_nm = party_name
-                        speaker.save()
-                        
-                        # Update party history
-                        SpeakerPartyHistory.objects.filter(speaker=speaker).delete()
-                        SpeakerPartyHistory.objects.create(
-                            speaker=speaker,
-                            party=party,
-                            order=0,
-                            is_current=True
-                        )
-                        speakers_updated += 1
                     
-                    self.stdout.write(f'   👥 Updated {speakers_updated} speakers for {party_name}')
+                    if speakers_list:
+                        # Bulk update speakers
+                        for speaker in speakers_list:
+                            speaker.current_party = party
+                            speaker.plpt_nm = party_name
+                        
+                        # Use bulk_update for better performance
+                        Speaker.objects.bulk_update(
+                            speakers_list, 
+                            ['current_party', 'plpt_nm'], 
+                            batch_size=100
+                        )
+                        
+                        # Clear existing party histories for these speakers
+                        speaker_ids = [speaker.naas_cd for speaker in speakers_list]
+                        SpeakerPartyHistory.objects.filter(speaker__naas_cd__in=speaker_ids).delete()
+                        
+                        # Create new party histories in bulk
+                        party_histories = [
+                            SpeakerPartyHistory(
+                                speaker=speaker,
+                                party=party,
+                                order=0,
+                                is_current=True
+                            ) for speaker in speakers_list
+                        ]
+                        SpeakerPartyHistory.objects.bulk_create(party_histories, batch_size=100)
+                        
+                        speakers_updated = len(speakers_list)
+                        processed_parties += 1
+                        self.stdout.write(f'   👥 Updated {speakers_updated} speakers for {party_name} ({processed_parties}/{total_parties})')
             
             # Clean up historical parties from 22nd Assembly context
             historical_party_objects = Party.objects.filter(
