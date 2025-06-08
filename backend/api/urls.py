@@ -38,6 +38,7 @@ urlpatterns = [
     # Missing endpoints that frontend is calling
     path('home-data/', views.home_data, name='home-data'),
     path('stats/', views.stats_overview, name='stats-overview'),
+    path('stats-overview/', views.stats_overview, name='stats-overview-alt'),
 
     # Analytics endpoints
     path('analytics/sentiment/', views.overall_sentiment_stats, name='overall-sentiment-stats'),
