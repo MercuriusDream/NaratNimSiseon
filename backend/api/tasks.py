@@ -2128,7 +2128,7 @@ def _process_single_bill_segmentation_batch(segmentation_llm, text_batch, bill_n
 당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
 국회 회의록 텍스트 배치에서 논의된 주요 의안(법안)별로 구간을 나누고, 각 의안별로 정책 카테고리, 핵심 정책 어구, 의안 관련 키워드를 추출해 주세요.
 
-의안 목록:
+의안 목록 (반드시 이 정확한 문자열을 사용하세요):
 {chr(10).join([f"- {bill}" for bill in bill_names])}
 
 회의록 텍스트 배치 (전체 문서의 {batch_offset}-{batch_offset+len(text_batch)} 구간):
@@ -2140,7 +2140,7 @@ def _process_single_bill_segmentation_batch(segmentation_llm, text_batch, bill_n
 {{
   "bill_discussion_segments": [
     {{
-      "bill_name_identified": "제공된 목록에서 정확히 일치하는 의안명",
+      "bill_name_identified": "위 목록에서 복사한 정확한 의안명 (한 글자도 바꾸지 말고 그대로 복사)",
       "discussion_start_idx": 해당 의안 논의가 시작되는 배치 내 문자 위치 (숫자),
       "confidence": 0.0-1.0 (매칭 확신도),
       "policy_categories": [
@@ -2157,7 +2157,8 @@ def _process_single_bill_segmentation_batch(segmentation_llm, text_batch, bill_n
 }}
 
 중요한 규칙:
-- "bill_name_identified"는 반드시 제공된 의안 목록에서 정확히 선택해야 합니다
+- "bill_name_identified"는 반드시 위 의안 목록에서 정확히 복사해야 합니다 (변경, 단축, 수정 금지)
+- 의안명을 찾기 어려우면 부분적 키워드로 매칭하되, 응답할 때는 원본 목록의 정확한 문자열을 사용하세요
 - discussion_start_idx는 이 배치 내에서의 상대적 위치입니다 (0부터 시작)
 - confidence가 0.7 미만인 경우는 포함하지 마세요
 - 배치 경계에서 잘린 논의는 다음 배치에서 처리됩니다
@@ -3499,7 +3500,7 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                     if confidence < 0.6:
                         continue
 
-                    # Find best matching bill with fuzzy logic
+                    # Find best matching bill with improved fuzzy logic
                     best_match = None
                     best_score = 0
 
@@ -3510,7 +3511,15 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                             best_score = 1.0
                             break
 
-                        # Check partial matches
+                        # Check if LLM response is contained in original or vice versa
+                        if bill_name in original_bill or original_bill in bill_name:
+                            similarity = min(len(bill_name), len(original_bill)) / max(len(bill_name), len(original_bill))
+                            if similarity > best_score and similarity > 0.5:
+                                best_score = similarity
+                                best_match = original_bill
+                            continue
+
+                        # Check partial matches using words
                         bill_words = set(bill_name.lower().split())
                         original_words = set(original_bill.lower().split())
 
@@ -3518,9 +3527,20 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
                         common_words = bill_words.intersection(original_words)
                         if common_words:
                             similarity = len(common_words) / len(bill_words.union(original_words))
-                            if similarity > best_score and similarity > 0.4:  # 40% similarity threshold
+                            if similarity > best_score and similarity > 0.3:  # Lowered threshold
                                 best_score = similarity
                                 best_match = original_bill
+
+                        # Check core bill name matches (remove common suffixes)
+                        bill_core = bill_name.replace('법률안', '').replace('일부개정', '').replace('의안', '').strip()
+                        original_core = original_bill.replace('법률안', '').replace('일부개정', '').replace('의안', '').strip()
+                        
+                        if bill_core and original_core and len(bill_core) > 3 and len(original_core) > 3:
+                            if bill_core in original_core or original_core in bill_core:
+                                core_similarity = min(len(bill_core), len(original_core)) / max(len(bill_core), len(original_core))
+                                if core_similarity > best_score and core_similarity > 0.6:
+                                    best_score = core_similarity
+                                    best_match = original_bill
 
                     if not best_match:
                         logger.debug(f"No matching bill found for '{bill_name}', skipping")
@@ -3661,7 +3681,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
 당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
 국회 회의록에서 법안별 논의 구간을 정확히 식별해주세요.
 
-대상 법안들:
+대상 법안들 (반드시 이 정확한 문자열을 사용하세요):
 {bill_list_str}
 
 핵심 키워드: {keywords_str}
@@ -3675,7 +3695,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
 {{
   "segments": [
     {{
-      "bill_name": "정확한_법안명",
+      "bill_name": "위 목록에서 복사한 정확한 법안명 (한 글자도 바꾸지 말 것)",
       "start_index": 시작위치,
       "end_index": 종료위치
     }}
@@ -3683,8 +3703,9 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
 }}
 
 중요한 조건:
+- bill_name은 반드시 위 법안 목록에서 정확히 복사해야 합니다 (변경, 단축, 수정 금지)
+- 법안을 찾기 어려우면 부분적 키워드로 매칭하되, 응답할 때는 원본 목록의 정확한 문자열을 사용하세요
 - start_index와 end_index는 반드시 위 텍스트에서 해당 법안 논의가 시작되고 끝나는 구간의 '정확한 문자 인덱스(파이썬 문자열 인덱스, 0부터 시작, start_index는 포함, end_index는 포함하지 않음)'를 사용해야 합니다.
-- 법안명은 위 목록에서 정확히 선택
 - ◯로 시작하는 실제 발언 구간에서만 찾기
 - start_index는 해당 법안 논의가 시작되는 ◯ 위치
 - end_index는 다음 법안 논의 시작 전까지 또는 구간 끝까지
@@ -3715,17 +3736,42 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
                 bill_name = seg.get('bill_name')
                 if bill_name in seen_bills:
                     continue  # Only allow one segment per bill
+                # Find exact match or use fuzzy matching to get original bill name
+                matched_bill_name = None
                 if bill_name in bill_names_list:
+                    matched_bill_name = bill_name
+                else:
+                    # Try fuzzy matching to find the original bill name
+                    for original_bill in bill_names_list:
+                        if bill_name in original_bill or original_bill in bill_name:
+                            matched_bill_name = original_bill
+                            break
+                    
+                    if not matched_bill_name:
+                        # Try partial word matching
+                        bill_words = set(bill_name.lower().split())
+                        for original_bill in bill_names_list:
+                            original_words = set(original_bill.lower().split())
+                            common_words = bill_words.intersection(original_words)
+                            if len(common_words) >= min(2, len(bill_words)):  # At least 2 common words or all words
+                                matched_bill_name = original_bill
+                                break
+
+                if matched_bill_name and matched_bill_name not in seen_bills:
                     start_idx = int(seg.get('start_index', 0)) + offset
                     end_idx = int(seg.get('end_index', 0)) + offset
                     # These should be PRECISE indices in text_chunk (0-based, [start_idx:end_idx])
                     if start_idx < end_idx and (end_idx - start_idx) > 200:
                         valid_segments.append({
-                            'a': bill_name,
+                            'a': matched_bill_name,  # Always use the original bill name
                             'b': start_idx,
                             'e': end_idx
                         })
-                        seen_bills.add(bill_name)
+                        seen_bills.add(matched_bill_name)
+                        if bill_name != matched_bill_name:
+                            logger.info(f"Mapped LLM response '{bill_name}' to original bill '{matched_bill_name}'")
+                elif not matched_bill_name:
+                    logger.debug(f"Could not match LLM response '{bill_name}' to any original bill name")
             return valid_segments
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
