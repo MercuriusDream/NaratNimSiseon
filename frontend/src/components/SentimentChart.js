@@ -1,4 +1,5 @@
 import React from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
   // Transform and validate data
