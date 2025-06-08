@@ -2206,9 +2206,81 @@ def extract_statements_with_bill_based_chunking(full_text,
         MAX_SEGMENTATION_LENGTH = 100000
         if len(full_text) > MAX_SEGMENTATION_LENGTH:
             logger.info(
-                f"Text too long for segmentation ({len(full_text)} chars), using first {MAX_SEGMENTATION_LENGTH} chars for bill identification"
+                f"Text too long for single segmentation ({len(full_text)} chars), processing in batches of {MAX_SEGMENTATION_LENGTH}"
             )
-            segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
+            # Process in overlapping batches to ensure we don't miss bill discussions at boundaries
+            batch_overlap = 5000  # 5K character overlap between batches
+            all_bill_segments = []
+            
+            for batch_start in range(0, len(full_text), MAX_SEGMENTATION_LENGTH - batch_overlap):
+                batch_end = min(batch_start + MAX_SEGMENTATION_LENGTH, len(full_text))
+                batch_text = full_text[batch_start:batch_end]
+                
+                logger.info(f"Processing segmentation batch: chars {batch_start}-{batch_end}")
+                
+                batch_segmentation_prompt = f"""
+국회 회의록 텍스트 배치에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
+
+제공된 의안 목록:
+{chr(10).join([f"- {bill}" for bill in bill_names_list])}
+
+회의록 텍스트 배치 (전체 문서의 {batch_start}-{batch_end} 구간):
+---
+{batch_text}
+---
+
+이 배치에서 각 의안에 대한 논의 시작 지점을 알려주세요. JSON 형식 응답:
+{{
+  "bill_discussion_segments": [
+    {{
+      "bill_name_identified": "제공된 목록에서 정확히 일치하는 의안명",
+      "discussion_start_idx": 해당 의안 논의가 시작되는 배치 내 문자 위치 (숫자),
+      "confidence": 0.0-1.0 (매칭 확신도)
+    }}
+  ]
+}}
+
+중요한 규칙:
+- "bill_name_identified"는 반드시 제공된 의안 목록에서 정확히 선택해야 합니다
+- discussion_start_idx는 이 배치 내에서의 상대적 위치입니다 (0부터 시작)
+- confidence가 0.7 미만인 경우는 포함하지 마세요
+- 배치 경계에서 잘린 논의는 다음 배치에서 처리됩니다
+"""
+                
+                try:
+                    batch_response = segmentation_llm.generate_content(batch_segmentation_prompt)
+                    if batch_response and batch_response.text:
+                        batch_text_cleaned = batch_response.text.strip().replace("```json", "").replace("```", "").strip()
+                        batch_data = json.loads(batch_text_cleaned)
+                        batch_segments = batch_data.get("bill_discussion_segments", [])
+                        
+                        # Adjust indices to be relative to full document
+                        for segment in batch_segments:
+                            if 'discussion_start_idx' in segment:
+                                segment['discussion_start_idx'] += batch_start
+                        
+                        all_bill_segments.extend(batch_segments)
+                        logger.info(f"Found {len(batch_segments)} bill segments in batch {batch_start}-{batch_end}")
+                    
+                    # Rate limiting between batches
+                    if batch_end < len(full_text):
+                        time.sleep(2)
+                        
+                except (json.JSONDecodeError, Exception) as e:
+                    logger.warning(f"Error processing segmentation batch {batch_start}-{batch_end}: {e}")
+                    continue
+            
+            # Remove duplicates and sort by position
+            seen_bills = set()
+            unique_segments = []
+            for segment in sorted(all_bill_segments, key=lambda x: x.get('discussion_start_idx', 0)):
+                bill_name = segment.get('bill_name_identified', '')
+                if bill_name and bill_name not in seen_bills:
+                    seen_bills.add(bill_name)
+                    unique_segments.append(segment)
+            
+            bill_segments_from_llm = unique_segments
+            logger.info(f"Batch segmentation completed: {len(bill_segments_from_llm)} unique bill segments identified")
         else:
             segmentation_text = full_text
 
@@ -2759,7 +2831,7 @@ def process_pdf_text_for_statements(full_text,
 
 회의록 텍스트:
 ---
-{segmentation_text}
+{full_text}
 ---
 
 각 의안에 대한 논의 시작 지점을 알려주세요. JSON 형식 응답:
@@ -2780,59 +2852,58 @@ def process_pdf_text_for_statements(full_text,
 - 순서는 회의록에 나타난 순서대로 정렬해주세요
 - confidence가 0.7 미만인 경우는 포함하지 마세요
 """
-        try:
-            seg_response = segmentation_llm.generate_content(
-                bill_segmentation_prompt)
-            if seg_response and seg_response.text:
-                seg_text_cleaned = seg_response.text.strip().replace(
-                    "```json", "").replace("```", "").strip()
-                seg_data = json.loads(seg_text_cleaned)
-                bill_segments_from_llm = seg_data.get(
-                    "bill_discussion_segments", [])
-                # general_cue = seg_data.get("general_discussion_cue") # Can handle this later
-                if bill_segments_from_llm:
-                    logger.info(
-                        f"LLM identified {len(bill_segments_from_llm)} potential bill discussion segments."
-                    )
+            try:
+                seg_response = segmentation_llm.generate_content(
+                    bill_segmentation_prompt)
+                if seg_response and seg_response.text:
+                    seg_text_cleaned = seg_response.text.strip().replace(
+                        "```json", "").replace("```", "").strip()
+                    seg_data = json.loads(seg_text_cleaned)
+                    bill_segments_from_llm = seg_data.get(
+                        "bill_discussion_segments", [])
+                    if bill_segments_from_llm:
+                        logger.info(
+                            f"LLM identified {len(bill_segments_from_llm)} potential bill discussion segments."
+                        )
+                    else:
+                        logger.info(
+                            "LLM did not identify distinct bill segments. Will process full text."
+                        )
                 else:
                     logger.info(
-                        "LLM did not identify distinct bill segments. Will process full text."
+                        "No response from LLM for bill segmentation. Will process full text."
                     )
-            else:
-                logger.info(
-                    "No response from LLM for bill segmentation. Will process full text."
+            except json.JSONDecodeError as e_json_seg:
+                logger.error(
+                    f"JSON parsing error for bill segmentation response: {e_json_seg}. Using bill names for fallback segmentation."
                 )
-        except json.JSONDecodeError as e_json_seg:
-            logger.error(
-                f"JSON parsing error for bill segmentation response: {e_json_seg}. Using bill names for fallback segmentation."
-            )
-            # Create fallback segments using actual bill names
-            if bill_names_list:
-                text_per_bill = len(segmentation_text) // len(bill_names_list)
-                for i, bill_name in enumerate(bill_names_list):
-                    start_idx = i * text_per_bill
-                    bill_segments_from_llm.append({
-                        "bill_name_identified": bill_name,
-                        "discussion_start_idx": start_idx,
-                        "confidence": 0.5
-                    })
-                logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
-        except Exception as e_seg:
-            logger.error(
-                f"Error during LLM bill segmentation: {e_seg}. Using bill names for fallback segmentation."
-            )
-            logger.exception("Traceback for bill segmentation error:")
-            # Create fallback segments using actual bill names
-            if bill_names_list:
-                text_per_bill = len(segmentation_text) // len(bill_names_list)
-                for i, bill_name in enumerate(bill_names_list):
-                    start_idx = i * text_per_bill
-                    bill_segments_from_llm.append({
-                        "bill_name_identified": bill_name,
-                        "discussion_start_idx": start_idx,
-                        "confidence": 0.5
-                    })
-                logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
+                # Create fallback segments using actual bill names
+                if bill_names_list:
+                    text_per_bill = len(full_text) // len(bill_names_list)
+                    for i, bill_name in enumerate(bill_names_list):
+                        start_idx = i * text_per_bill
+                        bill_segments_from_llm.append({
+                            "bill_name_identified": bill_name,
+                            "discussion_start_idx": start_idx,
+                            "confidence": 0.5
+                        })
+                    logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
+            except Exception as e_seg:
+                logger.error(
+                    f"Error during LLM bill segmentation: {e_seg}. Using bill names for fallback segmentation."
+                )
+                logger.exception("Traceback for bill segmentation error:")
+                # Create fallback segments using actual bill names
+                if bill_names_list:
+                    text_per_bill = len(full_text) // len(bill_names_list)
+                    for i, bill_name in enumerate(bill_names_list):
+                        start_idx = i * text_per_bill
+                        bill_segments_from_llm.append({
+                            "bill_name_identified": bill_name,
+                            "discussion_start_idx": start_idx,
+                            "confidence": 0.5
+                        })
+                    logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
 
     # Sort segments by their appearance order in the full_text using their indices
     sorted_segments_with_text = []
