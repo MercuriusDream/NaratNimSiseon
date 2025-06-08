@@ -76,6 +76,15 @@ class StatementSerializer(serializers.ModelSerializer):
         return value
 
 
+class SessionListSerializer(serializers.ModelSerializer):
+    """Optimized serializer for session list view without expensive joins"""
+    
+    class Meta:
+        model = Session
+        fields = ['conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 'conf_knd', 
+                 'cmit_nm', 'title']
+
+
 class SessionSerializer(serializers.ModelSerializer):
     bills = BillSerializer(many=True, read_only=True)
     statements = StatementSerializer(many=True, read_only=True)

@@ -53,93 +53,126 @@ class SessionViewSet(viewsets.ModelViewSet):
     serializer_class = SessionSerializer
     pagination_class = StandardResultsSetPagination
 
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return SessionListSerializer  # Use optimized serializer for list view
+        return SessionSerializer
+
     def get_queryset(self):
         try:
-            # Simple, fast queryset - no complex joins
-            base_queryset = Session.objects.only(
-                'conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 
-                'conf_knd', 'cmit_nm', 'title', 'created_at'
-            )
-            
-            # Apply era filter first - default to 22nd Assembly
-            era_co = self.request.query_params.get('era_co')
-            if era_co and era_co not in ['all']:
-                if era_co in ['22', '제22대']:
-                    base_queryset = base_queryset.filter(era_co__in=['22', '제22대'])
-                else:
-                    base_queryset = base_queryset.filter(era_co=era_co)
+            # Ultra-optimized queryset for listing
+            if self.action == 'list':
+                base_queryset = Session.objects.only(
+                    'conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 
+                    'conf_knd', 'cmit_nm', 'title'
+                ).filter(era_co__in=['22', '제22대'])  # Always filter to 22nd Assembly first
             else:
-                # Always default to 22nd Assembly
-                base_queryset = base_queryset.filter(era_co__in=['22', '제22대'])
+                base_queryset = Session.objects.all()
                 
-            # Apply other filters
+            # Apply filters only if provided
+            era_co = self.request.query_params.get('era_co')
+            if era_co and era_co not in ['all', '22', '제22대']:
+                base_queryset = base_queryset.filter(era_co=era_co)
+                
             sess = self.request.query_params.get('sess')
-            dgr = self.request.query_params.get('dgr')
-            date_from = self.request.query_params.get('date_from')
-            date_to = self.request.query_params.get('date_to')
-
             if sess:
                 base_queryset = base_queryset.filter(sess=sess)
+                
+            dgr = self.request.query_params.get('dgr')
             if dgr:
                 base_queryset = base_queryset.filter(dgr=dgr)
+                
+            date_from = self.request.query_params.get('date_from')
             if date_from:
                 try:
                     base_queryset = base_queryset.filter(conf_dt__gte=date_from)
                 except ValueError:
-                    logger.warning(f"Invalid date_from format: {date_from}")
+                    pass
+                    
+            date_to = self.request.query_params.get('date_to')
             if date_to:
                 try:
                     base_queryset = base_queryset.filter(conf_dt__lte=date_to)
                 except ValueError:
-                    logger.warning(f"Invalid date_to format: {date_to}")
+                    pass
 
             return base_queryset.order_by('-conf_dt')
         except Exception as e:
             logger.error(f"Error in SessionViewSet get_queryset: {e}")
-            # Return empty queryset instead of all sessions to prevent timeout
             return Session.objects.none()
 
     def list(self, request, *args, **kwargs):
         try:
-            queryset = self.filter_queryset(self.get_queryset())
+            # Use raw query for better performance
+            from django.db import connection
             
-            # Ensure we always return a consistent format
-            if not queryset.exists():
+            era_filter = "era_co IN ('22', '제22대')"
+            
+            # Build additional filters
+            additional_filters = []
+            params = []
+            
+            sess = request.query_params.get('sess')
+            if sess:
+                additional_filters.append("sess = %s")
+                params.append(sess)
+                
+            dgr = request.query_params.get('dgr')
+            if dgr:
+                additional_filters.append("dgr = %s")
+                params.append(dgr)
+                
+            date_from = request.query_params.get('date_from')
+            if date_from:
+                additional_filters.append("conf_dt >= %s")
+                params.append(date_from)
+                
+            date_to = request.query_params.get('date_to')
+            if date_to:
+                additional_filters.append("conf_dt <= %s")
+                params.append(date_to)
+            
+            where_clause = era_filter
+            if additional_filters:
+                where_clause += " AND " + " AND ".join(additional_filters)
+            
+            # Execute optimized query
+            with connection.cursor() as cursor:
+                query = f"""
+                SELECT conf_id, era_co, sess, dgr, conf_dt, conf_knd, cmit_nm, title
+                FROM api_session 
+                WHERE {where_clause}
+                ORDER BY conf_dt DESC 
+                LIMIT 20
+                """
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+                
+                # Convert to list of dicts
+                results = []
+                for row in rows:
+                    results.append({
+                        'conf_id': row[0],
+                        'era_co': row[1],
+                        'sess': row[2],
+                        'dgr': row[3],
+                        'conf_dt': row[4],
+                        'conf_knd': row[5],
+                        'cmit_nm': row[6],
+                        'title': row[7],
+                        'bills': [],  # Empty for performance
+                        'statements': []  # Empty for performance
+                    })
+                
                 return Response({
-                    'count': 0,
+                    'count': len(results),
                     'next': None,
                     'previous': None,
-                    'results': []
+                    'results': results
                 })
-
-            # Limit to prevent timeout
-            queryset = queryset[:20]  # Even smaller limit for better performance
-            
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True)
-                response_data = self.get_paginated_response(serializer.data)
-                # Ensure results is always a list
-                if 'results' not in response_data.data:
-                    response_data.data['results'] = []
-                return response_data
                 
-            serializer = self.get_serializer(queryset, many=True)
-            serialized_data = serializer.data
-            
-            # Ensure we always return a list
-            if not isinstance(serialized_data, list):
-                serialized_data = []
-                
-            return Response({
-                'count': len(serialized_data),
-                'next': None,
-                'previous': None,
-                'results': serialized_data
-            })
         except Exception as e:
             logger.error(f"Error in SessionViewSet list: {e}")
-            # Always return consistent format even on error
             return Response({
                 'count': 0,
                 'next': None,

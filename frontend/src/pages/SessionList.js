@@ -36,8 +36,13 @@ const SessionList = () => {
   }, [currentPage]);
 
   useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
+    // Debounce API calls to prevent excessive requests
+    const timeoutId = setTimeout(() => {
+      fetchSessions();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [currentPage]);
 
   return (
     <div className="min-h-screen bg-gray-50">
