@@ -46,7 +46,7 @@ const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
 
       return processedData.map((item, index) => {
         if (!item || typeof item !== 'object') return null;
-        
+
         return {
           name: item.party_name || 
                 item.speaker?.naas_nm || 
@@ -66,6 +66,30 @@ const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
       return [];
     }
   }, [data]);
+
+  // For sentiment distribution, create data with three categories
+  const sentimentBarData = React.useMemo(() => {
+    if (chartData.length === 0) return [];
+
+    // If we have overall sentiment data, create a single entry with three bars
+    if (chartData.length === 1 && (chartData[0].name === "Overall" || chartData[0].name === "전체")) {
+      const item = chartData[0];
+      return [{
+        name: "감성 분포",
+        긍정: item.positive_count || 0,
+        중립: item.neutral_count || (item.statement_count - (item.positive_count || 0) - (item.negative_count || 0)) || 0,
+        부정: item.negative_count || 0
+      }];
+    }
+
+    // For party-wise data, show each party with their sentiment breakdown
+    return chartData.map(item => ({
+      name: item.name,
+      긍정: item.positive_count || 0,
+      중립: item.neutral_count || 0,
+      부정: item.negative_count || 0
+    }));
+  }, [chartData]);
 
   if (!chartData || chartData.length === 0) {
     return (
@@ -104,30 +128,6 @@ const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
     }
     return null;
   };
-
-  // For sentiment distribution, create data with three categories
-  const sentimentBarData = React.useMemo(() => {
-    if (chartData.length === 0) return [];
-
-    // If we have overall sentiment data, create a single entry with three bars
-    if (chartData.length === 1 && (chartData[0].name === "Overall" || chartData[0].name === "전체")) {
-      const item = chartData[0];
-      return [{
-        name: "감성 분포",
-        긍정: item.positive_count || 0,
-        중립: item.neutral_count || (item.statement_count - (item.positive_count || 0) - (item.negative_count || 0)) || 0,
-        부정: item.negative_count || 0
-      }];
-    }
-
-    // For party-wise data, show each party with their sentiment breakdown
-    return chartData.map(item => ({
-      name: item.name,
-      긍정: item.positive_count || 0,
-      중립: item.neutral_count || 0,
-      부정: item.negative_count || 0
-    }));
-  }, [chartData]);
 
   const CustomTooltipThreeBars = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
