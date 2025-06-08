@@ -56,9 +56,10 @@ class Command(BaseCommand):
         ]
         
         self.stdout.write('🏛️ Step 1: Analyzing current Speaker party data...')
+        self.stdout.write('   This may take a few minutes for large datasets...')
         
-        # Get all speakers and their party information
-        speakers = Speaker.objects.all()
+        # Get all speakers and their party information (optimized with select_related)
+        speakers = Speaker.objects.select_related('current_party').all()
         party_analysis = defaultdict(lambda: {
             'speakers': [],
             'statement_count': 0,
@@ -66,7 +67,21 @@ class Command(BaseCommand):
             'final_party_only': []  # Speakers where this is their final party
         })
         
+        # Pre-fetch statement counts for all speakers to avoid N+1 queries
+        statement_counts = Statement.objects.values('speaker_id').annotate(
+            count=Count('id'),
+            avg_sentiment=Avg('sentiment_score')
+        )
+        statement_data = {item['speaker_id']: item for item in statement_counts}
+        
+        total_speakers = speakers.count()
+        processed = 0
+        
         for speaker in speakers:
+            processed += 1
+            if processed % 100 == 0:
+                self.stdout.write(f'   Processed {processed}/{total_speakers} speakers...')
+                
             party_list = speaker.get_party_list()
             if not party_list:
                 continue
@@ -74,10 +89,10 @@ class Command(BaseCommand):
             # Get the final (most recent) party
             final_party = party_list[-1]
             
-            # Count statements for this speaker
-            statement_count = Statement.objects.filter(speaker=speaker).count()
-            avg_sentiment = Statement.objects.filter(speaker=speaker).aggregate(
-                avg=Avg('sentiment_score'))['avg'] or 0
+            # Get statement data from pre-fetched results
+            speaker_data = statement_data.get(speaker.naas_cd, {'count': 0, 'avg_sentiment': 0})
+            statement_count = speaker_data['count']
+            avg_sentiment = speaker_data['avg_sentiment'] or 0
             
             # Add to all parties in history
             for party in party_list:
@@ -165,12 +180,16 @@ class Command(BaseCommand):
             statement_count = data['statement_count']
             
             if member_count > 0:
-                # Calculate average sentiment
-                all_statements = Statement.objects.filter(
-                    speaker__in=data['speakers']
-                )
-                avg_sentiment = all_statements.aggregate(
-                    avg=Avg('sentiment_score'))['avg'] or 0
+                # Calculate average sentiment from already processed data
+                total_sentiment = 0
+                total_statements = 0
+                for speaker in data['speakers']:
+                    speaker_data = statement_data.get(speaker.naas_cd, {'count': 0, 'avg_sentiment': 0})
+                    if speaker_data['count'] > 0 and speaker_data['avg_sentiment']:
+                        total_sentiment += speaker_data['avg_sentiment'] * speaker_data['count']
+                        total_statements += speaker_data['count']
+                
+                avg_sentiment = total_sentiment / total_statements if total_statements > 0 else 0
                 
                 self.stdout.write(
                     f'   {party_name}: {member_count} 의원, '
