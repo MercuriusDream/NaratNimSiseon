@@ -23,18 +23,19 @@ class Command(BaseCommand):
         
         # Define problematic/old party names that should be cleaned up
         problematic_parties = [
-            '대한독립촉성국민회',
-            '한나라당', 
-            '민주자유당',
-            '정보없음',
-            '민주정의당',
-            '신민당',
-            '바른정당',
-            '한국당',
-            '정의당',  # Old version
-            '무소속',
-            '',
-            ' ',
+            '대한독립촉성국민회',  # Historical independence movement party
+            '한나라당',           # Historical predecessor to 국민의힘
+            '민주자유당',         # Historical party from 1990s
+            '민주정의당',         # Historical party from 1980s-1990s
+            '신민당',            # Historical party
+            '바른정당',          # Historical party
+            '한국당',            # Historical party name
+            '정의당',            # Old version, should be mapped to current
+            '무소속',            # Independent - should be standardized
+            '정보없음',          # Missing information
+            '',                 # Empty string
+            ' ',                # Whitespace only
+            'None',             # Null values converted to string
         ]
         
         # Define current 22nd Assembly parties (official names)
@@ -49,13 +50,24 @@ class Command(BaseCommand):
         
         # Party name mappings for consolidation
         party_mappings = {
+            # Modern party consolidations
             '민주통합당': '더불어민주당',
             '더불어민주연합': '더불어민주당',
             '자유한국당': '국민의힘',
             '미래통합당': '국민의힘',
             '국민의미래': '새로운미래',
-            '한나라당': '국민의힘',  # Historical mapping
-            '민주자유당': '더불어민주당',  # Historical mapping
+            
+            # Historical party mappings (careful - these need verification)
+            '한나라당': '국민의힘',        # Conservative lineage
+            '민주정의당': '국민의힘',      # Conservative lineage  
+            '민주자유당': '더불어민주당',    # Liberal lineage (needs verification)
+            
+            # Standardize independents and missing data
+            '무소속': '무소속',
+            '정보없음': '무소속',         # Treat as independent if no info
+            '': '무소속',               # Empty strings as independent
+            ' ': '무소속',              # Whitespace as independent
+            'None': '무소속',           # Null values as independent
         }
         
         self.stdout.write('🧹 Step 1: Analyzing current party data...')
