@@ -14,6 +14,7 @@ urlpatterns = [
     path('sessions/<str:pk>/', views.SessionViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='session-detail'),
     path('sessions/<str:pk>/bills/', views.SessionViewSet.as_view({'get': 'bills'}), name='session-bills'),
     path('sessions/<str:pk>/statements/', views.SessionViewSet.as_view({'get': 'statements'}), name='session-statements'),
+    path('sessions/<str:pk>/sentiment_by_party/', views.session_sentiment_by_party, name='session-sentiment-by-party'),
 
     path('bills/', views.BillViewSet.as_view({'get': 'list', 'post': 'create'}), name='bill-list'),
     path('bills/<str:pk>/', views.BillViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='bill-detail'),
