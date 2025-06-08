@@ -52,25 +52,35 @@ class SessionViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        era_co = self.request.query_params.get('era_co')
-        sess = self.request.query_params.get('sess')
-        dgr = self.request.query_params.get('dgr')
-        date_from = self.request.query_params.get('date_from')
-        date_to = self.request.query_params.get('date_to')
+        try:
+            queryset = super().get_queryset()
+            era_co = self.request.query_params.get('era_co')
+            sess = self.request.query_params.get('sess')
+            dgr = self.request.query_params.get('dgr')
+            date_from = self.request.query_params.get('date_from')
+            date_to = self.request.query_params.get('date_to')
 
-        if era_co:
-            queryset = queryset.filter(era_co=era_co)
-        if sess:
-            queryset = queryset.filter(sess=sess)
-        if dgr:
-            queryset = queryset.filter(dgr=dgr)
-        if date_from:
-            queryset = queryset.filter(conf_dt__gte=date_from)
-        if date_to:
-            queryset = queryset.filter(conf_dt__lte=date_to)
+            if era_co:
+                queryset = queryset.filter(era_co=era_co)
+            if sess:
+                queryset = queryset.filter(sess=sess)
+            if dgr:
+                queryset = queryset.filter(dgr=dgr)
+            if date_from:
+                try:
+                    queryset = queryset.filter(conf_dt__gte=date_from)
+                except ValueError:
+                    logger.warning(f"Invalid date_from format: {date_from}")
+            if date_to:
+                try:
+                    queryset = queryset.filter(conf_dt__lte=date_to)
+                except ValueError:
+                    logger.warning(f"Invalid date_to format: {date_to}")
 
-        return queryset.order_by('-conf_dt')
+            return queryset.order_by('-conf_dt')
+        except Exception as e:
+            logger.error(f"Error in SessionViewSet get_queryset: {e}")
+            return Session.objects.none()
 
     @action(detail=True, methods=['get'])
     @api_action_wrapper(log_prefix="Fetching bills for session",
@@ -101,12 +111,30 @@ class BillViewSet(viewsets.ModelViewSet):
         try:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
-            return Response(serializer.data)
+            
+            # Add extra data for the bill
+            response_data = serializer.data
+            
+            # Add statement count
+            statement_count = Statement.objects.filter(bill=instance).count()
+            response_data['statement_count'] = statement_count
+            
+            # Add voting records count if available
+            try:
+                voting_count = VotingRecord.objects.filter(bill=instance).count()
+                response_data['voting_count'] = voting_count
+            except:
+                response_data['voting_count'] = 0
+            
+            return Response(response_data)
+        except Http404:
+            return Response({
+                'detail': 'Bill not found.'
+            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"Error retrieving bill {kwargs.get('pk')}: {e}")
             return Response({
-                'status': 'error',
-                'message': 'Failed to retrieve bill'
+                'detail': 'Failed to retrieve bill'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get_queryset(self):
@@ -294,23 +322,28 @@ class BillViewSet(viewsets.ModelViewSet):
             bill = self.get_object()
             statements = Statement.objects.filter(bill=bill)
 
+            # Initialize default response structure
+            response_data = {
+                'bill': {
+                    'id': bill.bill_id,
+                    'name': bill.bill_nm
+                },
+                'sentiment_summary': {
+                    'total_statements': 0,
+                    'average_sentiment': 0,
+                    'positive_count': 0,
+                    'neutral_count': 0,
+                    'negative_count': 0,
+                    'positive_percentage': 0,
+                    'negative_percentage': 0
+                },
+                'party_breakdown': [],
+                'speaker_breakdown': [],
+                'sentiment_timeline': []
+            }
+
             if not statements.exists():
-                return Response({
-                    'bill': {
-                        'id': bill.bill_id,
-                        'name': bill.bill_nm
-                    },
-                    'sentiment_summary': {
-                        'total_statements': 0,
-                        'average_sentiment': 0,
-                        'positive_count': 0,
-                        'neutral_count': 0,
-                        'negative_count': 0
-                    },
-                    'party_breakdown': [],
-                    'speaker_breakdown': [],
-                    'sentiment_timeline': []
-                })
+                return Response(response_data)
 
             # Calculate sentiment summary
             total_statements = statements.count()
@@ -510,8 +543,17 @@ class PartyViewSet(viewsets.ModelViewSet):
                     logger.error(f"Error triggering additional data fetch: {e}")
 
             queryset = self.filter_queryset(self.get_queryset())
-            serializer = self.get_serializer(queryset, many=True)
+            
+            # Paginate the queryset
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                result = self.get_paginated_response(serializer.data)
+                if fetch_additional:
+                    result.data['additional_data_fetched'] = True
+                return result
 
+            serializer = self.get_serializer(queryset, many=True)
             data = serializer.data if serializer.data is not None else []
 
             response_data = {
@@ -526,7 +568,10 @@ class PartyViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error in PartyViewSet list: {e}")
-            return Response([])
+            return Response({
+                'results': [],
+                'count': 0
+            }, status=200)
 
 
 class StatementListView(generics.ListAPIView):
@@ -1379,94 +1424,119 @@ def home_data(request):
         recent_sessions = Session.objects.order_by('-conf_dt')[:5]
         sessions_data = []
         for session in recent_sessions:
-            sessions_data.append({
-                'id': session.conf_id,
-                'title': session.title or f'제{session.era_co} {session.sess}회 {session.dgr}차',
-                'date': session.conf_dt,
-                'committee': session.cmit_nm or '',
-                'statement_count': session.statements.count(),
-                'bill_count': session.bills.count()
-            })
+            try:
+                sessions_data.append({
+                    'id': session.conf_id,
+                    'title': session.title or f'제{session.era_co}대 {session.sess}회 {session.dgr}차',
+                    'date': session.conf_dt.isoformat() if session.conf_dt else None,
+                    'committee': session.cmit_nm or '',
+                    'statement_count': session.statements.count(),
+                    'bill_count': session.bills.count()
+                })
+            except Exception as e:
+                logger.error(f"Error processing session {session.conf_id}: {e}")
+                continue
 
         # Get recent bills with statement counts
-        recent_bills = Bill.objects.select_related('session').prefetch_related('statements').order_by('-created_at')[:5]
+        recent_bills = Bill.objects.select_related('session').order_by('-created_at')[:5]
         bills_data = []
         for bill in recent_bills:
-            statement_count = bill.statements.count()
-            # Generate a proper session title if not available
-            session_title = bill.session.title if bill.session and bill.session.title else None
-            if not session_title and bill.session:
-                session_title = f"제{bill.session.era_co} {bill.session.sess}회 {bill.session.dgr}차"
-            
-            bills_data.append({
-                'id': bill.bill_id,
-                'title': bill.bill_nm,
-                'proposer': bill.proposer,
-                'session_id': bill.session.conf_id if bill.session else None,
-                'session_title': session_title,
-                'statement_count': statement_count
-            })
+            try:
+                statement_count = Statement.objects.filter(bill=bill).count()
+                # Generate a proper session title if not available
+                session_title = None
+                if bill.session:
+                    session_title = bill.session.title if bill.session.title else f"제{bill.session.era_co}대 {bill.session.sess}회 {bill.session.dgr}차"
+                
+                bills_data.append({
+                    'id': bill.bill_id,
+                    'title': bill.bill_nm,
+                    'proposer': bill.proposer or '정보없음',
+                    'session_id': bill.session.conf_id if bill.session else None,
+                    'session_title': session_title,
+                    'statement_count': statement_count
+                })
+            except Exception as e:
+                logger.error(f"Error processing bill {bill.bill_id}: {e}")
+                continue
 
         # Get recent statements with sentiment analysis
         recent_statements = Statement.objects.select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
         statements_data = []
         for statement in recent_statements:
-            statements_data.append({
-                'id': statement.id,
-                'speaker_name': statement.speaker.naas_nm,
-                'speaker_party': statement.speaker.plpt_nm,  # Use plpt_nm directly
-                'text': statement.text[:200] + '...' if len(statement.text) > 200 else statement.text,
-                'sentiment_score': statement.sentiment_score or 0,
-                'sentiment_reason': statement.sentiment_reason or '',
-                'bill_relevance_score': statement.bill_relevance_score or 0,
-                'session_title': statement.session.title if statement.session else None,
-                'bill_title': statement.bill.bill_nm if statement.bill else None,
-                'created_at': statement.created_at
-            })
+            try:
+                statements_data.append({
+                    'id': statement.id,
+                    'speaker_name': statement.speaker.naas_nm if statement.speaker else '알 수 없음',
+                    'speaker_party': statement.speaker.get_current_party_name() if statement.speaker else '정당정보없음',
+                    'text': statement.text[:200] + '...' if len(statement.text) > 200 else statement.text,
+                    'sentiment_score': statement.sentiment_score or 0,
+                    'sentiment_reason': statement.sentiment_reason or '',
+                    'bill_relevance_score': statement.bill_relevance_score or 0,
+                    'session_title': statement.session.title if statement.session and statement.session.title else None,
+                    'bill_title': statement.bill.bill_nm if statement.bill else None,
+                    'created_at': statement.created_at.isoformat() if statement.created_at else None
+                })
+            except Exception as e:
+                logger.error(f"Error processing statement {statement.id}: {e}")
+                continue
 
         # Calculate overall sentiment stats
-        all_statements = Statement.objects.all()
-        total_statements = all_statements.count()
+        total_statements = Statement.objects.count()
+        avg_sentiment = 0
+        positive_count = 0
+        neutral_count = 0
+        negative_count = 0
 
         if total_statements > 0:
-            avg_sentiment = all_statements.aggregate(
-                avg_sentiment=models.Avg('sentiment_score')
-            )['avg_sentiment'] or 0
+            try:
+                avg_sentiment_result = Statement.objects.aggregate(
+                    avg_sentiment=models.Avg('sentiment_score')
+                )['avg_sentiment']
+                avg_sentiment = avg_sentiment_result or 0
 
-            positive_count = all_statements.filter(sentiment_score__gt=0.3).count()
-            neutral_count = all_statements.filter(
-                sentiment_score__gte=-0.3, 
-                sentiment_score__lte=0.3
-            ).count()
-            negative_count = all_statements.filter(sentiment_score__lt=-0.3).count()
-        else:
-            avg_sentiment = 0
-            positive_count = 0
-            neutral_count = 0
-            negative_count = 0
+                positive_count = Statement.objects.filter(sentiment_score__gt=0.3).count()
+                negative_count = Statement.objects.filter(sentiment_score__lt=-0.3).count()
+                neutral_count = total_statements - positive_count - negative_count
+            except Exception as e:
+                logger.error(f"Error calculating sentiment stats: {e}")
 
         # Get party statistics - simplified approach
         party_stats = []
-        # Get top parties by statement count
-        party_statement_counts = Statement.objects.values('speaker__plpt_nm').annotate(
-            statement_count=Count('id'),
-            avg_sentiment=Avg('sentiment_score')
-        ).filter(statement_count__gt=0).order_by('-statement_count')[:10]
+        try:
+            # Get unique party names from speakers
+            unique_parties = Speaker.objects.values_list('plpt_nm', flat=True).distinct()
+            
+            for party_name in unique_parties:
+                if party_name and party_name.strip():
+                    try:
+                        # Count statements by this party
+                        statement_count = Statement.objects.filter(speaker__plpt_nm=party_name).count()
+                        if statement_count > 0:
+                            # Get average sentiment
+                            avg_sentiment_result = Statement.objects.filter(speaker__plpt_nm=party_name).aggregate(
+                                avg_sentiment=Avg('sentiment_score')
+                            )['avg_sentiment']
+                            
+                            # Get member count for this party
+                            member_count = Speaker.objects.filter(plpt_nm=party_name).count()
+                            
+                            party_stats.append({
+                                'party_name': party_name,
+                                'member_count': member_count,
+                                'statement_count': statement_count,
+                                'avg_sentiment': round(avg_sentiment_result or 0, 3)
+                            })
+                    except Exception as e:
+                        logger.error(f"Error processing party {party_name}: {e}")
+                        continue
+            
+            # Sort by statement count and take top 10
+            party_stats = sorted(party_stats, key=lambda x: x['statement_count'], reverse=True)[:10]
+        except Exception as e:
+            logger.error(f"Error calculating party stats: {e}")
 
-        for party_data in party_statement_counts:
-            party_name = party_data['speaker__plpt_nm']
-            if party_name and party_name.strip():
-                # Get member count for this party
-                member_count = Speaker.objects.filter(plpt_nm=party_name).count()
-                
-                party_stats.append({
-                    'party_name': party_name,
-                    'member_count': member_count,
-                    'statement_count': party_data['statement_count'],
-                    'avg_sentiment': round(party_data['avg_sentiment'] or 0, 3)
-                })
-
-        return Response({
+        response_data = {
             'recent_sessions': sessions_data,
             'recent_bills': bills_data,
             'recent_statements': statements_data,
@@ -1481,7 +1551,9 @@ def home_data(request):
             'total_sessions': Session.objects.count(),
             'total_bills': Bill.objects.count(),
             'total_speakers': Speaker.objects.count()
-        })
+        }
+
+        return Response(response_data)
 
     except Exception as e:
         logger.error(f"Error in home_data view: {e}")
@@ -1503,4 +1575,4 @@ def home_data(request):
             'total_sessions': 0,
             'total_bills': 0,
             'total_speakers': 0
-        })
+        }, status=200)
