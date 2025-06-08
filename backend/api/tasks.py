@@ -1474,7 +1474,11 @@ def process_speech_segments_multithreaded(speech_segments, session_id, bill_name
                     
             except Exception as e:
                 segment_index = future_to_index[future]
-                logger.error(f"❌ Exception processing segment {segment_index + 1}: {e}")
+                logger.error(f"❌ Exception processing segment {segment_index + 1} for bill '{bill_name}': {e}")
+                # Log the segment content that failed (first 200 chars)
+                if segment_index < len(speech_segments):
+                    failed_segment = speech_segments[segment_index]
+                    logger.debug(f"Failed segment content preview: {failed_segment[:200]}...")
             
             # Log progress
             if completed_count % 5 == 0 or completed_count == len(speech_segments):
@@ -1592,8 +1596,23 @@ def analyze_speech_segment_with_llm(speech_segment,
         should_ignore = any(ignored in speaker_name for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
         if not speaker_name or not speech_content or not is_valid_member or not is_substantial or should_ignore or not is_real_member:
-            skip_reason = "ignored speaker" if should_ignore else "not a real member" if not is_real_member else "invalid or insubstantial"
-            logger.info(f"Skipping speech segment due to {skip_reason}: Speaker='{speaker_name}', Valid={is_valid_member}, Substantial={is_substantial}, RealMember={is_real_member}")
+            # More detailed skip reason logging
+            skip_reasons = []
+            if not speaker_name:
+                skip_reasons.append("no speaker name")
+            if not speech_content:
+                skip_reasons.append("no speech content")
+            if not is_valid_member:
+                skip_reasons.append("not valid member")
+            if not is_substantial:
+                skip_reasons.append("not substantial content")
+            if should_ignore:
+                skip_reasons.append("ignored speaker type")
+            if not is_real_member:
+                skip_reasons.append("not real assembly member")
+            
+            skip_reason = ", ".join(skip_reasons)
+            logger.info(f"Skipping speech segment for bill '{bill_name}': {skip_reason}. Speaker='{speaker_name}', Valid={is_valid_member}, Substantial={is_substantial}, RealMember={is_real_member}")
             return None
 
         # Return the complete analysis
@@ -1609,9 +1628,13 @@ def analyze_speech_segment_with_llm(speech_segment,
         }
 
     except json.JSONDecodeError as e:
-        logger.error(f"❌ JSON parsing error for speech segment analysis: {e}")
+        logger.error(f"❌ JSON parsing error for speech segment analysis in bill '{bill_name}': {e}")
+        logger.debug(f"Raw LLM response that failed to parse: {response_text_cleaned[:500]}...")
     except Exception as e:
-        logger.error(f"❌ Error during speech segment analysis: {e}")
+        logger.error(f"❌ Error during speech segment analysis for bill '{bill_name}': {e}")
+        if hasattr(e, '__traceback__'):
+            import traceback
+            logger.debug(f"Full traceback: {traceback.format_exc()}")
     
     return None
 
