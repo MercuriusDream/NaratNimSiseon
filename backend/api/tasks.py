@@ -1523,10 +1523,27 @@ def analyze_batch_statements_single_request(batch_model, batch_segments, bill_na
     if not batch_segments:
         return []
 
+    # Clean and prepare segments
+    cleaned_segments = []
+    for i, segment in enumerate(batch_segments):
+        # Remove newlines and clean text
+        cleaned_segment = segment.replace('\n', ' ').replace('\r', '').strip()
+        
+        # Stop at reporting end marker
+        report_end_marker = "(보고사항은 끝에 실음)"
+        if report_end_marker in cleaned_segment:
+            cleaned_segment = cleaned_segment.split(report_end_marker)[0].strip()
+        
+        # Limit segment length for prompt efficiency
+        if len(cleaned_segment) > 500:
+            cleaned_segment = cleaned_segment[:500] + "..."
+        
+        cleaned_segments.append(cleaned_segment)
+
     # Create batch prompt for multiple segments
     segments_text = ""
-    for i, segment in enumerate(batch_segments):
-        segments_text += f"\n--- SEGMENT {i+1} ---\n{segment[:1000]}...\n"  # Limit each segment to 1000 chars
+    for i, segment in enumerate(cleaned_segments):
+        segments_text += f"\n--- SEGMENT {i+1} ---\n{segment}\n"
     
     prompt = f"""
 Analyze these {len(batch_segments)} Korean parliament speech segments and return JSON array:
@@ -1539,8 +1556,9 @@ Return ONLY valid JSON array with {len(batch_segments)} objects:
 [
   {{
     "segment_index": 1,
-    "speaker_name": "speaker name without titles",
-    "speech_content": "actual speech content",
+    "speaker_name": "clean speaker name extracted from ◯ patterns (e.g., from '◯의사국장 김승묵' extract '김승묵')",
+    "start_idx": 0,
+    "end_idx": 100,
     "is_valid_member": true/false,
     "is_substantial": true/false,
     "sentiment_score": -1.0 to 1.0,
@@ -1550,9 +1568,10 @@ Return ONLY valid JSON array with {len(batch_segments)} objects:
 ]
 
 Rules: 
+- Extract speaker names from ◯ patterns, clean titles (의원, 위원장, 의사국장, etc.)
+- start_idx and end_idx should represent character positions in the original segment
 - Real parliament member names only
 - No procedural speeches 
-- Remove titles like 의원/위원장
 - Must return exactly {len(batch_segments)} objects
 - Use segment_index 1-{len(batch_segments)}
 """
@@ -1587,19 +1606,37 @@ Rules:
                 continue
                 
             speaker_name = analysis_json.get('speaker_name', '').strip()
-            speech_content = analysis_json.get('speech_content', '').strip()
+            start_idx = analysis_json.get('start_idx', 0)
+            end_idx = analysis_json.get('end_idx', 0)
             is_valid_member = analysis_json.get('is_valid_member', False)
             is_substantial = analysis_json.get('is_substantial', False)
+
+            # Extract speech content using indices from original segment
+            speech_content = ""
+            if i < len(batch_segments) and start_idx >= 0 and end_idx > start_idx:
+                original_segment = batch_segments[i]
+                # Clean original segment for consistent extraction
+                clean_original = original_segment.replace('\n', ' ').replace('\r', '').strip()
+                
+                # Stop at reporting end marker
+                report_end_marker = "(보고사항은 끝에 실음)"
+                if report_end_marker in clean_original:
+                    clean_original = clean_original.split(report_end_marker)[0].strip()
+                
+                # Extract using indices, with bounds checking
+                actual_end = min(end_idx, len(clean_original))
+                actual_start = min(start_idx, len(clean_original))
+                speech_content = clean_original[actual_start:actual_end].strip()
+
+            # Clean speaker name from titles
+            if speaker_name:
+                for title in ['의원', '위원장', '장관', '의장', '부의장', '의사국장', '사무관', '국장']:
+                    speaker_name = speaker_name.replace(title, '').strip()
 
             # Validate speaker name against assembly members
             is_real_member = False
             if speaker_name and assembly_members:
-                name_for_matching = speaker_name
-                for title in ['의원', '위원장', '장관', '의장', '부의장']:
-                    name_for_matching = name_for_matching.replace(title, '').strip()
-                
-                is_real_member = name_for_matching in assembly_members or speaker_name in assembly_members
-                
+                is_real_member = speaker_name in assembly_members
                 if not assembly_members:
                     is_real_member = is_valid_member
 
