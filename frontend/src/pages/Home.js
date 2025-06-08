@@ -28,24 +28,13 @@ const Home = () => {
             const stats = homeResponse.data.overall_stats;
             const totalStatements = stats.total_statements || 0;
 
-            if (totalStatements > 0) {
-              setSentimentData({
-                total_statements: totalStatements,
-                positive_count: stats.positive_count || 0,
-                negative_count: stats.negative_count || 0,
-                neutral_count: stats.neutral_count || 0,
-                average_sentiment: stats.average_sentiment || 0
-              });
-            } else {
-              // Set empty sentiment data to show proper empty state
-              setSentimentData({
-                total_statements: 0,
-                positive_count: 0,
-                negative_count: 0,
-                neutral_count: 0,
-                average_sentiment: 0
-              });
-            }
+            setSentimentData({
+              total_statements: totalStatements,
+              positive_count: stats.positive_count || 0,
+              negative_count: stats.negative_count || 0,
+              neutral_count: stats.neutral_count || 0,
+              average_sentiment: stats.average_sentiment || 0
+            });
           }
           return;
         } catch (homeErr) {
@@ -86,12 +75,13 @@ const Home = () => {
         if (combinedData.overall_stats) {
           const stats = combinedData.overall_stats;
           const totalStatements = stats.total_statements || 0;
+          const neutral_count = Math.max(0, totalStatements - (stats.positive_count || 0) - (stats.negative_count || 0));
 
           setSentimentData({
             total_statements: totalStatements,
             positive_count: stats.positive_count || 0,
             negative_count: stats.negative_count || 0,
-            neutral_count: 0,
+            neutral_count: neutral_count,
             average_sentiment: stats.average_sentiment || 0
           });
         }

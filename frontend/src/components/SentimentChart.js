@@ -8,45 +8,69 @@ const SentimentChart = ({ data, title = "감성 분석 결과" }) => {
 
     let processedData = [];
 
-    // Handle different data structures
-    if (Array.isArray(data)) {
-      processedData = data;
-    } else if (data.party_sentiment && Array.isArray(data.party_sentiment)) {
-      processedData = data.party_sentiment;
-    } else if (data.results && Array.isArray(data.results)) {
-      processedData = data.results;
-    } else if (data.party_analysis && Array.isArray(data.party_analysis)) {
-      processedData = data.party_analysis;
-    } else if (data.sentiment_summary) {
-      // Handle single sentiment summary
-      return [{
-        name: "Overall",
-        sentiment: data.sentiment_summary.average_sentiment || 0,
-        party: "All Parties"
-      }];
+    try {
+      // Handle different data structures with better validation
+      if (Array.isArray(data)) {
+        processedData = data;
+      } else if (data && typeof data === 'object') {
+        if (data.party_sentiment && Array.isArray(data.party_sentiment)) {
+          processedData = data.party_sentiment;
+        } else if (data.results && Array.isArray(data.results)) {
+          processedData = data.results;
+        } else if (data.party_analysis && Array.isArray(data.party_analysis)) {
+          processedData = data.party_analysis;
+        } else if (data.sentiment_summary) {
+          // Handle single sentiment summary
+          return [{
+            name: "Overall",
+            sentiment: data.sentiment_summary.average_sentiment || 0,
+            party: "All Parties",
+            statement_count: data.sentiment_summary.total_statements || 0,
+            positive_count: data.sentiment_summary.positive_count || 0,
+            negative_count: data.sentiment_summary.negative_count || 0
+          }];
+        } else if (data.total_statements !== undefined) {
+          // Handle overall stats format from home page
+          return [{
+            name: "Overall",
+            sentiment: data.average_sentiment || 0,
+            party: "전체",
+            statement_count: data.total_statements || 0,
+            positive_count: data.positive_count || 0,
+            negative_count: data.negative_count || 0
+          }];
+        }
+      }
+
+      if (!Array.isArray(processedData) || processedData.length === 0) return [];
+
+      return processedData.map((item, index) => {
+        if (!item || typeof item !== 'object') return null;
+        
+        return {
+          name: item.party_name || 
+                item.speaker?.naas_nm || 
+                item.name || 
+                `Item ${index + 1}`,
+          sentiment: parseFloat(item.combined_sentiment || item.avg_sentiment || item.sentiment_score || 0),
+          party: item.party_name || 
+                 item.speaker?.plpt_nm || 
+                 "Unknown Party",
+          statement_count: item.statement_count || 0,
+          positive_count: item.positive_count || 0,
+          negative_count: item.negative_count || 0
+        };
+      }).filter(Boolean); // Remove null entries
+    } catch (error) {
+      console.error('Error processing chart data:', error, data);
+      return [];
     }
-
-    if (processedData.length === 0) return [];
-
-    return processedData.map((item, index) => ({
-      name: item.party_name || 
-            item.speaker?.naas_nm || 
-            item.name || 
-            `Item ${index + 1}`,
-      sentiment: parseFloat(item.combined_sentiment || item.avg_sentiment || item.sentiment_score || 0),
-      party: item.party_name || 
-             item.speaker?.plpt_nm || 
-             "Unknown Party",
-      statement_count: item.statement_count || 0,
-      positive_count: item.positive_count || 0,
-      negative_count: item.negative_count || 0
-    }));
   }, [data]);
 
   if (!chartData || chartData.length === 0) {
-    // Show a default empty state chart instead of just text
     return (
       <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
         <div className="text-center text-gray-600 py-8">
           <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
