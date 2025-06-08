@@ -71,23 +71,22 @@ function PartyList() {
   }, [timeRange, selectedCategories]);
 
   useEffect(() => {
-    fetchPartiesCallback();
-    fetchCategoryData();
-  }, [fetchPartiesCallback, timeRange, selectedCategories]);
-
-  const fetchCategoryData = async () => {
-    try {
-      const params = new URLSearchParams({ time_range: timeRange });
-      if (selectedCategories.length > 0) {
-        params.append('categories', selectedCategories.join(','));
+    const loadParties = async () => {
+      try {
+        setLoading(true);
+        const { fetchParties } = await import('../api');
+        const response = await fetchParties();
+        setParties(Array.isArray(response) ? response : response.results || []);
+      } catch (err) {
+        console.error('Error fetching parties:', err);
+        setError('정당 데이터를 불러오는 중 오류가 발생했습니다.');
+      } finally {
+        setLoading(false);
       }
+    };
 
-      const response = await api.get(`/analytics/categories/?${params.toString()}`);
-      setCategoryData(response.data.results || response.data || []);
-    } catch (err) {
-      console.error('Error fetching category data:', err);
-    }
-  };
+    loadParties();
+  }, [timeRange]);
 
   if (loading) {
     return (

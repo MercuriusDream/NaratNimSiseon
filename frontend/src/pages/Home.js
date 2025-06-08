@@ -12,83 +12,28 @@ const Home = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchHomeData = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Try the home endpoint first
-        try {
-          const homeResponse = await api.get('/api/home-data/');
-          console.log('Home data response:', homeResponse.data);
-          setHomeData(homeResponse.data);
+        // Import the API functions
+        const { fetchHomeData, fetchStatsOverview } = await import('../api');
 
-          // Set sentiment data for chart if available
-          if (homeResponse.data.overall_stats) {
-            const stats = homeResponse.data.overall_stats;
-            const totalStatements = stats.total_statements || 0;
+        // Fetch multiple endpoints in parallel
+        const [homeResponse, statsResponse] = await Promise.all([
+          fetchHomeData(),
+          fetchStatsOverview()
+        ]);
 
-            setSentimentData({
-              total_statements: totalStatements,
-              positive_count: stats.positive_count || 0,
-              negative_count: stats.negative_count || 0,
-              neutral_count: stats.neutral_count || 0,
-              average_sentiment: stats.average_sentiment || 0
-            });
-          }
-          return;
-        } catch (homeErr) {
-          console.warn('Home endpoint failed, trying individual endpoints:', homeErr);
-        }
+        console.log('Home data response:', homeResponse);
+        setHomeData(homeResponse);
+        setStatsData(statsResponse);
 
-        // Fallback to individual endpoints
-        const dataPromises = [
-          api.get('/api/sessions/').catch(() => ({ data: { results: [] } })),
-          api.get('/api/bills/').catch(() => ({ data: { results: [] } })),
-          api.get('/api/statements/').catch(() => ({ data: { results: [] } })),
-          api.get('/api/analytics/overall/').catch(() => ({ data: { total_statements: 0, average_sentiment: 0, positive_count: 0, neutral_count: 0, negative_count: 0 } })),
-          api.get('/api/analytics/parties/').catch(() => ({ data: { results: [] } }))
-        ];
-
-        const [sessionsRes, billsRes, statementsRes, overallRes, partyStatsRes] = await Promise.all(dataPromises);
-
-        const combinedData = {
-          recent_sessions: sessionsRes.data.results || sessionsRes.data || [],
-          recent_bills: billsRes.data.results || billsRes.data || [],
-          recent_statements: statementsRes.data.results || statementsRes.data || [],
-          overall_stats: overallRes.data || {
-            total_statements: 0,
-            average_sentiment: 0,
-            positive_count: 0,
-            neutral_count: 0,
-            negative_count: 0
-          },
-          party_stats: partyStatsRes.data.results || partyStatsRes.data || [],
-          total_sessions: sessionsRes.data.count || (sessionsRes.data.results ? sessionsRes.data.results.length : 0),
-          total_bills: billsRes.data.count || (billsRes.data.results ? billsRes.data.results.length : 0),
-          total_speakers: 300 // Default fallback
-        };
-
-        setHomeData(combinedData);
-
-        // Set sentiment data for chart
-        if (combinedData.overall_stats) {
-          const stats = combinedData.overall_stats;
-          const totalStatements = stats.total_statements || 0;
-          const neutral_count = Math.max(0, totalStatements - (stats.positive_count || 0) - (stats.negative_count || 0));
-
-          setSentimentData({
-            total_statements: totalStatements,
-            positive_count: stats.positive_count || 0,
-            negative_count: stats.negative_count || 0,
-            neutral_count: neutral_count,
-            average_sentiment: stats.average_sentiment || 0
-          });
-        }
       } catch (err) {
         console.error('Error fetching home data:', err);
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
-        // Set safe fallback data
+        // Set empty data to prevent crashes
         setHomeData({
           recent_sessions: [],
           recent_bills: [],
@@ -97,8 +42,7 @@ const Home = () => {
             total_statements: 0,
             average_sentiment: 0,
             positive_count: 0,
-            neutral_count: 0,
-            negative_count: 0
+            neutral_count: 0
           },
           party_stats: [],
           total_sessions: 0,
@@ -110,7 +54,7 @@ const Home = () => {
       }
     };
 
-    fetchHomeData();
+    fetchData();
   }, []);
 
   if (loading) {

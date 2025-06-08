@@ -11,43 +11,22 @@ const BillList = ({ filter }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchBills();
-  }, [filter, currentPage]);
-
-  const fetchBills = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams();
-      if (filter && filter !== 'all') {
-        params.append('status', filter);
+    const loadBills = async () => {
+      try {
+        setLoading(true);
+        const { fetchBills } = await import('../api');
+        const response = await fetchBills();
+        setBills(response.results || response || []);
+      } catch (err) {
+        console.error('Error fetching bills:', err);
+        setError('의안 데이터를 불러오는 중 오류가 발생했습니다.');
+      } finally {
+        setLoading(false);
       }
-      params.append('page', currentPage);
+    };
 
-      const response = await api.get(`/api/bills/?${params}`).catch(() => ({
-        data: { results: [], count: 0, next: null, previous: null }
-      }));
-
-      // Handle different response structures
-      const billsData = response.data?.results || response.data || [];
-      const paginationData = {
-        count: response.data?.count || billsData.length,
-        next: response.data?.next,
-        previous: response.data?.previous
-      };
-
-      setBills(Array.isArray(billsData) ? billsData : []);
-      setPagination(paginationData);
-    } catch (err) {
-      setError('의안 목록을 불러오는 중 오류가 발생했습니다.');
-      console.error('Error fetching bills:', err);
-      setBills([]);
-      setPagination({ count: 0, next: null, previous: null });
-    } finally {
-      setLoading(false);
-    }
-  };
+    loadBills();
+  }, []);
 
   return (
     <div>

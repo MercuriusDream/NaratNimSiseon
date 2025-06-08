@@ -9,46 +9,22 @@ const StatementList = ({ filters = {}, sessionId, billId }) => {
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    fetchStatements();
-  }, [filters, currentPage]);
-
-  const fetchStatements = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams();
-      params.append('page', currentPage);
-      if (sessionId) {
-        params.append('session', sessionId);
+    const loadStatements = async () => {
+      try {
+        setLoading(true);
+        const { default: api } = await import('../api');
+        const response = await api.get('/api/statements/');
+        setStatements(response.data.results || response.data || []);
+      } catch (err) {
+        console.error('Error fetching statements:', err);
+        setError('발언 데이터를 불러오는 중 오류가 발생했습니다.');
+      } finally {
+        setLoading(false);
       }
-      if (billId) {
-        params.append('bill', billId);
-      }
+    };
 
-      const response = await api.get(`/api/statements/?${params}`).catch(() => ({
-        data: { results: [], count: 0, next: null, previous: null }
-      }));
-
-      // Handle different response structures
-      const statementsData = response.data?.results || response.data || [];
-      const paginationData = {
-        count: response.data?.count || statementsData.length,
-        next: response.data?.next,
-        previous: response.data?.previous
-      };
-
-      setStatements(Array.isArray(statementsData) ? statementsData : []);
-      setPagination(paginationData);
-    } catch (err) {
-      setError('발언 목록을 불러오는 중 오류가 발생했습니다.');
-      console.error('Error fetching statements:', err);
-      setStatements([]);
-      setPagination({ count: 0, next: null, previous: null });
-    } finally {
-      setLoading(false);
-    }
-  };
+    loadStatements();
+  }, []);
 
   const getSentimentColor = (score) => {
     if (score > 0.3) return 'text-green-600 bg-green-100';

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import NavigationHeader from '../components/NavigationHeader';
 import Footer from '../components/Footer';
@@ -102,7 +101,7 @@ function SentimentAnalysis() {
                   특정 정당의 감성 분석 결과를 확인하세요. 
                   발언과 투표 기록을 종합하여 정당의 정책 성향을 분석합니다.
                 </p>
-                
+
                 <div className="mb-6">
                   <label htmlFor="party-select" className="block text-sm font-medium text-gray-700 mb-2">
                     분석할 정당 선택:
