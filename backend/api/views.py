@@ -54,15 +54,17 @@ class SessionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         try:
-            queryset = super().get_queryset()
+            # Filter to only show 22nd Assembly sessions
+            queryset = super().get_queryset().filter(era_co='22')
             era_co = self.request.query_params.get('era_co')
             sess = self.request.query_params.get('sess')
             dgr = self.request.query_params.get('dgr')
             date_from = self.request.query_params.get('date_from')
             date_to = self.request.query_params.get('date_to')
 
-            if era_co:
-                queryset = queryset.filter(era_co=era_co)
+            if era_co and era_co != '22':
+                # Only allow 22nd assembly
+                return Session.objects.none()
             if sess:
                 queryset = queryset.filter(sess=sess)
             if dgr:
@@ -459,7 +461,11 @@ class SpeakerViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        # Filter to only show 22nd Assembly speakers
+        queryset = super().get_queryset().filter(
+            models.Q(gtelt_eraco__icontains='22') | 
+            models.Q(gtelt_eraco__icontains='제22대')
+        )
         name = self.request.query_params.get('name')
         party = self.request.query_params.get('party')
         elecd_nm_param = self.request.query_params.get('elecd_nm')
@@ -471,8 +477,9 @@ class SpeakerViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(plpt_nm__icontains=party)
         if elecd_nm_param:
             queryset = queryset.filter(elecd_nm__icontains=elecd_nm_param)
-        if era_co:
-            queryset = queryset.filter(era_co=era_co)
+        if era_co and era_co != '22':
+            # Only allow 22nd assembly
+            return Speaker.objects.none()
 
         return queryset.order_by('naas_nm')
 
@@ -586,8 +593,8 @@ class PartyViewSet(viewsets.ModelViewSet):
                 '민주정의당', '신민당', '바른정당', '한국당', '무소속', '', ' '
             ]
             
-            # Get all parties and enhance with statistics, excluding problematic ones
-            parties = Party.objects.exclude(name__in=problematic_parties)
+            # Get only 22nd Assembly parties and enhance with statistics, excluding problematic ones
+            parties = Party.objects.filter(assembly_era=22).exclude(name__in=problematic_parties)
             party_data = []
 
             for party in parties:
@@ -682,7 +689,7 @@ class StatementListView(generics.ListAPIView):
 def statement_list(request):
     """List all statements with pagination and filtering"""
     try:
-        statements_qs = Statement.objects.select_related(
+        statements_qs = Statement.objects.filter(session__era_co='22').select_related(
             'speaker', 'session', 'bill').all()
 
         # Apply filters
@@ -723,7 +730,7 @@ def statement_list(request):
 def bill_list(request):
     """List all bills with pagination and filtering"""
     try:
-        bills_qs = Bill.objects.select_related('session').all()
+        bills_qs = Bill.objects.filter(session__era_co='22').select_related('session').all()
 
         # Apply filters
         session_id = request.query_params.get('session_id')
@@ -1568,8 +1575,8 @@ def sentiment_analysis_list(request):
 def home_data(request):
     """Get aggregated data for home page"""
     try:
-        # Use prefetch_related to optimize queries
-        recent_sessions = Session.objects.prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
+        # Use prefetch_related to optimize queries - only 22nd Assembly
+        recent_sessions = Session.objects.filter(era_co='22').prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
         sessions_data = []
         for session in recent_sessions:
             try:
@@ -1585,8 +1592,8 @@ def home_data(request):
                 logger.error(f"Error processing session {session.conf_id}: {e}")
                 continue
 
-        # Optimize recent bills query
-        recent_bills = Bill.objects.select_related('session').annotate(
+        # Optimize recent bills query - only 22nd Assembly
+        recent_bills = Bill.objects.filter(session__era_co='22').select_related('session').annotate(
             statement_count=Count('statements')
         ).order_by('-created_at')[:5]
         
@@ -1609,8 +1616,8 @@ def home_data(request):
                 logger.error(f"Error processing bill {bill.bill_id}: {e}")
                 continue
 
-        # Optimize recent statements query
-        recent_statements = Statement.objects.select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
+        # Optimize recent statements query - only 22nd Assembly
+        recent_statements = Statement.objects.filter(session__era_co='22').select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
         statements_data = []
         for statement in recent_statements:
             try:
@@ -1630,8 +1637,8 @@ def home_data(request):
                 logger.error(f"Error processing statement {statement.id}: {e}")
                 continue
 
-        # Optimize sentiment stats calculation with a single query
-        sentiment_stats = Statement.objects.aggregate(
+        # Optimize sentiment stats calculation with a single query - only 22nd Assembly
+        sentiment_stats = Statement.objects.filter(session__era_co='22').aggregate(
             total_count=Count('id'),
             avg_sentiment=Avg('sentiment_score'),
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
@@ -1650,8 +1657,8 @@ def home_data(request):
             '민주정의당', '신민당', '바른정당', '한국당', '무소속', '', ' '
         ]
         
-        # Optimize party statistics with a single query, excluding problematic parties
-        party_stats = Statement.objects.select_related('speaker').values(
+        # Optimize party statistics with a single query, excluding problematic parties - only 22nd Assembly
+        party_stats = Statement.objects.filter(session__era_co='22').select_related('speaker').values(
             'speaker__plpt_nm'
         ).annotate(
             party_name=F('speaker__plpt_nm'),
@@ -1664,10 +1671,11 @@ def home_data(request):
             speaker__plpt_nm__in=problematic_parties
         ).order_by('-statement_count')[:10]
 
-        # Get member counts for top parties in a single query
+        # Get member counts for top parties in a single query - only 22nd Assembly
         top_party_names = [p['party_name'] for p in party_stats]
         member_counts = Speaker.objects.filter(
-            plpt_nm__in=top_party_names
+            plpt_nm__in=top_party_names,
+            gtelt_eraco__icontains='22'
         ).values('plpt_nm').annotate(
             member_count=Count('naas_cd')
         )
@@ -1680,10 +1688,10 @@ def home_data(request):
             party['member_count'] = member_count_lookup.get(party['party_name'], 0)
             party['avg_sentiment'] = round(party['avg_sentiment'] or 0, 3)
 
-        # Get basic counts with a single query each
-        total_sessions = Session.objects.count()
-        total_bills = Bill.objects.count()
-        total_speakers = Speaker.objects.count()
+        # Get basic counts with a single query each - only 22nd Assembly
+        total_sessions = Session.objects.filter(era_co='22').count()
+        total_bills = Bill.objects.filter(session__era_co='22').count()
+        total_speakers = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
 
         # Ensure all arrays are properly formatted
         response_data = {
