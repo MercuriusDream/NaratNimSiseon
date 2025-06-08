@@ -1813,38 +1813,42 @@ def _process_single_segmentation_batch(text_segment, bill_name, global_offset=0)
         max_chunk_size = 12000  # Increased chunk size for better context
         if len(clean_text) <= max_chunk_size:
             return _process_text_chunk_for_segmentation(segmentation_model, clean_text, bill_name, 0)
-        
+
         # Split into overlapping chunks for better continuity
         chunk_overlap = 1000  # 1k character overlap
         all_indices = []
-        
+
         for chunk_start in range(0, len(clean_text), max_chunk_size - chunk_overlap):
             chunk_end = min(chunk_start + max_chunk_size, len(clean_text))
             chunk_text = clean_text[chunk_start:chunk_end]
-            
+
             # Process this chunk
             chunk_indices = _process_text_chunk_for_segmentation(segmentation_model, chunk_text, bill_name, chunk_start)
-            
+
             # Adjust indices to global position and filter overlaps
             for idx_pair in chunk_indices:
                 global_start = idx_pair['start'] + chunk_start + global_offset
                 global_end = idx_pair['end'] + chunk_start + global_offset
-                
+
                 # Check for overlaps with existing indices
                 is_overlap = False
                 for existing in all_indices:
                     if (global_start < existing['end'] and global_end > existing['start']):
                         is_overlap = True
                         break
-                
+
                 if not is_overlap:
                     all_indices.append({'start': global_start, 'end': global_end})
-            
+
             # Rate limiting between chunks
             if chunk_end < len(clean_text):
                 time.sleep(1)
-        
+
         return all_indices
+
+    except Exception as e:
+        logger.error(f"Error in single segmentation batch: {e}")
+        return []
 
 def _process_text_chunk_for_segmentation(model, text_chunk, bill_name, chunk_offset):
     """Process a single text chunk for speech segmentation."""
@@ -1909,65 +1913,55 @@ def _process_text_chunk_for_segmentation(model, text_chunk, bill_name, chunk_off
                         # Validate indices are within this chunk
                         if 0 <= start < end <= len(text_chunk):
                             valid_indices.append({'start': start, 'end': end})
-
                 return valid_indices
             else:
                 logger.warning(f"LLM response is not a list: {type(indices)}")
                 return []
-
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error in chunk segmentation: {e}")
             return []
-
     except Exception as e:
         logger.error(f"Error in chunk speech segmentation: {e}")
         return []
 
-
-def _process_bill_segmentation_with_batching(segmentation_llm, full_text, bill_names_list):
-    """Process bill segmentation with proper batching for large texts."""
-    if not full_text or len(full_text.strip()) < 500:
-        logger.warning(f"Text too short for bill segmentation (length: {len(full_text) if full_text else 0})")
-        return []
-    
     if not bill_names_list:
         logger.warning("No bill names provided for segmentation")
         return []
-    
+
     # Clean and validate inputs
     clean_text = full_text.strip()
     safe_bill_names = [str(bill)[:200] for bill in bill_names_list if bill and str(bill).strip()]
-    
+
     if not safe_bill_names:
         logger.warning("No valid bill names after cleaning")
         return []
-    
+
     # Process in batches if text is too long
     max_batch_size = 80000  # 80k chars for bill segmentation
     if len(clean_text) <= max_batch_size:
         return _process_single_bill_segmentation_batch(segmentation_llm, clean_text, safe_bill_names, 0)
-    
+
     logger.info(f"Processing bill segmentation in batches (text length: {len(clean_text)})")
-    
+
     # Split into overlapping batches
     batch_overlap = 10000  # 10k character overlap
     all_segments = []
-    
+
     for batch_start in range(0, len(clean_text), max_batch_size - batch_overlap):
         batch_end = min(batch_start + max_batch_size, len(clean_text))
         batch_text = clean_text[batch_start:batch_end]
-        
+
         logger.info(f"Processing bill segmentation batch: chars {batch_start}-{batch_end}")
-        
+
         # Process this batch
         batch_segments = _process_single_bill_segmentation_batch(
             segmentation_llm, batch_text, safe_bill_names, batch_start
         )
-        
+
         # Adjust positions to global coordinates and check for duplicates
         for segment in batch_segments:
             global_start = segment['b'] + batch_start
-            
+
             # Check if we already have this bill
             existing_bill = next((s for s in all_segments if s['a'] == segment['a']), None)
             if existing_bill:
@@ -1981,11 +1975,11 @@ def _process_bill_segmentation_with_batching(segmentation_llm, full_text, bill_n
                     'b': global_start,
                     'c': segment['c']
                 })
-        
+
         # Rate limiting between batches
         if batch_end < len(clean_text):
             time.sleep(2)
-    
+
     logger.info(f"Bill segmentation batching complete: {len(all_segments)} segments found")
     return all_segments
 
@@ -2018,21 +2012,21 @@ JSON 형식으로 응답:
 - JSON만 응답"""
 
         response = segmentation_llm.generate_content(bill_segmentation_prompt)
-        
+
         if not response or not response.text:
             logger.warning("No response from LLM for bill segmentation batch")
             return []
-        
+
         response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-        
+
         if not response_text or not ("{" in response_text and "}" in response_text):
             logger.warning(f"Invalid response format: {response_text[:100]}...")
             return []
-        
+
         try:
             data = json.loads(response_text)
             segments = data.get("bill_segments", [])
-            
+
             valid_segments = []
             for segment in segments:
                 if (isinstance(segment, dict) and 
@@ -2040,19 +2034,19 @@ JSON 형식으로 응답:
                     segment.get('bill_name', '').strip() and
                     isinstance(segment.get('start_position', -1), (int, float)) and
                     segment.get('start_position', -1) >= 0):
-                    
+
                     valid_segments.append({
                         'a': segment['bill_name'].strip(),
                         'b': int(segment['start_position']),
                         'c': float(segment['confidence'])
                     })
-            
+
             return valid_segments
-            
+
         except json.JSONDecodeError as e:
             logger.warning(f"JSON decode error in bill segmentation: {e}")
             return []
-            
+
     except Exception as e:
         logger.error(f"Error in bill segmentation batch: {e}")
         return []
@@ -2262,23 +2256,23 @@ def _process_large_batch_in_chunks(batch_model, segments, bill_name, assembly_me
     """Process large batches by splitting into smaller chunks."""
     chunk_size = 8  # Process 8 segments at a time
     all_results = []
-    
+
     for chunk_start in range(0, len(segments), chunk_size):
         chunk_end = min(chunk_start + chunk_size, len(segments))
         chunk_segments = segments[chunk_start:chunk_end]
-        
+
         chunk_results = analyze_batch_statements_single_request(
             batch_model, chunk_segments, bill_name, assembly_members,
             estimated_tokens // (len(segments) // chunk_size + 1),
             batch_start_index + chunk_start
         )
-        
+
         all_results.extend(chunk_results)
-        
+
         # Brief pause between chunks
         if chunk_end < len(segments):
             time.sleep(1)
-    
+
     return all_results
 
 def _execute_batch_analysis(batch_model, prompt, cleaned_segments, original_segments, assembly_members, batch_start_index):
@@ -2336,18 +2330,18 @@ def _execute_batch_analysis(batch_model, prompt, cleaned_segments, original_segm
                     '의사국장', '사무관', '국장', '서기관', '실장', '청장', '원장', 
                     '대변인', '비서관', '수석', '정무위원', '간사'
                 ]
-                
+
                 for title in titles_to_remove:
                     speaker_name = speaker_name.replace(title, '').strip()
 
             # Validate speaker
             is_real_member = speaker_name in assembly_members if assembly_members and speaker_name else is_valid_member
-            
+
             should_ignore = any(ignored in speaker_name for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
             if (speaker_name and speech_content and is_valid_member and 
                 is_substantial and not should_ignore and is_real_member):
-                
+
                 results.append({
                     'speaker_name': speaker_name,
                     'text': speech_content,
@@ -2365,7 +2359,7 @@ def _execute_batch_analysis(batch_model, prompt, cleaned_segments, original_segm
 
     except Exception as e:
         processing_time = time.time() - start_time
-        
+
         if "504" in str(e) or "Deadline" in str(e):
             logger.warning(f"⏰ BATCH TIMEOUT after {processing_time:.1f}s: {e}")
             time.sleep(15)
@@ -3188,9 +3182,10 @@ def process_pdf_text_for_statements(full_text,
             segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
 
         # Process bill segmentation with proper batching
-        bill_segments_from_llm = _process_bill_segmentation_with_batching(
-            segmentation_llm, segmentation_text, bill_names_list
-        )
+        try:
+            bill_segments_from_llm = _process_bill_segmentation_with_batching(
+                segmentation_llm, segmentation_text, bill_names_list
+            )
         except json.JSONDecodeError as e_json_seg:
             logger.error(
                 f"JSON parsing error for bill segmentation response: {e_json_seg}. Using bill names for fallback segmentation."
@@ -3305,13 +3300,13 @@ def process_pdf_text_for_statements(full_text,
         else:
             # Last resort: use keyword-based segmentation
             logger.info("No bill names available. Trying keyword-based segmentation of full text.")
-            
+
             # Look for common bill discussion patterns
             statements_from_full_text = extract_statements_with_keyword_fallback(
                 full_text, session_id, debug)
-            
+
             all_extracted_statements_data.extend(statements_from_full_text)
-            
+
             if not all_extracted_statements_data:
                 logger.warning("No statements could be extracted using any method.")
                 return
@@ -3524,16 +3519,16 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
     """
     if not text:
         return []
-    
+
     logger.info(f"🔍 Using keyword-based fallback extraction for session {session_id}")
-    
+
     # Find bill discussion sections using common patterns
     bill_patterns = [
         r'○\s*(\d+)\.\s*([^○]+?)(?=○|\Z)',  # "○ 1. 법안명" pattern
         r'(\d+)\.\s*([^○\n]{20,100}법률안[^○\n]*)',  # "번호. ...법률안" pattern
         r'의안번호\s*(\d+)[^○]*?([^○\n]{10,80})',  # "의안번호 XXXX" pattern
     ]
-    
+
     bill_segments = []
     for pattern in bill_patterns:
         matches = list(re.finditer(pattern, text, re.DOTALL))
@@ -3545,41 +3540,41 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
                     'start_pos': start_pos,
                     'bill_name': bill_name[:100]  # Limit length
                 })
-    
+
     # Sort by position and remove overlaps
     bill_segments.sort(key=lambda x: x['start_pos'])
-    
+
     all_statements = []
-    
+
     if bill_segments:
         logger.info(f"Found {len(bill_segments)} potential bill sections using keywords")
-        
+
         for i, segment in enumerate(bill_segments):
             start_pos = segment['start_pos']
             end_pos = bill_segments[i + 1]['start_pos'] if i + 1 < len(bill_segments) else len(text)
-            
+
             segment_text = text[start_pos:end_pos]
             bill_name = segment['bill_name']
-            
+
             # Extract statements from this segment
             statements_in_segment = process_single_segment_for_statements_with_splitting(
                 segment_text, session_id, bill_name, debug)
-            
+
             for stmt_data in statements_in_segment:
                 stmt_data['associated_bill_name'] = bill_name
-            
+
             all_statements.extend(statements_in_segment)
     else:
         # Process entire text as one segment
         logger.info("No bill patterns found, processing entire text")
         statements_from_full = process_single_segment_for_statements_with_splitting(
             text, session_id, "General Discussion", debug)
-        
+
         for stmt_data in statements_from_full:
             stmt_data['associated_bill_name'] = "General Discussion"
-        
+
         all_statements.extend(statements_from_full)
-    
+
     logger.info(f"✅ Keyword-based extraction completed: {len(all_statements)} statements")
     return all_statements
 
