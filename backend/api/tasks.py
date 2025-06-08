@@ -1479,6 +1479,77 @@ def extract_text_segment(text, start_marker, end_marker=None):
         return ""
 
 
+def extract_bill_specific_content(full_text, bill_name):
+    """Extract content specific to a bill from the full text using keyword matching."""
+    try:
+        if not full_text or not bill_name:
+            return ""
+        
+        # Clean bill name for better matching
+        clean_bill_name = bill_name.strip()
+        
+        # Create variations of the bill name for searching
+        search_terms = [clean_bill_name]
+        
+        # Add variations without common suffixes
+        if "법률안" in clean_bill_name:
+            search_terms.append(clean_bill_name.replace("법률안", ""))
+        if "일부개정" in clean_bill_name:
+            search_terms.append(clean_bill_name.replace("일부개정", ""))
+        
+        # Extract core bill name (before parentheses if any)
+        if "(" in clean_bill_name:
+            core_name = clean_bill_name.split("(")[0].strip()
+            search_terms.append(core_name)
+        
+        # Find all mentions of the bill in the text
+        bill_positions = []
+        for term in search_terms:
+            if len(term.strip()) > 3:  # Only search for meaningful terms
+                pos = 0
+                while True:
+                    found_pos = full_text.find(term, pos)
+                    if found_pos == -1:
+                        break
+                    bill_positions.append(found_pos)
+                    pos = found_pos + 1
+        
+        if not bill_positions:
+            logger.info(f"No mentions found for bill: {bill_name}")
+            return ""
+        
+        # Find the earliest mention
+        earliest_pos = min(bill_positions)
+        
+        # Extract content from the earliest mention to a reasonable endpoint
+        # Look for next bill mention or use chunk size
+        start_pos = max(0, earliest_pos - 500)  # Include some context before
+        
+        # Find a good end point (next bill, end of section, or max length)
+        max_segment_length = 15000  # 15k chars max per bill segment
+        end_pos = min(len(full_text), start_pos + max_segment_length)
+        
+        # Try to find a natural break point (like next bill discussion)
+        remaining_text = full_text[earliest_pos + len(clean_bill_name):end_pos]
+        
+        # Look for patterns that might indicate next bill discussion
+        next_bill_patterns = ["○", "의안", "법률안", "건의"]
+        for pattern in next_bill_patterns:
+            pattern_pos = remaining_text.find(pattern)
+            if pattern_pos != -1 and pattern_pos > 1000:  # At least 1k chars into the segment
+                end_pos = earliest_pos + len(clean_bill_name) + pattern_pos
+                break
+        
+        extracted_content = full_text[start_pos:end_pos].strip()
+        
+        logger.info(f"Extracted {len(extracted_content)} chars for bill: {bill_name[:50]}...")
+        return extracted_content
+        
+    except Exception as e:
+        logger.error(f"❌ Error extracting bill-specific content for '{bill_name}': {e}")
+        return ""
+
+
 @with_db_retry
 def get_all_assembly_members():
     """Get all assembly member names from local Speaker database."""
@@ -2232,30 +2303,42 @@ def extract_statements_with_bill_based_chunking(full_text,
                 segment_actual_text
             })
 
-    # If no segments identified, create segments for each bill or one segment with actual bill name
-    if not sorted_segments_with_text:
-        if bill_names_list and len(bill_names_list) > 0:
-            # Create segments for each known bill, dividing text equally
-            text_length = len(full_text)
-            segment_size = text_length // len(bill_names_list)
+    # If no LLM segments identified, process bills iteratively one by one
+    if not sorted_segments_with_text and bill_names_list:
+        logger.info(f"No LLM segments found, processing {len(bill_names_list)} bills iteratively")
+        
+        # Process each bill individually by searching for its discussion in the text
+        for bill_name in bill_names_list:
+            logger.info(f"🔍 Processing bill iteratively: {bill_name}")
             
-            for i, bill_name in enumerate(bill_names_list):
-                start_pos = i * segment_size
-                end_pos = (i + 1) * segment_size if i < len(bill_names_list) - 1 else text_length
-                segment_text = full_text[start_pos:end_pos]
-                
+            # Try to find bill-specific content in the text
+            bill_segment_text = extract_bill_specific_content(full_text, bill_name)
+            
+            if bill_segment_text and len(bill_segment_text.strip()) > 100:  # Minimum content threshold
                 sorted_segments_with_text.append({
                     "bill_name": bill_name,
-                    "text": segment_text
+                    "text": bill_segment_text
                 })
-                logger.info(f"Created fallback segment for bill: {bill_name} ({len(segment_text)} chars)")
-        else:
-            # Only use "General Discussion" as absolute last resort
-            sorted_segments_with_text = [{
-                "bill_name": "General Discussion",
-                "text": full_text
-            }]
-            logger.warning("No bill names available, using 'General Discussion' as fallback")
+                logger.info(f"✅ Found content for bill: {bill_name} ({len(bill_segment_text)} chars)")
+            else:
+                logger.info(f"⚠️ No specific content found for bill: {bill_name}, skipping")
+    
+    # If still no segments and we have bills, create equal segments as last resort
+    if not sorted_segments_with_text and bill_names_list:
+        logger.warning(f"Creating equal segments for {len(bill_names_list)} bills as last resort")
+        text_length = len(full_text)
+        segment_size = text_length // len(bill_names_list)
+        
+        for i, bill_name in enumerate(bill_names_list):
+            start_pos = i * segment_size
+            end_pos = (i + 1) * segment_size if i < len(bill_names_list) - 1 else text_length
+            segment_text = full_text[start_pos:end_pos]
+            
+            sorted_segments_with_text.append({
+                "bill_name": bill_name,
+                "text": segment_text
+            })
+            logger.info(f"Created equal segment for bill: {bill_name} ({len(segment_text)} chars)")
 
     # Step 3: Process each bill segment in chunks with multithreading
     logger.info(
@@ -2810,12 +2893,30 @@ def process_pdf_text_for_statements(full_text,
             if not debug:
                 time.sleep(1)  # Pause between processing major segments
     else:
-        logger.info(
-            "No bill segments identified or bill-based processing failed. Using bill-based chunking approach."
-        )
-        # This function returns list of DICTS (speaker, text, LLM analysis fields)
-        all_extracted_statements_data = extract_statements_with_bill_based_chunking(
-            full_text, session_id, bill_names_list, debug)
+        # If no segments could be created, process each bill iteratively
+        if bill_names_list:
+            logger.info(f"No segments identified. Processing {len(bill_names_list)} bills iteratively one by one.")
+            for bill_name in bill_names_list:
+                logger.info(f"🔄 Processing individual bill: {bill_name}")
+                
+                # Extract content for this specific bill
+                bill_content = extract_bill_specific_content(full_text, bill_name)
+                
+                if bill_content and len(bill_content.strip()) > 100:
+                    statements_in_bill = extract_statements_for_bill_segment(
+                        bill_content, session_id, bill_name, debug)
+                    for stmt_data in statements_in_bill:
+                        stmt_data['associated_bill_name'] = bill_name
+                    all_extracted_statements_data.extend(statements_in_bill)
+                    logger.info(f"✅ Processed {len(statements_in_bill)} statements for bill: {bill_name}")
+                else:
+                    logger.info(f"⚠️ No content found for bill: {bill_name}")
+                
+                if not debug:
+                    time.sleep(1)  # Pause between bills
+        else:
+            logger.warning("No bill names available for iterative processing. Cannot process statements.")
+            return
 
     # Final step: Save all collected and analyzed statements to DB
     logger.info(
