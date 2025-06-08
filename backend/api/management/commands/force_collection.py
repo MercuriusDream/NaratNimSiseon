@@ -29,16 +29,45 @@ class Command(BaseCommand):
             '--restart',
             action='store_true',
             help='Restart from beginning instead of continuing')
+        parser.add_argument(
+            '--start-date',
+            type=str,
+            help='Start processing from specific date (YYYY-MM-DD format)')
+        parser.add_argument(
+            '--start-session',
+            type=str,
+            help='Start processing from specific session ID (e.g., 54810)')
 
     def handle(self, *args, **options):
         debug = options['debug']
         restart = options['restart']
+        start_date_str = options.get('start_date')
+        start_session_id = options.get('start_session')
         
-        # Find the last processed session
+        # Find the last processed session or use specified starting point
         last_session = None
         start_date = None
         
-        if not restart:
+        if start_date_str:
+            # Use specified start date
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                self.stdout.write(f'📅 Starting from specified date: {start_date}')
+            except ValueError:
+                self.stdout.write(self.style.ERROR(f'❌ Invalid date format: {start_date_str}. Use YYYY-MM-DD'))
+                return
+        elif start_session_id:
+            # Use specified session ID to find start date
+            try:
+                specified_session = Session.objects.get(conf_id=start_session_id)
+                start_date = specified_session.conf_dt
+                self.stdout.write(f'📍 Starting from specified session: {specified_session.conf_id} ({specified_session.conf_dt})')
+                self.stdout.write(f'🔄 Continuing collection from: {start_date}')
+            except Session.DoesNotExist:
+                self.stdout.write(self.style.ERROR(f'❌ Session {start_session_id} not found in database'))
+                return
+        elif not restart:
+            # Auto-find last processed session
             last_session = Session.objects.order_by('-conf_dt', '-created_at').first()
             if last_session:
                 start_date = last_session.conf_dt
