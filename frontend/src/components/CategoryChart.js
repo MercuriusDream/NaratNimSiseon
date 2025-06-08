@@ -2,6 +2,18 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+const getSentimentColor = (sentimentScore) => {
+  // Normalize sentiment score from [-1, 1] to [0, 1]
+  const normalized = (sentimentScore + 1) / 2;
+  
+  // Interpolate between red (0) and green (1)
+  const red = Math.round((1 - normalized) * 255);
+  const green = Math.round(normalized * 255);
+  const blue = 0;
+  
+  return `rgb(${red}, ${green}, ${blue})`;
+};
+
 const CategoryChart = ({ data, title = "카테고리별 감성 분석" }) => {
   if (!data || data.length === 0) {
     return (
@@ -12,13 +24,17 @@ const CategoryChart = ({ data, title = "카테고리별 감성 분석" }) => {
   }
 
   // Transform data for the chart
-  const chartData = data.map(item => ({
-    category: item.category_name || item.name,
-    positive: item.positive_count || 0,
-    neutral: item.neutral_count || 0,
-    negative: item.negative_count || 0,
-    avg_sentiment: item.avg_sentiment || 0
-  }));
+  const chartData = data.map(item => {
+    const avgSentiment = item.avg_sentiment || 0;
+    return {
+      category: item.category_name || item.name,
+      positive: item.positive_count || 0,
+      neutral: item.neutral_count || 0,
+      negative: item.negative_count || 0,
+      avg_sentiment: avgSentiment,
+      sentiment_color: getSentimentColor(avgSentiment)
+    };
+  });
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -71,9 +87,9 @@ const CategoryChart = ({ data, title = "카테고리별 감성 분석" }) => {
             <YAxis />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
-            <Bar dataKey="positive" name="긍정" fill="#10B981" />
+            <Bar dataKey="positive" name="긍정" fill={(entry) => getSentimentColor(0.5)} />
             <Bar dataKey="neutral" name="중립" fill="#6B7280" />
-            <Bar dataKey="negative" name="부정" fill="#EF4444" />
+            <Bar dataKey="negative" name="부정" fill={(entry) => getSentimentColor(-0.5)} />
           </BarChart>
         </ResponsiveContainer>
       </div>

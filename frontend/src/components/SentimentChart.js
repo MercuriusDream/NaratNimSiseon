@@ -61,6 +61,15 @@ const SentimentChart = ({ data }) => {
     );
   }
 
+  // Function to calculate gradient color based on sentiment score
+  const getSentimentColor = (sentimentScore) => {
+    const normalizedScore = (sentimentScore + 1) / 2; // Normalize score to 0-1 range
+    const red = Math.round(255 * (1 - normalizedScore));
+    const green = Math.round(255 * normalizedScore);
+    const blue = 0;
+    return `rgb(${red}, ${green}, ${blue})`;
+  };
+
   return (
     <div className="space-y-4">
       {chartData.map((item, index) => {
@@ -77,28 +86,20 @@ const SentimentChart = ({ data }) => {
               <span className="font-medium text-sm">
                 {displayName}
               </span>
-              <span className={`px-2 py-1 rounded text-xs ${
-                sentimentScore > 0.3
-                  ? 'bg-green-100 text-green-800'
-                  : sentimentScore < -0.3
-                  ? 'bg-red-100 text-red-800'
-                  : 'bg-gray-100 text-gray-800'
-              }`}>
+              <div 
+                className="px-2 py-1 rounded text-xs text-white font-medium"
+                style={{ backgroundColor: getSentimentColor(sentimentScore) }}
+              >
                 {sentimentScore.toFixed(3)}
-              </span>
+              </div>
             </div>
 
             <div className="w-full bg-gray-200 rounded-full h-3 relative">
               <div
-                className={`h-3 rounded-full transition-all duration-300 ${
-                  sentimentScore > 0.3
-                    ? 'bg-green-500'
-                    : sentimentScore < -0.3
-                    ? 'bg-red-500'
-                    : 'bg-gray-400'
-                }`}
+                className={`h-3 rounded-full transition-all duration-300`}
                 style={{
-                  width: `${Math.max(Math.min(Math.abs(sentimentScore) * 100, 100), 5)}%`
+                  width: `${Math.max(Math.min(Math.abs(sentimentScore) * 100, 100), 5)}%`,
+                  backgroundColor: getSentimentColor(sentimentScore)
                 }}
               ></div>
             </div>
