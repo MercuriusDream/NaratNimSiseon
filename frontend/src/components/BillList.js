@@ -17,24 +17,33 @@ const BillList = ({ filter }) => {
   const fetchBills = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({
-        page: currentPage
-      });
+      setError(null);
 
+      const params = new URLSearchParams();
       if (filter && filter !== 'all') {
-        params.append('name', filter);
+        params.append('status', filter);
       }
+      params.append('page', currentPage);
 
-      const response = await api.get(`/api/bills/?${params}`);
-      setBills(response.data.results || response.data);
-      setPagination({
-        count: response.data.count,
-        next: response.data.next,
-        previous: response.data.previous
-      });
+      const response = await api.get(`/api/bills/?${params}`).catch(() => ({
+        data: { results: [], count: 0, next: null, previous: null }
+      }));
+
+      // Handle different response structures
+      const billsData = response.data?.results || response.data || [];
+      const paginationData = {
+        count: response.data?.count || billsData.length,
+        next: response.data?.next,
+        previous: response.data?.previous
+      };
+
+      setBills(Array.isArray(billsData) ? billsData : []);
+      setPagination(paginationData);
     } catch (err) {
       setError('의안 목록을 불러오는 중 오류가 발생했습니다.');
       console.error('Error fetching bills:', err);
+      setBills([]);
+      setPagination({ count: 0, next: null, previous: null });
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
@@ -15,32 +14,36 @@ const StatementList = ({ filters = {} }) => {
   const fetchStatements = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({
-        page: currentPage,
-        ...filters
-      });
-      
-      const response = await api.get(`/api/statements/?${params}`);
-      
-      // Handle different response structures
-      let statementsData = [];
-      if (response.data.results && Array.isArray(response.data.results)) {
-        statementsData = response.data.results;
-      } else if (response.data.data && Array.isArray(response.data.data)) {
-        statementsData = response.data.data;
-      } else if (Array.isArray(response.data)) {
-        statementsData = response.data;
+      setError(null);
+
+      const params = new URLSearchParams();
+      params.append('page', currentPage);
+      if (sessionId) {
+        params.append('session', sessionId);
       }
-      
-      setStatements(statementsData);
-      setPagination({
-        count: response.data.count || statementsData.length,
-        next: response.data.next,
-        previous: response.data.previous
-      });
-    } catch (error) {
-      console.error('Error fetching statements:', error);
-      setStatements([]); // Ensure we always have an array
+      if (billId) {
+        params.append('bill', billId);
+      }
+
+      const response = await api.get(`/api/statements/?${params}`).catch(() => ({
+        data: { results: [], count: 0, next: null, previous: null }
+      }));
+
+      // Handle different response structures
+      const statementsData = response.data?.results || response.data || [];
+      const paginationData = {
+        count: response.data?.count || statementsData.length,
+        next: response.data?.next,
+        previous: response.data?.previous
+      };
+
+      setStatements(Array.isArray(statementsData) ? statementsData : []);
+      setPagination(paginationData);
+    } catch (err) {
+      setError('발언 목록을 불러오는 중 오류가 발생했습니다.');
+      console.error('Error fetching statements:', err);
+      setStatements([]);
+      setPagination({ count: 0, next: null, previous: null });
     } finally {
       setLoading(false);
     }
@@ -96,13 +99,13 @@ const StatementList = ({ filters = {} }) => {
                 {getSentimentLabel(statement.sentiment_score)} ({statement.sentiment_score?.toFixed(2)})
               </div>
             </div>
-            
+
             <p className="text-gray-700 leading-relaxed mb-4">
               {statement.text.length > 300 
                 ? `${statement.text.substring(0, 300)}...` 
                 : statement.text}
             </p>
-            
+
             {statement.policy_keywords && (
               <div className="flex flex-wrap gap-2">
                 {statement.policy_keywords.split(',').slice(0, 5).map((keyword, index) => (

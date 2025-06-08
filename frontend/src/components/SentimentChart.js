@@ -21,12 +21,12 @@ const SentimentChart = ({ data }) => {
       const positiveCount = data.positive_count || 0;
       const neutralCount = data.neutral_count || 0;
       const negativeCount = data.negative_count || 0;
-      
+
       // Calculate proportions as percentages
       const positiveScore = positiveCount / totalStatements;
       const neutralScore = neutralCount / totalStatements;
       const negativeScore = negativeCount / totalStatements;
-      
+
       chartData = [
         {
           speaker__plpt_nm: '긍정적 발언',
@@ -42,13 +42,12 @@ const SentimentChart = ({ data }) => {
         },
         {
           speaker__plpt_nm: '중립적 발언',
-          party_name: '중립적 발언', 
-          avg_sentiment: neutralScore * 0.5, // Scale neutral to middle range
-          sentiment_score: neutralScore * 0.5,
+          party_name: '중립적 발언',
           statement_count: neutralCount,
           positive_count: 0,
           negative_count: 0,
           proportion: (neutralScore * 100).toFixed(1) + '%',
+          avg_sentiment: neutralScore,
           isDistribution: true,
           distributionType: 'neutral'
         },
@@ -118,7 +117,7 @@ const SentimentChart = ({ data }) => {
           ? getDistributionColor(item.distributionType)
           : getSentimentColor(sentimentScore);
         const barWidth = isDistribution 
-          ? `${Math.max(Math.min((item.statement_count / (item.statement_count || 1)) * 100, 100), 5)}%`
+          ? `${Math.max(Math.min((item.avg_sentiment || item.statement_count / data.length) * 100, 100), 5)}%`
           : `${Math.max(Math.min(Math.abs(sentimentScore) * 100, 100), 5)}%`;
 
         return (

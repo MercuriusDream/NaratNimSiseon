@@ -16,10 +16,67 @@ function PartyList() {
   const [categoryData, setCategoryData] = useState([]);
   const [showCategoryFilter, setShowCategoryFilter] = useState(false);
 
+  const fetchPartiesCallback = useCallback(async (fetchAdditional = false) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const params = new URLSearchParams({ time_range: timeRange });
+      if (selectedCategories.length > 0) {
+        params.append('categories', selectedCategories.join(','));
+      }
+      if (fetchAdditional) {
+        params.append('fetch_additional', 'true');
+      }
+
+      const response = await api.get(`/api/parties/?${params.toString()}`);
+
+      // Handle different response structures and ensure we always have an array
+      let partiesData = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          partiesData = response.data;
+        } else if (response.data.results && Array.isArray(response.data.results)) {
+          partiesData = response.data.results;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          partiesData = response.data.data;
+        } else {
+          // If no recognizable array structure, default to empty array
+          console.warn('Unexpected parties data structure:', response.data);
+          partiesData = [];
+        }
+      }
+
+      // Double-check that partiesData is always an array
+      if (!Array.isArray(partiesData)) {
+        console.warn('Parties data is not an array after processing:', partiesData);
+        partiesData = [];
+      }
+
+      setParties(partiesData);
+
+      if (response.data && response.data.additional_data_fetched) {
+        console.log('Additional data fetch triggered');
+      }
+    } catch (err) {
+      const errorMessage = err.response?.status === 500 
+        ? '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+        : '데이터를 불러오는 중 오류가 발생했습니다.';
+      setError(errorMessage);
+      console.error('Error fetching parties:', err);
+      setParties([]); // Ensure parties is set to empty array on error
+    } finally {
+      setLoading(false);
+    }
+  }, [timeRange, selectedCategories]);
+
+  // Update the fetchParties function
+  const fetchParties = fetchPartiesCallback;
+
   useEffect(() => {
     fetchParties();
     fetchCategoryData();
-  }, [timeRange, selectedCategories]);
+  }, [fetchParties, timeRange, selectedCategories]);
 
   const fetchParties = async (fetchAdditional = false) => {
     try {

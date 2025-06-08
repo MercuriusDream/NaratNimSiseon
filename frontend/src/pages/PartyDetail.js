@@ -14,11 +14,7 @@ function PartyDetail() {
   const [timeRange, setTimeRange] = useState('all'); // 'all', 'month', 'year'
   const [sortBy, setSortBy] = useState('sentiment'); // 'sentiment', 'statements', 'bills'
 
-  useEffect(() => {
-    fetchPartyData();
-  }, [id, timeRange, sortBy, fetchPartyData]);
-
-  const fetchPartyData = async (fetchAdditional = false) => {
+  const fetchPartyData = useCallback(async (fetchAdditional = false) => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -43,7 +39,11 @@ function PartyDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, timeRange, sortBy]);
+
+  useEffect(() => {
+    fetchPartyData();
+  }, [fetchPartyData]);
 
   if (loading) {
     return (

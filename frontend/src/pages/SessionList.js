@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import NavigationHeader from '../components/NavigationHeader';
@@ -13,11 +13,7 @@ const SessionList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchSessions();
-  }, [currentPage]);
-
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -37,7 +33,11 @@ const SessionList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage]);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
 
   return (
     <div className="min-h-screen bg-gray-50">
