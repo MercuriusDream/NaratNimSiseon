@@ -3262,19 +3262,13 @@ def process_pdf_text_for_statements(full_text,
                                     bill_names_list,
                                     debug=False):
     """
-    Main orchestrator for processing full PDF text.
-    Uses multi-stage LLM:
-    1. Bill Segmentation (optional, can fallback)
-    2. Speaker/Content Extraction per segment (or for full text if no segments)
-    3. Detailed Analysis per extracted statement.
+    Simplified orchestrator for processing full PDF text.
+    1. Get bill segments with start/end indices
+    2. Slice text by indices and assign statements to corresponding bills
+    3. Process statements for each bill segment
     """
-    if not model or not genai:  # Check for main model and genai module
-        logger.warning(
-            "❌ LLM not available. Skipping statement extraction from PDF text."
-        )
-        # Optionally, could call a very basic regex fallback here if desired as a last resort
-        # statements_data_fallback = extract_statements_with_regex_fallback(full_text, session_id, debug)
-        # process_extracted_statements_data(statements_data_fallback, session_obj, debug, associated_bill_name="Regex Fallback")
+    if not model or not genai:
+        logger.warning("❌ LLM not available. Skipping statement extraction from PDF text.")
         return
 
     # Clean the full text before processing
@@ -3282,76 +3276,41 @@ def process_pdf_text_for_statements(full_text,
     full_text = clean_pdf_text(full_text)
     logger.info(f"📄 Cleaned text length: ~{len(full_text)} chars")
 
-    logger.info(
-        f"🤖 Starting LLM-based statement processing for session PDF {session_id}."
-    )
+    logger.info(f"🤖 Starting simplified bill-based statement processing for session PDF {session_id}.")
 
-    all_extracted_statements_data = [
-    ]  # List of dicts, each a statement with analysis
+    all_extracted_statements_data = []
 
-    # Stage 0: Bill Segmentation (optional, but preferred if bills_names_list is rich)
-    # Using a lighter model for segmentation.
+    # Stage 1: Get bill segments with indices
     try:
         segmentation_model_name = 'gemini-2.0-flash-lite'
         segmentation_llm = genai.GenerativeModel(segmentation_model_name)
     except Exception as e_model:
-        logger.error(
-            f"Failed to initialize segmentation model ({segmentation_model_name}): {e_model}. Will process full text."
-        )
+        logger.error(f"Failed to initialize segmentation model ({segmentation_model_name}): {e_model}")
         segmentation_llm = None
 
     bill_segments_from_llm = []
-    if segmentation_llm and bill_names_list and len(
-            bill_names_list) > 1:  # Only segment if multiple bills context
-        logger.info(
-            f"🔍 Stage 0 (Bill Segment): Attempting to segment transcript by bills for session {session_id}"
-        )
-
-        # Limit text for segmentation to prevent prompt overflow
-        MAX_SEGMENTATION_LENGTH = 100000  # 100k characters for segmentation
-        segmentation_text = full_text
-        if len(full_text) > MAX_SEGMENTATION_LENGTH:
-            logger.warning(
-                f"Text too long for segmentation ({len(full_text)} chars), truncating to {MAX_SEGMENTATION_LENGTH}"
-            )
-            segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
-
-        # Process bill segmentation with proper batching
+    if segmentation_llm and bill_names_list and len(bill_names_list) > 0:
+        logger.info(f"🔍 Getting bill segments with indices for session {session_id}")
+        
         try:
             bill_segments_from_llm = _process_bill_segmentation_with_batching(
-                segmentation_llm, segmentation_text, bill_names_list
+                segmentation_llm, full_text, bill_names_list
             )
-        except json.JSONDecodeError as e_json_seg:
-            logger.error(
-                f"JSON parsing error for bill segmentation response: {e_json_seg}. Using bill names for fallback segmentation."
-            )
-            # Create fallback segments using actual bill names
-            if bill_names_list:
-                text_per_bill = len(full_text) // len(bill_names_list)
-                for i, bill_name in enumerate(bill_names_list):
-                    start_idx = i * text_per_bill
-                    bill_segments_from_llm.append({
-                        "a": bill_name,
-                        "b": start_idx,
-                        "c": 0.5
-                    })
-                logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
         except Exception as e_seg:
-            logger.error(
-                f"Error during LLM bill segmentation: {e_seg}. Using bill names for fallback segmentation."
-            )
-            logger.exception("Traceback for bill segmentation error:")
-            # Create fallback segments using actual bill names
+            logger.error(f"Error during LLM bill segmentation: {e_seg}")
+            # Create equal segments as fallback
             if bill_names_list:
                 text_per_bill = len(full_text) // len(bill_names_list)
                 for i, bill_name in enumerate(bill_names_list):
                     start_idx = i * text_per_bill
+                    end_idx = (i + 1) * text_per_bill if i < len(bill_names_list) - 1 else len(full_text)
                     bill_segments_from_llm.append({
                         "a": bill_name,
                         "b": start_idx,
+                        "e": end_idx,
                         "c": 0.5
                     })
-                logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
+                logger.info(f"Created {len(bill_segments_from_llm)} equal fallback segments")
 
 def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text, bill_names_list):
     """
@@ -3600,7 +3559,7 @@ def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text
         return []
 
 def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_list, offset):
-    """Process a single chunk for bill segmentation with improved matching."""
+    """Process a single chunk for bill segmentation with improved matching and end indices."""
     import json
     try:
         # Estimate tokens for rate limiting
@@ -3645,11 +3604,13 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
   ]
 }}
 
-조건:
+중요한 조건:
 - 법안명은 위 목록에서 정확히 선택
+- start_index와 end_index는 반드시 포함 (논의 구간의 시작과 끝)
 - 실제 토론/발언이 있는 구간만 포함
 - 단순 언급이나 목록은 제외
-- confidence 0.6 이상만 포함"""
+- confidence 0.6 이상만 포함
+- end_index는 다음 법안 논의 시작 전까지 또는 구간 끝까지"""
         
         response = segmentation_llm.generate_content(prompt)
         gemini_rate_limiter.record_request(estimated_tokens)
@@ -3669,7 +3630,11 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
                     seg.get('bill_name') in bill_names_list):
                     
                     start_idx = int(seg.get('start_index', 0)) + offset
-                    end_idx = int(seg.get('end_index', 0)) + offset
+                    end_idx = int(seg.get('end_index', len(text_chunk))) + offset
+                    
+                    # Ensure end_idx is valid and reasonable
+                    if end_idx <= start_idx:
+                        end_idx = min(start_idx + 5000, len(text_chunk) + offset)  # Default 5k chars
                     
                     if start_idx < end_idx and (end_idx - start_idx) > 200:
                         valid_segments.append({
@@ -3689,105 +3654,85 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
         logger.error(f"Error in single segmentation chunk: {e}")
         return []
 
-    # Sort segments by their appearance order in the full_text using their indices
-    sorted_segments_with_text = []
+    # Stage 2: Process bill segments by slicing text using indices
     if bill_segments_from_llm:
-        valid_segments_for_sort = []
+        # Sort segments by start index
+        valid_segments = []
         for seg_info in bill_segments_from_llm:
             start_idx = seg_info.get("b")
-            if start_idx is not None and isinstance(
-                    start_idx, int) and 0 <= start_idx < len(full_text):
-                seg_info['b'] = start_idx
-                valid_segments_for_sort.append(seg_info)
+            end_idx = seg_info.get("e")
+            
+            # Validate indices
+            if (start_idx is not None and isinstance(start_idx, int) and 
+                start_idx >= 0 and start_idx < len(full_text)):
+                
+                # If no end index, calculate it
+                if end_idx is None or not isinstance(end_idx, int):
+                    # Find next segment's start or use text end
+                    next_start = len(full_text)
+                    for other_seg in bill_segments_from_llm:
+                        other_start = other_seg.get("b")
+                        if (other_start is not None and other_start > start_idx and 
+                            other_start < next_start):
+                            next_start = other_start
+                    end_idx = next_start
+                
+                # Final validation
+                if end_idx > start_idx and end_idx <= len(full_text):
+                    valid_segments.append({
+                        "bill_name": seg_info.get("a", "Unknown Bill"),
+                        "start_idx": start_idx,
+                        "end_idx": end_idx,
+                        "confidence": seg_info.get("c", 0.5)
+                    })
 
-        # Sort by start_index
-        valid_segments_for_sort.sort(key=lambda x: x['b'])
-
-        # Now define the actual text for each segment
-        for current_seg_info in valid_segments_for_sort:
-            segment_text_start_index = current_seg_info['b']
-            segment_text_end_index = current_seg_info.get('e', len(full_text))
-            # Ensure indices are valid
-            if not isinstance(segment_text_start_index, int) or not isinstance(segment_text_end_index, int):
-                continue
-            if segment_text_start_index < 0 or segment_text_end_index > len(full_text) or segment_text_start_index >= segment_text_end_index:
-                continue
-            segment_actual_text = full_text[segment_text_start_index:segment_text_end_index]
-            sorted_segments_with_text.append({
-                "bill_name": current_seg_info.get("a", "Unknown Bill Segment"),
-                "text": segment_actual_text
-            })
-        logger.info(
-            f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance."
-        )
-
-    if sorted_segments_with_text:
-        logger.info(
-            f"Processing {len(sorted_segments_with_text)} identified bill text segments..."
-        )
-        for seg_data in sorted_segments_with_text:
-            bill_name_for_seg = seg_data["bill_name"]
-            text_of_segment = seg_data["text"]
-            logger.info(
-                f"--- Processing segment for Bill: {bill_name_for_seg} ({len(text_of_segment)} chars) ---"
-            )
-
-            # This function returns a list of DICTS, where each dict has speaker, text, and LLM analysis fields
-            statements_in_segment = extract_statements_for_bill_segment(
-                text_of_segment, session_id, bill_name_for_seg, debug)
-            for stmt_data in statements_in_segment:
-                stmt_data[
-                    'associated_bill_name'] = bill_name_for_seg  # Add association
-            all_extracted_statements_data.extend(statements_in_segment)
+        # Sort by start index
+        valid_segments.sort(key=lambda x: x['start_idx'])
+        
+        logger.info(f"Processing {len(valid_segments)} bill segments using index-based slicing")
+        
+        for seg_data in valid_segments:
+            bill_name = seg_data["bill_name"]
+            start_idx = seg_data["start_idx"]
+            end_idx = seg_data["end_idx"]
+            
+            # Slice text using the indices
+            bill_text = full_text[start_idx:end_idx]
+            
+            logger.info(f"--- Processing Bill: {bill_name} (chars {start_idx}-{end_idx}, {len(bill_text)} chars) ---")
+            
+            # Extract statements from this bill's text segment
+            statements_in_bill = extract_statements_for_bill_segment(
+                bill_text, session_id, bill_name, debug)
+            
+            # Associate all statements with this bill
+            for stmt_data in statements_in_bill:
+                stmt_data['associated_bill_name'] = bill_name
+            
+            all_extracted_statements_data.extend(statements_in_bill)
+            logger.info(f"✅ Extracted {len(statements_in_bill)} statements for {bill_name}")
+            
             if not debug:
-                time.sleep(1)  # Pause between processing major segments
+                time.sleep(1)  # Brief pause between bills
+    
     else:
-        # If no segments could be created, process each bill iteratively
-        if bill_names_list:
-            logger.info(f"No segments identified. Processing {len(bill_names_list)} bills iteratively one by one.")
-            for bill_name in bill_names_list:
-                logger.info(f"🔄 Processing individual bill: {bill_name}")
+        # Fallback: process entire text if no segments found
+        logger.info("No bill segments identified. Processing entire text as general discussion.")
+        statements_from_full_text = extract_statements_with_keyword_fallback(
+            full_text, session_id, debug)
+        
+        for stmt_data in statements_from_full_text:
+            stmt_data['associated_bill_name'] = "General Discussion"
+        
+        all_extracted_statements_data.extend(statements_from_full_text)
 
-                # Extract content for this specific bill
-                bill_content = extract_bill_specific_content(full_text, bill_name)
-
-                if bill_content and len(bill_content.strip()) > 100:
-                    statements_in_bill = extract_statements_for_bill_segment(
-                        bill_content, session_id, bill_name, debug)
-                    for stmt_data in statements_in_bill:
-                        stmt_data['associated_bill_name'] = bill_name
-                    all_extracted_statements_data.extend(statements_in_bill)
-                    logger.info(f"✅ Processed {len(statements_in_bill)} statements for bill: {bill_name}")
-                else:
-                    logger.info(f"⚠️ No content found for bill: {bill_name}")
-
-                if not debug:
-                    time.sleep(1)  # Pause between bills
-        else:
-            # Last resort: use keyword-based segmentation
-            logger.info("No bill names available. Trying keyword-based segmentation of full text.")
-
-            # Look for common bill discussion patterns
-            statements_from_full_text = extract_statements_with_keyword_fallback(
-                full_text, session_id, debug)
-
-            all_extracted_statements_data.extend(statements_from_full_text)
-
-            if not all_extracted_statements_data:
-                logger.warning("No statements could be extracted using any method.")
-                return
-
-    # Final step: Save all collected and analyzed statements to DB
-    logger.info(
-        f"Collected a total of {len(all_extracted_statements_data)} analyzed statements for session {session_id}."
-    )
+    # Final step: Save all statements to DB
+    logger.info(f"Collected {len(all_extracted_statements_data)} statements for session {session_id}")
+    
     if not debug and all_extracted_statements_data:
-        process_extracted_statements_data(all_extracted_statements_data,
-                                          session_obj, debug)
+        process_extracted_statements_data(all_extracted_statements_data, session_obj, debug)
     elif debug and all_extracted_statements_data:
-        logger.debug(
-            f"🐛 DEBUG: Would save {len(all_extracted_statements_data)} statements. First one: {all_extracted_statements_data[0] if all_extracted_statements_data else 'None'}"
-        )
+        logger.debug(f"🐛 DEBUG: Would save {len(all_extracted_statements_data)} statements")
 
 
 def process_extracted_statements_data(statements_data_list,
