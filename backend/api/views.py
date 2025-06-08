@@ -1651,48 +1651,27 @@ def home_data(request):
         negative_count = sentiment_stats['negative_count'] or 0
         neutral_count = total_statements - positive_count - negative_count
 
-        # Define current 22nd Assembly parties only
-        current_22nd_parties = [
-            '더불어민주당', '국민의힘', '조국혁신당', '진보당', 
-            '개혁신당', '새로운미래', '기본소득당', '사회민주당'
-        ]
-        
-        # Get party statistics only for current 22nd Assembly parties with proper filtering
-        party_stats_data = []
-        
-        for party_name in current_22nd_parties:
-            # Get 22nd Assembly speakers for this party
-            party_speakers = Speaker.objects.filter(
-                plpt_nm__icontains=party_name,
+        # Get party statistics with simpler approach - only 22nd Assembly
+        party_stats = Statement.objects.filter(session__era_co='22').select_related('speaker').values(
+            'speaker__plpt_nm'
+        ).annotate(
+            party_name=F('speaker__plpt_nm'),
+            statement_count=Count('id'),
+            avg_sentiment=Avg('sentiment_score')
+        ).filter(
+            speaker__plpt_nm__isnull=False,
+            statement_count__gt=10  # Only parties with significant activity
+        ).exclude(
+            speaker__plpt_nm__in=['', ' ', '무소속', '정보없음']
+        ).order_by('-statement_count')[:8]
+
+        # Add member counts for these parties
+        for party in party_stats:
+            party['member_count'] = Speaker.objects.filter(
+                plpt_nm__icontains=party['party_name'],
                 gtelt_eraco__icontains='22'
-            )
-            
-            if not party_speakers.exists():
-                continue
-                
-            # Get statements from these speakers in 22nd Assembly sessions
-            party_statements = Statement.objects.filter(
-                session__era_co='22',
-                speaker__in=party_speakers
-            )
-            
-            if not party_statements.exists():
-                continue
-            
-            # Calculate statistics
-            statement_count = party_statements.count()
-            avg_sentiment = party_statements.aggregate(avg=Avg('sentiment_score'))['avg'] or 0
-            member_count = party_speakers.count()
-            
-            party_stats_data.append({
-                'party_name': party_name,
-                'statement_count': statement_count,
-                'avg_sentiment': round(avg_sentiment, 3),
-                'member_count': member_count
-            })
-        
-        # Sort by statement count descending
-        party_stats = sorted(party_stats_data, key=lambda x: x['statement_count'], reverse=True)[:10]
+            ).count()
+            party['avg_sentiment'] = round(party['avg_sentiment'] or 0, 3)
 
         # Get basic counts with a single query each - only 22nd Assembly
         total_sessions = Session.objects.filter(era_co='22').count()
