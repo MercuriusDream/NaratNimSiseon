@@ -71,27 +71,15 @@ const SentimentChart = ({ data, title = "감성 분포" }) => {
   const sentimentDistributionData = React.useMemo(() => {
     if (chartData.length === 0) return [];
 
-    // Find the actual range of sentiment values in the data
-    const sentiments = chartData.map(item => item.sentiment).filter(s => !isNaN(s));
-    if (sentiments.length === 0) return [];
-
-    const minSentiment = Math.min(...sentiments);
-    const maxSentiment = Math.max(...sentiments);
-    
-    // Add some padding to the range (10% on each side)
-    const range = maxSentiment - minSentiment;
-    const padding = Math.max(0.1, range * 0.1); // At least 0.1 padding
-    const adjustedMin = Math.max(-1.0, minSentiment - padding);
-    const adjustedMax = Math.min(1.0, maxSentiment + padding);
-    
-    // Create bins based on actual data range
-    const binCount = 10;
-    const actualRange = adjustedMax - adjustedMin;
-    const binSize = actualRange / binCount;
-    
+    // Create sentiment bins from -1.0 to 1.0 with 0.05 intervals
     const bins = [];
+    const binSize = 0.05;
+    const minSentiment = -1.0;
+    const maxSentiment = 1.0;
+    const binCount = (maxSentiment - minSentiment) / binSize; // 40 bins total
+
     for (let i = 0; i < binCount; i++) {
-      const binStart = adjustedMin + (i * binSize);
+      const binStart = minSentiment + (i * binSize);
       const binEnd = binStart + binSize;
       const binCenter = binStart + (binSize / 2);
       
@@ -115,8 +103,8 @@ const SentimentChart = ({ data, title = "감성 분포" }) => {
           bin.count += statementCount;
           break;
         }
-        // Handle edge case for exactly the max value
-        if (sentiment === adjustedMax && bin.binEnd === adjustedMax) {
+        // Handle edge case for exactly 1.0
+        if (sentiment === 1.0 && bin.binEnd === 1.0) {
           bin.count += statementCount;
           break;
         }
