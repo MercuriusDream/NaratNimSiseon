@@ -1303,9 +1303,14 @@ def extract_text_segment(text, start_marker, end_marker=None):
         return ""
 
 
+@with_db_retry
 def get_all_assembly_members():
     """Get all assembly member names from local Speaker database."""
     try:
+        # Ensure fresh database connection
+        from django.db import connection
+        connection.ensure_connection()
+        
         # Get all speaker names from our local database
         speaker_names = set(Speaker.objects.values_list('naas_nm', flat=True))
         logger.info(
