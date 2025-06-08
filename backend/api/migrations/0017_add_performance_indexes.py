@@ -18,8 +18,8 @@ class Migration(migrations.Migration):
             reverse_sql="DROP INDEX IF EXISTS idx_session_conf_dt;"
         ),
         migrations.RunSQL(
-            "CREATE INDEX IF NOT EXISTS idx_statement_session_era ON api_statement(session_id) WHERE session_id IN (SELECT conf_id FROM api_session WHERE era_co IN ('제22대', '22'));",
-            reverse_sql="DROP INDEX IF EXISTS idx_statement_session_era;"
+            "CREATE INDEX IF NOT EXISTS idx_statement_session_id ON api_statement(session_id);",
+            reverse_sql="DROP INDEX IF EXISTS idx_statement_session_id;"
         ),
         migrations.RunSQL(
             "CREATE INDEX IF NOT EXISTS idx_statement_created_at ON api_statement(created_at DESC);",
