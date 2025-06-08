@@ -1383,7 +1383,7 @@ def home_data(request):
                 'id': session.conf_id,
                 'title': session.title or f'제{session.era_co} {session.sess}회 {session.dgr}차',
                 'date': session.conf_dt,
-                'committee': session.cmit_nm,
+                'committee': session.cmit_nm or '',
                 'statement_count': session.statements.count(),
                 'bill_count': session.bills.count()
             })
@@ -1487,7 +1487,20 @@ def home_data(request):
         logger.error(f"Error in home_data view: {e}")
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        return Response(
-            {'error': 'Failed to fetch home data'}, 
-            status=500
-        )
+        # Return empty data structure instead of error to prevent frontend crashes
+        return Response({
+            'recent_sessions': [],
+            'recent_bills': [],
+            'recent_statements': [],
+            'overall_stats': {
+                'total_statements': 0,
+                'average_sentiment': 0,
+                'positive_count': 0,
+                'neutral_count': 0,
+                'negative_count': 0
+            },
+            'party_stats': [],
+            'total_sessions': 0,
+            'total_bills': 0,
+            'total_speakers': 0
+        })

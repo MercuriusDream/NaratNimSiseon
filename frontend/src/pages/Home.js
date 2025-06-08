@@ -27,11 +27,34 @@ const Home = () => {
       setLoading(true);
       const response = await api.get('/api/home/');
       console.log('Home data response:', response.data);
-      setHomeData(response.data);
+      
+      // Ensure we have the expected data structure
+      const data = response.data || {};
+      setHomeData({
+        recent_sessions: Array.isArray(data.recent_sessions) ? data.recent_sessions : [],
+        recent_bills: Array.isArray(data.recent_bills) ? data.recent_bills : [],
+        recent_statements: Array.isArray(data.recent_statements) ? data.recent_statements : [],
+        overall_stats: data.overall_stats || {},
+        party_stats: Array.isArray(data.party_stats) ? data.party_stats : [],
+        total_sessions: data.total_sessions || 0,
+        total_bills: data.total_bills || 0,
+        total_speakers: data.total_speakers || 0
+      });
       setError(null);
     } catch (error) {
       console.error('Error fetching home data:', error);
       setError('데이터를 불러오는데 실패했습니다.');
+      // Set default empty data structure
+      setHomeData({
+        recent_sessions: [],
+        recent_bills: [],
+        recent_statements: [],
+        overall_stats: {},
+        party_stats: [],
+        total_sessions: 0,
+        total_bills: 0,
+        total_speakers: 0
+      });
     } finally {
       setLoading(false);
     }
