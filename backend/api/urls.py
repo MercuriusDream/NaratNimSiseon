@@ -22,5 +22,5 @@ urlpatterns = [
     path('analytics/sentiment/by-party-topic/', views.sentiment_by_party_and_topic, name='sentiment-by-party-topic'),
     path('analytics/sentiment/categories/', views.category_sentiment_analysis, name='category-sentiment-analysis'),
     path('trigger-analysis/', views.trigger_statement_analysis, name='trigger-analysis'),
-    path('home-data/', views.home_data, name='home-data'),
+    path('home/', views.home_data, name='home-data'),
 ]
