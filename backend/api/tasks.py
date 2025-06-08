@@ -3360,12 +3360,72 @@ def process_pdf_text_for_statements(full_text,
 
 def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text, bill_names_list):
     """
-    Use the LLM to segment the transcript into bill-related sections.
+    Use the LLM to segment the transcript into bill-related sections with batching support for large texts.
     Returns a list of dicts with keys: 'a' (bill name), 'b' (start idx), 'e' (end idx), 'c' (confidence/score).
     """
     try:
-        # Process entire text as a single unit
-        return _process_single_segmentation_chunk(segmentation_llm, segmentation_text, bill_names_list, 0)
+        if not bill_names_list:
+            logger.warning("No bill names provided for segmentation")
+            return []
+
+        # Clean and validate inputs
+        clean_text = segmentation_text.strip()
+        safe_bill_names = [str(bill)[:200] for bill in bill_names_list if bill and str(bill).strip()]
+
+        if not safe_bill_names:
+            logger.warning("No valid bill names after cleaning")
+            return []
+
+        # Process in batches if text is too long
+        max_batch_size = 80000  # 80k chars for bill segmentation
+        if len(clean_text) <= max_batch_size:
+            return _process_single_segmentation_chunk(segmentation_llm, clean_text, safe_bill_names, 0)
+
+        logger.info(f"Processing bill segmentation in batches (text length: {len(clean_text)})")
+
+        # Split into overlapping batches
+        batch_overlap = 10000  # 10k character overlap
+        all_segments = []
+
+        for batch_start in range(0, len(clean_text), max_batch_size - batch_overlap):
+            batch_end = min(batch_start + max_batch_size, len(clean_text))
+            batch_text = clean_text[batch_start:batch_end]
+
+            logger.info(f"Processing bill segmentation batch: chars {batch_start}-{batch_end}")
+
+            # Process this batch
+            batch_segments = _process_single_segmentation_chunk(
+                segmentation_llm, batch_text, safe_bill_names, batch_start
+            )
+
+            # Adjust positions to global coordinates and check for duplicates
+            for segment in batch_segments:
+                global_start = segment['b'] + batch_start
+                global_end = segment.get('e', global_start + 1000) + batch_start
+
+                # Check if we already have this bill
+                existing_bill = next((s for s in all_segments if s['a'] == segment['a']), None)
+                if existing_bill:
+                    # Keep the one with higher confidence
+                    segment_confidence = segment.get('c', 0.5)
+                    if segment_confidence > existing_bill.get('c', 0.5):
+                        existing_bill['b'] = global_start
+                        existing_bill['e'] = global_end
+                        existing_bill['c'] = segment_confidence
+                else:
+                    all_segments.append({
+                        'a': segment['a'],
+                        'b': global_start,
+                        'e': global_end,
+                        'c': segment.get('c', 0.5)
+                    })
+
+            # Rate limiting between batches
+            if batch_end < len(clean_text):
+                time.sleep(2)
+
+        logger.info(f"Bill segmentation batching complete: {len(all_segments)} segments found")
+        return all_segments
 
     except Exception as e:
         logger.error(f"❌ Error in bill segmentation LLM: {e}")
