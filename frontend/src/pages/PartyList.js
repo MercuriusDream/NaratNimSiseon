@@ -248,7 +248,7 @@ function PartyList() {
               </div>
 
               {/* Sentiment Chart */}
-              {party.recent_statements && Array.isArray(party.recent_statements) && (
+              {party.recent_statements && Array.isArray(party.recent_statements) && party.recent_statements.length > 0 && (
                 <div className="h-48 mb-4">
                   <SentimentChart data={party.recent_statements} />
                 </div>
@@ -259,8 +259,8 @@ function PartyList() {
                 <div className="mt-4">
                   <h3 className="text-sm font-medium text-gray-700 mb-2">주요 의원</h3>
                   <div className="space-y-2">
-                    {party.top_members.map(member => (
-                      <div key={member.id || member.naas_nm} className="flex items-center justify-between text-sm">
+                    {party.top_members.map((member, index) => (
+                      <div key={member.id || member.naas_nm || index} className="flex items-center justify-between text-sm">
                         <Link
                           to={`/speakers/${member.id || member.naas_cd}`}
                           className="text-gray-600 hover:text-blue-600"

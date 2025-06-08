@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 
@@ -51,6 +50,14 @@ const NavigationHeader = () => {
           }`}
         >
           의안 목록
+        </a>
+        <a 
+          href="/sentiment" 
+          className={`self-stretch my-auto transition-colors duration-200 ${
+            isActive('/sentiment') ? 'text-blue-600 font-semibold' : 'text-gray-700 hover:text-blue-600'
+          }`}
+        >
+          감성 분석
         </a>
       </nav>
     </header>

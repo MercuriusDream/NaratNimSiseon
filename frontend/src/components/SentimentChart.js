@@ -11,11 +11,20 @@ import {
 } from 'recharts';
 
 const SentimentChart = ({ data }) => {
+  // Ensure data is always an array
+  if (!data || !Array.isArray(data)) {
+    return (
+      <div className="flex items-center justify-center h-48 bg-gray-50 rounded-lg">
+        <p className="text-gray-500">표시할 감성 데이터가 없습니다.</p>
+      </div>
+    );
+  }
+
   // Transform data for the chart
   const processChartData = () => {
     // Handle multiple possible data structures
     let dataArray = [];
-    
+
     if (Array.isArray(data)) {
       dataArray = data;
     } else if (data?.data && Array.isArray(data.data)) {

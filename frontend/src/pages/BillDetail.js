@@ -20,15 +20,21 @@ function BillDetail() {
         setLoading(true);
 
         // Handle potential missing data gracefully
-        const [billRes, statementsRes] = await Promise.all([
+        const [billResponse, statementsResponse] = await Promise.all([
           axios.get(`/api/bills/${id}/`),
           axios.get(`/api/bills/${id}/statements/`)
         ]);
 
-        setBill(billRes.data);
+        // Ensure bill data is properly set
+        if (billResponse.data) {
+          setBill(billResponse.data);
+        } else {
+          throw new Error('의안 데이터를 찾을 수 없습니다.');
+        }
 
-        // Handle the statements response structure
-        const statementsData = statementsRes.data;
+        const statementsData = statementsResponse.data;
+
+        // Handle different response structures and ensure we always have an array
         let statementsArray = [];
         if (statementsData?.status === 'success' && Array.isArray(statementsData.data)) {
           statementsArray = statementsData.data;
@@ -37,6 +43,7 @@ function BillDetail() {
         } else if (statementsData?.results && Array.isArray(statementsData.results)) {
           statementsArray = statementsData.results;
         }
+
         setStatements(statementsArray);
 
         // Try to fetch additional data, but don't fail if it's not available

@@ -21,16 +21,16 @@ function App() {
       <div className="App">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/bills" element={<BillList />} />
+          <Route path="/bills/:id" element={<BillDetail />} />
           <Route path="/parties" element={<PartyList />} />
           <Route path="/parties/:id" element={<PartyDetail />} />
           <Route path="/sessions" element={<SessionList />} />
           <Route path="/sessions/:id" element={<SessionDetail />} />
-          <Route path="/bills" element={<BillList />} />
-          <Route path="/bills/:id" element={<BillDetail />} />
           <Route path="/speakers" element={<SpeakerList />} />
           <Route path="/speakers/:id" element={<SpeakerDetail />} />
-          <Route path="/sentiment" element={<SentimentAnalysis />} />
           <Route path="/statements" element={<StatementList />} />
+          <Route path="/sentiment" element={<SentimentAnalysis />} />
         </Routes>
       </div>
     </Router>
