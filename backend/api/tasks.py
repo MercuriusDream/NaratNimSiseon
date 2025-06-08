@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import concurrent.futures
 import queue
 
 logger = logging.getLogger(__name__)
@@ -1439,7 +1440,10 @@ def process_speech_segments_multithreaded(speech_segments, session_id, bill_name
             return result, segment_index
             
         except Exception as e:
-            logger.error(f"Error processing segment {segment_index}: {e}")
+            logger.error(f"Error processing segment {segment_index + 1}: {type(e).__name__}: {e}")
+            if hasattr(e, '__traceback__'):
+                import traceback
+                logger.debug(f"Full traceback for segment {segment_index + 1}: {traceback.format_exc()}")
             # Still need to schedule next request
             threading.Timer(2.1, lambda: rate_limit_queue.put(True)).start()
             return None, segment_index
@@ -1472,13 +1476,23 @@ def process_speech_segments_multithreaded(speech_segments, session_id, bill_name
                 else:
                     logger.warning(f"⚠️ No result for segment {segment_index + 1} in '{bill_name}'")
                     
+            except concurrent.futures.TimeoutError:
+                segment_index = future_to_index[future]
+                logger.error(f"❌ Timeout (60s) processing segment {segment_index + 1} for bill '{bill_name}' - LLM may be overloaded")
+                if segment_index < len(speech_segments):
+                    failed_segment = speech_segments[segment_index]
+                    logger.debug(f"Timed out segment preview: {failed_segment[:200]}...")
             except Exception as e:
                 segment_index = future_to_index[future]
-                logger.error(f"❌ Exception processing segment {segment_index + 1} for bill '{bill_name}': {e}")
+                logger.error(f"❌ Exception processing segment {segment_index + 1} for bill '{bill_name}': {type(e).__name__}: {e}")
                 # Log the segment content that failed (first 200 chars)
                 if segment_index < len(speech_segments):
                     failed_segment = speech_segments[segment_index]
                     logger.debug(f"Failed segment content preview: {failed_segment[:200]}...")
+                # Log full traceback for debugging
+                if hasattr(e, '__traceback__'):
+                    import traceback
+                    logger.debug(f"Full traceback for segment {segment_index + 1}: {traceback.format_exc()}")
             
             # Log progress
             if completed_count % 5 == 0 or completed_count == len(speech_segments):
