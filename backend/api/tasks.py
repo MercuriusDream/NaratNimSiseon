@@ -2565,6 +2565,8 @@ def analyze_single_statement_with_bill_context(statement_data_dict,
                                                bill_name,
                                                debug=False):
     """Analyze a single statement's text using LLM, with context of a specific bill. Now only returns sentiment and bill relevance."""
+    global model
+    
     if not model:  # Global 'model' for detailed analysis (e.g., gemma-3)
         logger.warning(
             "❌ Main LLM ('model') not available. Cannot analyze statement for bill context.")
@@ -3095,6 +3097,8 @@ def analyze_statement_categories(self,
             "statement_id is required for analyze_statement_categories.")
         return
 
+    global model
+    
     if not model:  # Global 'model'
         logger.warning(
             "❌ Main LLM ('model') not available. Cannot analyze statement categories."
@@ -3313,6 +3317,8 @@ def process_pdf_text_for_statements(full_text,
     2. Slice text by indices and assign statements to corresponding bills
     3. Process statements for each bill segment
     """
+    global model, genai
+    
     logger.info(f"🔍 Checking LLM availability - model: {model is not None}, genai: {genai is not None}")
     
     if not model or not genai:
@@ -4020,6 +4026,8 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
 
 
 def analyze_single_statement(statement_data_dict, session_id, debug=False):
+    global model
+    
     if not model:  # Global 'model'
         logger.warning(" Main LLM ('model') not available. Cannot analyze statement (generic).")
         statement_data_dict.update({
