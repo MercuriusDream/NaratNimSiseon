@@ -2990,33 +2990,30 @@ def process_pdf_text_for_statements(full_text,
             segmentation_text = full_text[:MAX_SEGMENTATION_LENGTH] + "\n[텍스트가 길이 제한으로 잘렸습니다]"
 
         bill_segmentation_prompt = f"""
-국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간(시작 인덱스 기준)을 나누어주세요.
+다음 국회 회의록에서 각 의안의 논의 시작점을 찾아 JSON으로 응답해주세요.
 
-제공된 의안(법안) 목록:
+의안 목록:
 {chr(10).join([f"- {bill}" for bill in bill_names_list])}
 
-아래 회의록 텍스트에서 각 의안별 논의가 시작되는 위치(문자 인덱스)를 찾아주세요.
-
 회의록 텍스트:
----
-{segmentation_text}
----
+{segmentation_text[:50000]}
 
-아래와 같은 JSON 형식으로만 응답하세요 (설명 없이):
-{
-  "z": [
-    {
-      "a": "의안명1",
-      "b": 1234,
-      "c": 0.95
-    },
-    ...
+다음 JSON 형식으로 응답하세요:
+{{
+  "bill_segments": [
+    {{
+      "bill_name": "정확한 의안명",
+      "start_position": 시작 위치(숫자),
+      "confidence": 0.0-1.0 신뢰도
+    }}
   ]
-}
+}}
 
-- 각 의안이 회의록에서 논의되지 않았다면 "b"는 -1, "c"는 0.0으로 해주세요.
-- 반드시 제공된 의안 목록의 모든 항목에 대해 결과를 반환하세요.
-- 응답에는 JSON 외의 다른 텍스트(설명, 주석 등)를 포함하지 마세요.
+규칙:
+1. 의안명은 제공된 목록에서 정확히 선택
+2. 회의록에서 "○ 의안번호" 또는 의안명이 처음 나타나는 위치를 찾으세요
+3. 신뢰도 0.7 이상만 포함
+4. JSON만 응답하고 다른 설명 없이
 """
 
         try:
@@ -3026,8 +3023,18 @@ def process_pdf_text_for_statements(full_text,
                 seg_text_cleaned = seg_response.text.strip().replace(
                     "```json", "").replace("```", "").strip()
                 seg_data = json.loads(seg_text_cleaned)
-                bill_segments_from_llm = seg_data.get(
-                    "z", [])
+                raw_segments = seg_data.get("bill_segments", [])
+                
+                # Convert to expected format
+                bill_segments_from_llm = []
+                for segment in raw_segments:
+                    if segment.get('confidence', 0) >= 0.7:
+                        bill_segments_from_llm.append({
+                            "a": segment.get('bill_name', ''),
+                            "b": segment.get('start_position', -1),
+                            "c": segment.get('confidence', 0.0)
+                        })
+                
                 if bill_segments_from_llm:
                     logger.info(
                         f"LLM identified {len(bill_segments_from_llm)} potential bill discussion segments."
@@ -3153,8 +3160,18 @@ def process_pdf_text_for_statements(full_text,
                 if not debug:
                     time.sleep(1)  # Pause between bills
         else:
-            logger.warning("No bill names available for iterative processing. Cannot process statements.")
-            return
+            # Last resort: use keyword-based segmentation
+            logger.info("No bill names available. Trying keyword-based segmentation of full text.")
+            
+            # Look for common bill discussion patterns
+            statements_from_full_text = extract_statements_with_keyword_fallback(
+                full_text, session_id, debug)
+            
+            all_extracted_statements_data.extend(statements_from_full_text)
+            
+            if not all_extracted_statements_data:
+                logger.warning("No statements could be extracted using any method.")
+                return
 
     # Final step: Save all collected and analyzed statements to DB
     logger.info(
@@ -3355,6 +3372,73 @@ def process_extracted_statements_data(statements_data_list,
     logger.info(
         f"🎉 Saved {created_count} new statements for session {session_obj.conf_id}."
     )
+
+
+def extract_statements_with_keyword_fallback(text, session_id, debug=False):
+    """
+    Extract statements using keyword patterns when LLM fails.
+    Looks for common bill discussion markers and speaker patterns.
+    """
+    if not text:
+        return []
+    
+    logger.info(f"🔍 Using keyword-based fallback extraction for session {session_id}")
+    
+    # Find bill discussion sections using common patterns
+    bill_patterns = [
+        r'○\s*(\d+)\.\s*([^○]+?)(?=○|\Z)',  # "○ 1. 법안명" pattern
+        r'(\d+)\.\s*([^○\n]{20,100}법률안[^○\n]*)',  # "번호. ...법률안" pattern
+        r'의안번호\s*(\d+)[^○]*?([^○\n]{10,80})',  # "의안번호 XXXX" pattern
+    ]
+    
+    bill_segments = []
+    for pattern in bill_patterns:
+        matches = list(re.finditer(pattern, text, re.DOTALL))
+        for match in matches:
+            start_pos = match.start()
+            bill_name = match.group(2).strip() if len(match.groups()) > 1 else match.group(1).strip()
+            if len(bill_name) > 10:  # Only meaningful bill names
+                bill_segments.append({
+                    'start_pos': start_pos,
+                    'bill_name': bill_name[:100]  # Limit length
+                })
+    
+    # Sort by position and remove overlaps
+    bill_segments.sort(key=lambda x: x['start_pos'])
+    
+    all_statements = []
+    
+    if bill_segments:
+        logger.info(f"Found {len(bill_segments)} potential bill sections using keywords")
+        
+        for i, segment in enumerate(bill_segments):
+            start_pos = segment['start_pos']
+            end_pos = bill_segments[i + 1]['start_pos'] if i + 1 < len(bill_segments) else len(text)
+            
+            segment_text = text[start_pos:end_pos]
+            bill_name = segment['bill_name']
+            
+            # Extract statements from this segment
+            statements_in_segment = process_single_segment_for_statements_with_splitting(
+                segment_text, session_id, bill_name, debug)
+            
+            for stmt_data in statements_in_segment:
+                stmt_data['associated_bill_name'] = bill_name
+            
+            all_statements.extend(statements_in_segment)
+    else:
+        # Process entire text as one segment
+        logger.info("No bill patterns found, processing entire text")
+        statements_from_full = process_single_segment_for_statements_with_splitting(
+            text, session_id, "General Discussion", debug)
+        
+        for stmt_data in statements_from_full:
+            stmt_data['associated_bill_name'] = "General Discussion"
+        
+        all_statements.extend(statements_from_full)
+    
+    logger.info(f"✅ Keyword-based extraction completed: {len(all_statements)} statements")
+    return all_statements
 
 
 def extract_statements_with_regex_fallback(text, session_id, debug=False):
