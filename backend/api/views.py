@@ -1487,8 +1487,8 @@ def party_detail(request, party_id):
 def home_data(request):
     """Get aggregated data for home page"""
     try:
-        # Get recent sessions
-        recent_sessions = Session.objects.order_by('-conf_dt')[:5]
+        # Use prefetch_related to optimize queries
+        recent_sessions = Session.objects.prefetch_related('statements', 'bills').order_by('-conf_dt')[:5]
         sessions_data = []
         for session in recent_sessions:
             try:
@@ -1504,13 +1504,14 @@ def home_data(request):
                 logger.error(f"Error processing session {session.conf_id}: {e}")
                 continue
 
-        # Get recent bills with statement counts
-        recent_bills = Bill.objects.select_related('session').order_by('-created_at')[:5]
+        # Optimize recent bills query
+        recent_bills = Bill.objects.select_related('session').annotate(
+            statement_count=Count('statements')
+        ).order_by('-created_at')[:5]
+        
         bills_data = []
         for bill in recent_bills:
             try:
-                statement_count = Statement.objects.filter(bill=bill).count()
-                # Generate a proper session title if not available
                 session_title = None
                 if bill.session:
                     session_title = bill.session.title if bill.session.title else f"제{bill.session.era_co}대 {bill.session.sess}회 {bill.session.dgr}차"
@@ -1521,13 +1522,13 @@ def home_data(request):
                     'proposer': bill.proposer or '정보없음',
                     'session_id': bill.session.conf_id if bill.session else None,
                     'session_title': session_title,
-                    'statement_count': statement_count
+                    'statement_count': bill.statement_count
                 })
             except Exception as e:
                 logger.error(f"Error processing bill {bill.bill_id}: {e}")
                 continue
 
-        # Get recent statements with sentiment analysis
+        # Optimize recent statements query
         recent_statements = Statement.objects.select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
         statements_data = []
         for statement in recent_statements:
@@ -1548,60 +1549,52 @@ def home_data(request):
                 logger.error(f"Error processing statement {statement.id}: {e}")
                 continue
 
-        # Calculate overall sentiment stats
-        total_statements = Statement.objects.count()
-        avg_sentiment = 0
-        positive_count = 0
-        neutral_count = 0
-        negative_count = 0
+        # Optimize sentiment stats calculation with a single query
+        sentiment_stats = Statement.objects.aggregate(
+            total_count=Count('id'),
+            avg_sentiment=Avg('sentiment_score'),
+            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+        )
+        
+        total_statements = sentiment_stats['total_count'] or 0
+        avg_sentiment = sentiment_stats['avg_sentiment'] or 0
+        positive_count = sentiment_stats['positive_count'] or 0
+        negative_count = sentiment_stats['negative_count'] or 0
+        neutral_count = total_statements - positive_count - negative_count
 
-        if total_statements > 0:
-            try:
-                avg_sentiment_result = Statement.objects.aggregate(
-                    avg_sentiment=models.Avg('sentiment_score')
-                )['avg_sentiment']
-                avg_sentiment = avg_sentiment_result or 0
+        # Optimize party statistics with a single query
+        party_stats = Statement.objects.select_related('speaker').values(
+            'speaker__plpt_nm'
+        ).annotate(
+            party_name=F('speaker__plpt_nm'),
+            statement_count=Count('id'),
+            avg_sentiment=Avg('sentiment_score')
+        ).filter(
+            speaker__plpt_nm__isnull=False,
+            statement_count__gt=0
+        ).order_by('-statement_count')[:10]
 
-                positive_count = Statement.objects.filter(sentiment_score__gt=0.3).count()
-                negative_count = Statement.objects.filter(sentiment_score__lt=-0.3).count()
-                neutral_count = total_statements - positive_count - negative_count
-            except Exception as e:
-                logger.error(f"Error calculating sentiment stats: {e}")
+        # Get member counts for top parties in a single query
+        top_party_names = [p['party_name'] for p in party_stats]
+        member_counts = Speaker.objects.filter(
+            plpt_nm__in=top_party_names
+        ).values('plpt_nm').annotate(
+            member_count=Count('naas_cd')
+        )
+        
+        # Create a lookup dict for member counts
+        member_count_lookup = {mc['plpt_nm']: mc['member_count'] for mc in member_counts}
+        
+        # Add member counts to party stats
+        for party in party_stats:
+            party['member_count'] = member_count_lookup.get(party['party_name'], 0)
+            party['avg_sentiment'] = round(party['avg_sentiment'] or 0, 3)
 
-        # Get party statistics - simplified approach
-        party_stats = []
-        try:
-            # Get unique party names from speakers
-            unique_parties = Speaker.objects.values_list('plpt_nm', flat=True).distinct()
-            
-            for party_name in unique_parties:
-                if party_name and party_name.strip():
-                    try:
-                        # Count statements by this party
-                        statement_count = Statement.objects.filter(speaker__plpt_nm=party_name).count()
-                        if statement_count > 0:
-                            # Get average sentiment
-                            avg_sentiment_result = Statement.objects.filter(speaker__plpt_nm=party_name).aggregate(
-                                avg_sentiment=Avg('sentiment_score')
-                            )['avg_sentiment']
-                            
-                            # Get member count for this party
-                            member_count = Speaker.objects.filter(plpt_nm=party_name).count()
-                            
-                            party_stats.append({
-                                'party_name': party_name,
-                                'member_count': member_count,
-                                'statement_count': statement_count,
-                                'avg_sentiment': round(avg_sentiment_result or 0, 3)
-                            })
-                    except Exception as e:
-                        logger.error(f"Error processing party {party_name}: {e}")
-                        continue
-            
-            # Sort by statement count and take top 10
-            party_stats = sorted(party_stats, key=lambda x: x['statement_count'], reverse=True)[:10]
-        except Exception as e:
-            logger.error(f"Error calculating party stats: {e}")
+        # Get basic counts with a single query each
+        total_sessions = Session.objects.count()
+        total_bills = Bill.objects.count()
+        total_speakers = Speaker.objects.count()
 
         response_data = {
             'recent_sessions': sessions_data,
@@ -1614,10 +1607,10 @@ def home_data(request):
                 'neutral_count': neutral_count,
                 'negative_count': negative_count
             },
-            'party_stats': party_stats,
-            'total_sessions': Session.objects.count(),
-            'total_bills': Bill.objects.count(),
-            'total_speakers': Speaker.objects.count()
+            'party_stats': list(party_stats),
+            'total_sessions': total_sessions,
+            'total_bills': total_bills,
+            'total_speakers': total_speakers
         }
 
         return Response(response_data)
