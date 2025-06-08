@@ -1414,7 +1414,7 @@ def home_data(request):
             statements_data.append({
                 'id': statement.id,
                 'speaker_name': statement.speaker.naas_nm,
-                'speaker_party': statement.speaker.get_current_party_name(),
+                'speaker_party': statement.speaker.plpt_nm,  # Use plpt_nm directly
                 'text': statement.text[:200] + '...' if len(statement.text) > 200 else statement.text,
                 'sentiment_score': statement.sentiment_score or 0,
                 'sentiment_reason': statement.sentiment_reason or '',
@@ -1445,24 +1445,25 @@ def home_data(request):
             neutral_count = 0
             negative_count = 0
 
-        # Get party statistics
-        parties = Party.objects.all()
+        # Get party statistics - simplified approach
         party_stats = []
-        for party in parties:
-            party_statements = Statement.objects.filter(
-                speaker__current_party=party
-            )
+        # Get top parties by statement count
+        party_statement_counts = Statement.objects.values('speaker__plpt_nm').annotate(
+            statement_count=Count('id'),
+            avg_sentiment=Avg('sentiment_score')
+        ).filter(statement_count__gt=0).order_by('-statement_count')[:10]
 
-            if party_statements.exists():
-                avg_party_sentiment = party_statements.aggregate(
-                    avg_sentiment=models.Avg('sentiment_score')
-                )['avg_sentiment'] or 0
-
+        for party_data in party_statement_counts:
+            party_name = party_data['speaker__plpt_nm']
+            if party_name and party_name.strip():
+                # Get member count for this party
+                member_count = Speaker.objects.filter(plpt_nm=party_name).count()
+                
                 party_stats.append({
-                    'party_name': party.name,
-                    'member_count': party.members.count(),
-                    'statement_count': party_statements.count(),
-                    'avg_sentiment': avg_party_sentiment
+                    'party_name': party_name,
+                    'member_count': member_count,
+                    'statement_count': party_data['statement_count'],
+                    'avg_sentiment': round(party_data['avg_sentiment'] or 0, 3)
                 })
 
         return Response({
@@ -1471,7 +1472,7 @@ def home_data(request):
             'recent_statements': statements_data,
             'overall_stats': {
                 'total_statements': total_statements,
-                'average_sentiment': avg_sentiment,
+                'average_sentiment': round(avg_sentiment, 3),
                 'positive_count': positive_count,
                 'neutral_count': neutral_count,
                 'negative_count': negative_count
@@ -1484,6 +1485,8 @@ def home_data(request):
 
     except Exception as e:
         logger.error(f"Error in home_data view: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return Response(
             {'error': 'Failed to fetch home data'}, 
             status=500
