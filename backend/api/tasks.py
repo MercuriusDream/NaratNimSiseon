@@ -3649,8 +3649,21 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
             logger.info(f"No voting data found for bill {bill_id}")
             return
 
-        created_count = 0
-        updated_count = 0
+        # Prepare data for bulk operations
+        voting_records_to_create = []
+        voting_records_to_update = []
+        
+        # Get all speakers at once to avoid repeated database queries
+        all_speakers = {speaker.naas_nm: speaker for speaker in Speaker.objects.all()}
+        
+        # Get existing voting records for this bill
+        existing_records = {
+            (record.speaker.naas_nm, record.bill_id): record 
+            for record in VotingRecord.objects.filter(bill=bill).select_related('speaker')
+        }
+        
+        processed_count = 0
+        skipped_count = 0
 
         for vote_item in voting_data:
             try:
@@ -3659,70 +3672,89 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
                 vote_date_str = vote_item.get('VOTE_DATE', '')
 
                 if not member_name or not vote_result:
+                    skipped_count += 1
                     continue
 
                 # Parse vote date
                 vote_date = None
                 if vote_date_str:
                     try:
-                        vote_date = datetime.strptime(vote_date_str,
-                                                      '%Y%m%d %H%M%S')
+                        vote_date = datetime.strptime(vote_date_str, '%Y%m%d %H%M%S')
                     except ValueError:
-                        logger.warning(
-                            f"Could not parse vote date: {vote_date_str}")
+                        logger.warning(f"Could not parse vote date: {vote_date_str}")
                         vote_date = datetime.now()
+                else:
+                    vote_date = datetime.now()
 
-                # Find the speaker by name
+                # Find the speaker by name from our cached dict
                 speaker = None
-                speakers = Speaker.objects.filter(
-                    naas_nm__icontains=member_name)
-                if speakers.count() == 1:
-                    speaker = speakers.first()
-                elif speakers.count() > 1:
-                    # Try exact match first
-                    exact_match = speakers.filter(naas_nm=member_name).first()
-                    if exact_match:
-                        speaker = exact_match
-                    else:
-                        speaker = speakers.first()
-                        logger.warning(
-                            f"Multiple speakers found for {member_name}, using first match"
-                        )
+                if member_name in all_speakers:
+                    speaker = all_speakers[member_name]
+                else:
+                    # Try partial match
+                    for speaker_name, speaker_obj in all_speakers.items():
+                        if member_name in speaker_name or speaker_name in member_name:
+                            speaker = speaker_obj
+                            break
 
                 if not speaker:
-                    logger.warning(
-                        f"Speaker not found for voting record: {member_name}")
+                    logger.warning(f"Speaker not found for voting record: {member_name}")
+                    skipped_count += 1
                     continue
 
-                # Create or update voting record
-                voting_record, created = VotingRecord.objects.update_or_create(
-                    bill=bill,
-                    speaker=speaker,
-                    defaults={
-                        'vote_result': vote_result,
-                        'vote_date': vote_date,
-                        'session': bill.session
-                    })
-
-                if created:
-                    created_count += 1
-                    logger.info(
-                        f"✨ Created voting record: {member_name} - {vote_result} for {bill.bill_nm[:30]}..."
-                    )
+                # Check if record already exists
+                record_key = (member_name, bill_id)
+                if record_key in existing_records:
+                    # Update existing record
+                    existing_record = existing_records[record_key]
+                    existing_record.vote_result = vote_result
+                    existing_record.vote_date = vote_date
+                    existing_record.session = bill.session
+                    voting_records_to_update.append(existing_record)
                 else:
-                    updated_count += 1
-                    logger.info(
-                        f"🔄 Updated voting record: {member_name} - {vote_result} for {bill.bill_nm[:30]}..."
+                    # Create new record
+                    voting_record = VotingRecord(
+                        bill=bill,
+                        speaker=speaker,
+                        vote_result=vote_result,
+                        vote_date=vote_date,
+                        session=bill.session
                     )
+                    voting_records_to_create.append(voting_record)
+                
+                processed_count += 1
 
             except Exception as e_vote:
-                logger.error(
-                    f"❌ Error processing vote item for {bill_id}: {e_vote}. Item: {vote_item}"
-                )
+                logger.error(f"❌ Error processing vote item for {bill_id}: {e_vote}. Item: {vote_item}")
+                skipped_count += 1
                 continue
 
+        # Perform bulk operations
+        created_count = 0
+        updated_count = 0
+        
+        if voting_records_to_create:
+            try:
+                VotingRecord.objects.bulk_create(voting_records_to_create, ignore_conflicts=True)
+                created_count = len(voting_records_to_create)
+                logger.info(f"✨ Bulk created {created_count} voting records for {bill.bill_nm[:30]}...")
+            except Exception as e_bulk_create:
+                logger.error(f"❌ Error in bulk create: {e_bulk_create}")
+        
+        if voting_records_to_update:
+            try:
+                VotingRecord.objects.bulk_update(
+                    voting_records_to_update, 
+                    ['vote_result', 'vote_date', 'session'],
+                    batch_size=100
+                )
+                updated_count = len(voting_records_to_update)
+                logger.info(f"🔄 Bulk updated {updated_count} voting records for {bill.bill_nm[:30]}...")
+            except Exception as e_bulk_update:
+                logger.error(f"❌ Error in bulk update: {e_bulk_update}")
+
         logger.info(
-            f"🎉 Voting data processed for bill {bill_id}: {created_count} created, {updated_count} updated."
+            f"🎉 Voting data processed for bill {bill_id}: {created_count} created, {updated_count} updated, {skipped_count} skipped, {processed_count} total processed."
         )
 
     except RequestException as re_exc:
