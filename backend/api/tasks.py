@@ -195,23 +195,23 @@ try:
     import google.generativeai as genai
     if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel(
-            'gemini-2.0-flash-lite')  # Main model for detailed analysis
+        model = genai.GenerativeModel('gemini-2.0-flash-lite')  # Main model for detailed analysis
+        logger.info("✅ Gemini API configured successfully with gemini-2.0-flash-lite model")
     else:
-        logger.warning(
-            "GEMINI_API_KEY not found or empty in settings. LLM features will be disabled."
+        logger.error(
+            "❌ GEMINI_API_KEY not found or empty in settings. LLM features will be disabled."
         )
         genai = None
         model = None
-except ImportError:
-    logger.warning(
-        "google.generativeai library not available. LLM features will be disabled."
+except ImportError as e:
+    logger.error(
+        f"❌ google.generativeai library not available: {e}. LLM features will be disabled."
     )
     genai = None
     model = None
 except Exception as e:
-    logger.warning(
-        f"Error configuring Gemini API: {e}. LLM features will be disabled.")
+    logger.error(
+        f"❌ Error configuring Gemini API: {e}. LLM features will be disabled.")
     genai = None
     model = None
 
@@ -3313,9 +3313,51 @@ def process_pdf_text_for_statements(full_text,
     2. Slice text by indices and assign statements to corresponding bills
     3. Process statements for each bill segment
     """
+    logger.info(f"🔍 Checking LLM availability - model: {model is not None}, genai: {genai is not None}")
+    
     if not model or not genai:
-        logger.warning("❌ LLM not available. Skipping statement extraction from PDF text.")
-        return
+        logger.error("❌ LLM not available. Attempting to re-initialize...")
+        
+        # Try to re-initialize Gemini
+        try:
+            import google.generativeai as genai_reinit
+            if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
+                genai_reinit.configure(api_key=settings.GEMINI_API_KEY)
+                temp_model = genai_reinit.GenerativeModel('gemini-2.0-flash-lite')
+                logger.info("✅ Successfully re-initialized Gemini API")
+                
+                # Update global variables
+                global model, genai
+                model = temp_model
+                genai = genai_reinit
+            else:
+                logger.error("❌ GEMINI_API_KEY still not available. Using fallback extraction.")
+                # Use fallback extraction method
+                statements_from_fallback = extract_statements_with_keyword_fallback(
+                    full_text, session_id, debug)
+                
+                for stmt_data in statements_from_fallback:
+                    stmt_data['associated_bill_name'] = "General Discussion"
+                
+                if not debug and statements_from_fallback:
+                    process_extracted_statements_data(statements_from_fallback, session_obj, debug)
+                
+                logger.info(f"📊 Fallback extraction completed: {len(statements_from_fallback)} statements")
+                return
+        except Exception as e:
+            logger.error(f"❌ Failed to re-initialize Gemini: {e}. Using fallback extraction.")
+            # Use fallback extraction method
+            statements_from_fallback = extract_statements_with_keyword_fallback(
+                full_text, session_id, debug)
+            
+            for stmt_data in statements_from_fallback:
+                stmt_data['associated_bill_name'] = "General Discussion"
+            
+            if not debug and statements_from_fallback:
+                process_extracted_statements_data(statements_from_fallback, session_obj, debug)
+            
+            logger.info(f"📊 Fallback extraction completed: {len(statements_from_fallback)} statements")
+            return
 
     # Clean the full text before processing
     logger.info(f"🧹 Cleaning PDF text for session {session_id}")
