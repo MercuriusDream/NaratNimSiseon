@@ -797,7 +797,8 @@ def data_status(request):
     statement_count = Statement.objects.count()
 
     # Recent activity (last 24 hours)
-    yesterday = datetime.now() - timedelta(hours=24)    recent_sessions = Session.objects.filter(created_at__gte=yesterday).count()
+    yesterday = datetime.now() - timedelta(hours=24)
+    recent_sessions = Session.objects.filter(created_at__gte=yesterday).count()
     recent_bills = Bill.objects.filter(created_at__gte=yesterday).count()
     recent_statements = Statement.objects.filter(
         created_at__gte=yesterday).count()
