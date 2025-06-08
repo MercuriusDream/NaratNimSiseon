@@ -26,10 +26,26 @@ class Command(BaseCommand):
             help=
             'Only revert the historical party changes without applying fixes',
         )
+        parser.add_argument(
+            '--name',
+            type=str,
+            help='Specific speaker name to fix (optional)',
+        )
+        parser.add_argument(
+            '--target-party',
+            type=str,
+            help='Target party to assign to the speaker (optional)',
+        )
 
     def handle(self, *args, **options):
         dry_run = options.get('dry_run', False)
         revert_only = options.get('revert_only', False)
+        speaker_name = options.get('name')
+        target_party = options.get('target_party')
+
+        if speaker_name and target_party:
+            self.handle_specific_speaker(speaker_name, target_party, dry_run)
+            return
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -140,10 +156,10 @@ class Command(BaseCommand):
             if raw_22nd_party:
                 api_calls_made += 1
                 current_party = speaker.get_current_party_name()
-                
+
                 # Clean up the party name - extract the most recent/relevant party
                 actual_22nd_party = self.clean_party_name(raw_22nd_party)
-                
+
                 self.stdout.write(f'   🧹 Cleaned API party: {raw_22nd_party} → {actual_22nd_party}')
 
                 # Check if the cleaned API party is different and is not a historical party
@@ -209,8 +225,45 @@ class Command(BaseCommand):
         else:
             self.stdout.write(
                 self.style.SUCCESS(
-                    '✅ FIXES COMPLETE - Historical parties reverted and speakers updated'
+                    '✅ FIXES COMPLETE - Historical parties reverted, speakers updated, and problematic parties cleaned up'
                 ))
+
+    def handle_specific_speaker(self, speaker_name, target_party, dry_run):
+        """Handle updating a specific speaker to a target party"""
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'🎯 Updating specific speaker: {speaker_name} → {target_party}'
+            ))
+
+        try:
+            # Direct lookup instead of iteration
+            speaker = Speaker.objects.get(naas_nm=speaker_name)
+
+            current_party_name = speaker.get_current_party_name()
+            self.stdout.write(f'   Current party: {current_party_name}')
+
+            if current_party_name == target_party:
+                self.stdout.write(f'   ✅ Speaker already in {target_party}')
+                return
+
+            if not dry_run:
+                self.update_speaker_party(speaker, target_party)
+                self.stdout.write(f'   ✅ Updated {speaker_name} to {target_party}')
+            else:
+                self.stdout.write(f'   🔍 DRY RUN: Would update {speaker_name} to {target_party}')
+
+        except Speaker.DoesNotExist:
+            self.stdout.write(
+                self.style.ERROR(f'   ❌ Speaker not found: {speaker_name}')
+            )
+        except Speaker.MultipleObjectsReturned:
+            self.stdout.write(
+                self.style.ERROR(f'   ❌ Multiple speakers found with name: {speaker_name}')
+            )
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'   ❌ Error updating {speaker_name}: {e}')
+            )
 
     def fetch_22nd_assembly_party(self, speaker_name):
         """Fetch speaker's 22nd Assembly party from ALLNAMEMBER API"""
@@ -301,13 +354,13 @@ class Command(BaseCommand):
         """Clean complex party name strings to extract the most relevant current party"""
         if not party_name:
             return party_name
-            
+
         # Split by slash and get individual parties
         parties = [p.strip() for p in party_name.split('/') if p.strip()]
-        
+
         if not parties:
             return party_name
-            
+
         # Priority mapping for current 22nd Assembly parties
         priority_parties = [
             '더불어민주당',
@@ -318,11 +371,11 @@ class Command(BaseCommand):
             '새로운미래',
             '무소속'
         ]
-        
+
         # Look for priority parties first (most recent/relevant)
         for priority_party in priority_parties:
             if priority_party in parties:
                 return priority_party
-        
+
         # If no priority party found, return the last (most recent) party
         return parties[-1]
