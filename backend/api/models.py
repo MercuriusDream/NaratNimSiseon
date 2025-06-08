@@ -100,9 +100,22 @@ class Speaker(models.Model):
         return [party.strip() for party in self.plpt_nm.split('/') if party.strip()]
     
     def get_current_party_name(self):
-        """Returns the most recent (last) party from the party history"""
+        """Returns the most recent (last) party from the party history with proper mapping"""
         parties = self.get_party_list()
-        return parties[-1] if parties else "정당정보없음"
+        if not parties:
+            return "정당정보없음"
+        
+        # Get the last (most recent) party
+        current_party = parties[-1]
+        
+        # Apply party name mappings for consolidation
+        party_mappings = {
+            '민주통합당': '더불어민주당',
+            '더불어민주연합': '더불어민주당',
+            # Add other mappings as needed
+        }
+        
+        return party_mappings.get(current_party, current_party)
 
 class SpeakerPartyHistory(models.Model):
     speaker = models.ForeignKey(Speaker, on_delete=models.CASCADE, verbose_name=_("국회의원"))
