@@ -175,24 +175,34 @@ class Command(BaseCommand):
                     
                     party_name = member_data.get('PLPT_NM', '정당정보없음').strip()
                     
-                    # Extract all parties from party history
-                    if party_name and party_name != '정당정보없음':
-                        party_list = [p.strip() for p in party_name.split('/') if p.strip()]
+                    # Handle party names with "/" - use the newest (last) party
+                    if party_name and '/' in party_name:
+                        party_name = party_name.split('/')[-1].strip()
+                    
+                    # Extract all parties from party history for unique_parties tracking
+                    original_party_name = member_data.get('PLPT_NM', '정당정보없음').strip()
+                    if original_party_name and original_party_name != '정당정보없음':
+                        party_list = [p.strip() for p in original_party_name.split('/') if p.strip()]
                         unique_parties.update(party_list)
+                    
+                    # Handle null values with safe defaults
+                    naas_ch_nm = member_data.get('NAAS_CH_NM')
+                    if naas_ch_nm is None or naas_ch_nm == '':
+                        naas_ch_nm = '정보없음'
                     
                     speaker, created = Speaker.objects.update_or_create(
                         naas_cd=naas_cd,
                         defaults={
-                            'naas_nm': member_data.get('NAAS_NM', ''),
-                            'naas_ch_nm': member_data.get('NAAS_CH_NM', ''),
+                            'naas_nm': member_data.get('NAAS_NM', '정보없음'),
+                            'naas_ch_nm': naas_ch_nm,
                             'plpt_nm': party_name,
                             'elecd_nm': member_data.get('ELECD_NM') or None,
                             'elecd_div_nm': member_data.get('ELECD_DIV_NM') or None,
                             'cmit_nm': member_data.get('CMIT_NM') or None,
-                            'blng_cmit_nm': member_data.get('BLNG_CMIT_NM', ''),
-                            'rlct_div_nm': member_data.get('RLCT_DIV_NM', ''),
-                            'gtelt_eraco': member_data.get('GTELT_ERACO', ''),
-                            'ntr_div': member_data.get('NTR_DIV', ''),
+                            'blng_cmit_nm': member_data.get('BLNG_CMIT_NM', '정보없음'),
+                            'rlct_div_nm': member_data.get('RLCT_DIV_NM', '정보없음'),
+                            'gtelt_eraco': member_data.get('GTELT_ERACO', '정보없음'),
+                            'ntr_div': member_data.get('NTR_DIV', '정보없음'),
                             'naas_pic': member_data.get('NAAS_PIC', '')
                         }
                     )
