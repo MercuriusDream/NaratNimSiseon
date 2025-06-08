@@ -3183,7 +3183,7 @@ def process_pdf_text_for_statements(full_text,
 
         # Process bill segmentation with proper batching
         try:
-            bill_segments_from_llm = _process_single_segmentation_batch(
+            bill_segments_from_llm = _process_bill_segmentation_with_batching(
                 segmentation_llm, segmentation_text, bill_names_list
             )
         except json.JSONDecodeError as e_json_seg:
@@ -3218,6 +3218,71 @@ def process_pdf_text_for_statements(full_text,
                     })
                 logger.info(f"Created {len(bill_segments_from_llm)} fallback segments with actual bill names")
 
+def _process_bill_segmentation_with_batching(segmentation_llm, segmentation_text, bill_names_list):
+    """
+    Use the LLM to segment the transcript into bill-related sections.
+    Returns a list of dicts with keys: 'a' (bill name), 'b' (start idx), 'e' (end idx), 'c' (confidence/score).
+    """
+    import json
+    try:
+        CHUNK_SIZE = 2000
+        total_length = len(segmentation_text)
+        all_segments = []
+        for chunk_start in range(0, total_length, CHUNK_SIZE):
+            chunk_end = min(chunk_start + CHUNK_SIZE, total_length)
+            chunk_text = segmentation_text[chunk_start:chunk_end]
+            prompt = f"""
+            다음 국회 회의록 텍스트를 법안별로 구분해 주세요. 각 법안 이름과 해당 법안에 해당하는 텍스트의 시작 인덱스(b)와 종료 인덱스(e)를 아래 JSON 배열로 반환하세요.
+            법안 목록: {', '.join(bill_names_list)}
+            텍스트:
+            ---
+            {chunk_text}
+            ---
+            응답 형식 예시:
+            [
+              {{"a": "법안명", "b": 1234, "e": 5678, "c": 0.8}}
+            ]
+            반드시 JSON 배열만 반환하세요.
+            """
+            logger.info(f"[Segmentation LLM] Processing chunk {chunk_start}-{chunk_end} of {total_length}")
+            response = segmentation_llm.generate_content(prompt)
+            response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+            try:
+                segments = json.loads(response_text)
+            except Exception as e_json:
+                logger.error(f"[Segmentation LLM] JSON decode error in chunk {chunk_start}-{chunk_end}: {e_json}")
+                continue
+            if not isinstance(segments, list):
+                logger.warning(f"[Segmentation LLM] Expected list in chunk {chunk_start}-{chunk_end}, got {type(segments)}")
+                continue
+            for seg in segments:
+                if (isinstance(seg, dict) and 'a' in seg and 'b' in seg and 'e' in seg):
+                    # Adjust indices to be relative to the full text
+                    try:
+                        seg_b = int(seg['b']) + chunk_start
+                        seg_e = int(seg['e']) + chunk_start
+                    except Exception:
+                        continue
+                    if seg_b < seg_e and seg_b >= 0 and seg_e <= total_length:
+                        seg_copy = dict(seg)
+                        seg_copy['b'] = seg_b
+                        seg_copy['e'] = seg_e
+                        all_segments.append(seg_copy)
+        # Remove duplicates/overlaps (keep first by bill name and start index)
+        unique_segments = {}
+        for seg in all_segments:
+            key = (seg['a'], seg['b'])
+            if key not in unique_segments:
+                unique_segments[key] = seg
+        valid_segments = list(unique_segments.values())
+        if not valid_segments:
+            raise ValueError("No valid segments returned by LLM.")
+        return valid_segments
+    except Exception as e:
+        logger.error(f"❌ Error in bill segmentation LLM: {e}")
+        logger.exception("Traceback for bill segmentation LLM error:")
+        return []
+
     # Sort segments by their appearance order in the full_text using their indices
     sorted_segments_with_text = []
     if bill_segments_from_llm:
@@ -3233,23 +3298,18 @@ def process_pdf_text_for_statements(full_text,
         valid_segments_for_sort.sort(key=lambda x: x['b'])
 
         # Now define the actual text for each segment
-        for i, current_seg_info in enumerate(valid_segments_for_sort):
+        for current_seg_info in valid_segments_for_sort:
             segment_text_start_index = current_seg_info['b']
-            segment_text_end_index = len(full_text)  # Default to end
-
-            if i + 1 < len(
-                    valid_segments_for_sort):  # If there's a next segment
-                next_segment_start_index = valid_segments_for_sort[
-                    i + 1]['b']
-                segment_text_end_index = next_segment_start_index
-
-            segment_actual_text = full_text[
-                segment_text_start_index:segment_text_end_index]
+            segment_text_end_index = current_seg_info.get('e', len(full_text))
+            # Ensure indices are valid
+            if not isinstance(segment_text_start_index, int) or not isinstance(segment_text_end_index, int):
+                continue
+            if segment_text_start_index < 0 or segment_text_end_index > len(full_text) or segment_text_start_index >= segment_text_end_index:
+                continue
+            segment_actual_text = full_text[segment_text_start_index:segment_text_end_index]
             sorted_segments_with_text.append({
-                "bill_name":
-                current_seg_info.get("a", "Unknown Bill Segment"),
-                "text":
-                segment_actual_text
+                "bill_name": current_seg_info.get("a", "Unknown Bill Segment"),
+                "text": segment_actual_text
             })
         logger.info(
             f"Successfully ordered {len(sorted_segments_with_text)} bill segments by appearance."
