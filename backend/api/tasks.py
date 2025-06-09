@@ -2631,122 +2631,144 @@ def _process_large_batch_in_chunks(batch_model, segments, bill_name,
 
 def _execute_batch_analysis(batch_model, prompt, cleaned_segments,
                             original_segments, assembly_members,
-                            batch_start_index):
-    """Execute the actual batch analysis request."""
-    start_time = time.time()
-    try:
-        response = batch_model.generate_content(prompt)
-
-        processing_time = time.time() - start_time
-        logger.info(
-            f"Batch processing took {processing_time:.1f}s for {len(cleaned_segments)} segments"
-        )
-
-        if not response or not response.text:
-            logger.warning(
-                f"Empty batch response from LLM after {processing_time:.1f}s")
-            return []
-
-        response_text_cleaned = response.text.strip().replace(
-            "```json", "").replace("```", "").strip()
-
+                            batch_start_index, max_retries=3):
+    """Execute the actual batch analysis request with retry logic for API errors."""
+    
+    for attempt in range(max_retries + 1):
+        start_time = time.time()
         try:
-            analysis_array = json.loads(response_text_cleaned)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in batch response: {e}")
-            logger.debug(f"Raw response: {response_text_cleaned[:500]}...")
-            return []
+            response = batch_model.generate_content(prompt)
 
-        if not isinstance(analysis_array, list):
-            logger.warning(f"Expected list but got {type(analysis_array)}")
-            return []
+            processing_time = time.time() - start_time
+            logger.info(
+                f"Batch processing took {processing_time:.1f}s for {len(cleaned_segments)} segments"
+            )
 
-        results = []
-        for i, analysis_json in enumerate(analysis_array):
-            if not isinstance(analysis_json, dict):
+            if not response or not response.text:
+                logger.warning(
+                    f"Empty batch response from LLM after {processing_time:.1f}s")
+                return []
+
+            response_text_cleaned = response.text.strip().replace(
+                "```json", "").replace("```", "").strip()
+
+            try:
+                analysis_array = json.loads(response_text_cleaned)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error in batch response: {e}")
+                logger.debug(f"Raw response: {response_text_cleaned[:500]}...")
+                return []
+
+            if not isinstance(analysis_array, list):
+                logger.warning(f"Expected list but got {type(analysis_array)}")
+                return []
+
+            results = []
+            for i, analysis_json in enumerate(analysis_array):
+                if not isinstance(analysis_json, dict):
+                    continue
+
+                speaker_name = analysis_json.get('speaker_name', '').strip()
+                start_idx = analysis_json.get('start_idx', 0)
+                end_idx = analysis_json.get('end_idx', 0)
+                is_valid_member = analysis_json.get('is_valid_member', False)
+                is_substantial = analysis_json.get('is_substantial', False)
+
+                # Extract speech content
+                speech_content = ""
+                if i < len(original_segments
+                           ) and start_idx >= 0 and end_idx > start_idx:
+                    original_segment = original_segments[i]
+                    clean_original = original_segment.replace('\n', ' ').replace(
+                        '\r', '').strip()
+
+                    # Extract using indices with bounds checking
+                    actual_end = min(end_idx, len(clean_original))
+                    actual_start = min(start_idx, len(clean_original))
+                    speech_content = clean_original[actual_start:actual_end].strip(
+                    )
+
+                # Clean speaker name from titles
+                if speaker_name:
+                    titles_to_remove = [
+                        '위원장', '부위원장', '의원', '장관', '차관', '의장', '부의장', '의사국장',
+                        '사무관', '국장', '서기관', '실장', '청장', '원장', '대변인', '비서관', '수석',
+                        '정무위원', '간사'
+                    ]
+
+                    for title in titles_to_remove:
+                        speaker_name = speaker_name.replace(title, '').strip()
+
+                # Validate speaker
+                is_real_member = speaker_name in assembly_members if assembly_members and speaker_name else is_valid_member
+
+                should_ignore = any(
+                    ignored in speaker_name
+                    for ignored in IGNORED_SPEAKERS) if speaker_name else True
+
+                if (speaker_name and speech_content and is_valid_member
+                        and is_substantial and not should_ignore
+                        and is_real_member):
+
+                    results.append({
+                        'speaker_name':
+                        speaker_name,
+                        'text':
+                        speech_content,
+                        'sentiment_score':
+                        analysis_json.get('sentiment_score', 0.0),
+                        'sentiment_reason':
+                        'LLM 배치 분석 완료',
+                        'bill_relevance_score':
+                        analysis_json.get('bill_relevance_score', 0.0),
+                        'policy_categories': [],
+                        'policy_keywords': [],
+                        'bill_specific_keywords': [],
+                        'segment_index':
+                        batch_start_index + i
+                    })
+
+            logger.info(
+                f"✅ Batch processed {len(results)} valid statements from {len(cleaned_segments)} segments"
+            )
+            return results
+
+        except Exception as e:
+            processing_time = time.time() - start_time
+            error_msg = str(e).lower()
+            
+            # Determine error type and retry strategy
+            is_retryable_error = False
+            wait_time = 5  # Default wait time
+            
+            if "500" in error_msg and "internal error" in error_msg:
+                is_retryable_error = True
+                wait_time = 10 + (attempt * 10)  # 10s, 20s, 30s
+                logger.error(f"Error in batch analysis after {processing_time:.1f}s: 500 An internal error has occurred. Please retry or report in https://developers.generativeai.google/guide/troubleshooting")
+            elif "504" in error_msg or "deadline" in error_msg or "timeout" in error_msg:
+                is_retryable_error = True
+                wait_time = 15 + (attempt * 15)  # 15s, 30s, 45s
+                logger.warning(f"⏰ BATCH TIMEOUT after {processing_time:.1f}s: {e}")
+            elif "429" in error_msg or "quota" in error_msg or "rate" in error_msg:
+                is_retryable_error = True
+                wait_time = 20 + (attempt * 20)  # 20s, 40s, 60s
+                logger.warning(f"Rate limit hit during batch analysis: {e}")
+            else:
+                # Non-retryable error
+                logger.error(f"Non-retryable error in batch analysis after {processing_time:.1f}s: {e}")
+                return []
+            
+            if is_retryable_error and attempt < max_retries:
+                logger.info(f"Resting {wait_time}s before retry {attempt + 1}/{max_retries}...")
+                time.sleep(wait_time)
                 continue
-
-            speaker_name = analysis_json.get('speaker_name', '').strip()
-            start_idx = analysis_json.get('start_idx', 0)
-            end_idx = analysis_json.get('end_idx', 0)
-            is_valid_member = analysis_json.get('is_valid_member', False)
-            is_substantial = analysis_json.get('is_substantial', False)
-
-            # Extract speech content
-            speech_content = ""
-            if i < len(original_segments
-                       ) and start_idx >= 0 and end_idx > start_idx:
-                original_segment = original_segments[i]
-                clean_original = original_segment.replace('\n', ' ').replace(
-                    '\r', '').strip()
-
-                # Extract using indices with bounds checking
-                actual_end = min(end_idx, len(clean_original))
-                actual_start = min(start_idx, len(clean_original))
-                speech_content = clean_original[actual_start:actual_end].strip(
-                )
-
-            # Clean speaker name from titles
-            if speaker_name:
-                titles_to_remove = [
-                    '위원장', '부위원장', '의원', '장관', '차관', '의장', '부의장', '의사국장',
-                    '사무관', '국장', '서기관', '실장', '청장', '원장', '대변인', '비서관', '수석',
-                    '정무위원', '간사'
-                ]
-
-                for title in titles_to_remove:
-                    speaker_name = speaker_name.replace(title, '').strip()
-
-            # Validate speaker
-            is_real_member = speaker_name in assembly_members if assembly_members and speaker_name else is_valid_member
-
-            should_ignore = any(
-                ignored in speaker_name
-                for ignored in IGNORED_SPEAKERS) if speaker_name else True
-
-            if (speaker_name and speech_content and is_valid_member
-                    and is_substantial and not should_ignore
-                    and is_real_member):
-
-                results.append({
-                    'speaker_name':
-                    speaker_name,
-                    'text':
-                    speech_content,
-                    'sentiment_score':
-                    analysis_json.get('sentiment_score', 0.0),
-                    'sentiment_reason':
-                    'LLM 배치 분석 완료',
-                    'bill_relevance_score':
-                    analysis_json.get('bill_relevance_score', 0.0),
-                    'policy_categories': [],
-                    'policy_keywords': [],
-                    'bill_specific_keywords': [],
-                    'segment_index':
-                    batch_start_index + i
-                })
-
-        logger.info(
-            f"✅ Batch processed {len(results)} valid statements from {len(cleaned_segments)} segments"
-        )
-        return results
-
-    except Exception as e:
-        processing_time = time.time() - start_time
-
-        if "504" in str(e) or "Deadline" in str(e):
-            logger.warning(
-                f"⏰ BATCH TIMEOUT after {processing_time:.1f}s: {e}")
-            time.sleep(15)
-            return []
-        elif "429" in str(e) and "quota" in str(e).lower():
-            logger.warning(f"Rate limit hit during batch analysis: {e}")
-            time.sleep(10)
-            return []
-        else:
-            logger.error(
-                f"Error in batch analysis after {processing_time:.1f}s: {e}")
-            return []
+            elif is_retryable_error:
+                logger.error(f"Max retries ({max_retries}) exceeded for batch analysis. Final error: {e}")
+                return []
+            else:
+                return []
+    
+    return []
 
 
 def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name,
