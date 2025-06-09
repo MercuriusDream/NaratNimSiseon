@@ -4512,11 +4512,36 @@ def process_pdf_text_for_statements(full_text, session_id, session_obj, bills_co
 def clean_pdf_text(text: str) -> str:
     """
     Cleans the entire raw PDF text by removing session headers, OCR markers,
-    and normalizing whitespace. This is the single source of truth for text cleaning.
+    session end markers, and normalizing whitespace. This is the single source of truth for text cleaning.
     """
     import re
     if not text:
         return ""
+
+    # First, truncate text at session end markers to remove unimportant content
+    session_end_patterns = [
+        r'\(\d{1,2}시\s*\d{1,2}분\s+산회\)',  # (10시38분 산회)
+        r'\(\d{1,2}시\s*\d{1,2}분\s+폐회\)',  # (10시38분 폐회)
+        r'\(\d{1,2}시\s*\d{1,2}분\s+정회\)',  # (10시38분 정회)
+        r'\(\d{1,2}시\s*\d{1,2}분\s+휴회\)',  # (10시38분 휴회)
+        r'산회\s*선포',  # 산회 선포
+        r'폐회\s*선포',  # 폐회 선포
+        r'정회\s*선포',  # 정회 선포
+        r'휴회\s*선포',  # 휴회 선포
+    ]
+    
+    # Find the earliest session end marker and truncate text there
+    earliest_end_pos = len(text)
+    for pattern in session_end_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            end_pos = match.end()
+            if end_pos < earliest_end_pos:
+                earliest_end_pos = end_pos
+    
+    if earliest_end_pos < len(text):
+        text = text[:earliest_end_pos]
+        logger.info(f"🚫 Truncated text at session end marker (removed {len(text) - earliest_end_pos} chars after session end)")
 
     # This pattern matches full-line headers like "제423회-제4차(2025년4월3일) 1"
     session_header_pattern = re.compile(r'^제\d+회-제\d+차\s*\(.+?\)\s*\d+\s*$')
@@ -4525,21 +4550,48 @@ def clean_pdf_text(text: str) -> str:
         r'^==\s*(Start|End) of OCR for page \d+\s*==$')
     # Remove meeting start/end time markers from the flow of text, as they are not part of speech.
     timing_marker_pattern = re.compile(r'\(\d{1,2}시\s*\d{1,2}분\s+개의?\)')
+    # Remove report markers that indicate end of substantive content
+    report_end_pattern = re.compile(r'\(보고사항은 끝에 실음\)')
+    # Remove page break markers and similar artifacts
+    page_break_pattern = re.compile(r'^-+\s*페이지\s*\d+\s*-+$')
+    # Remove empty procedural lines
+    procedural_pattern = re.compile(r'^[\s\-\=\*]+$')
 
     lines = text.split('\n')
     cleaned_lines = []
+    skip_after_report_end = False
 
     for line in lines:
         stripped_line = line.strip()
+
+        # Skip empty lines
+        if not stripped_line:
+            continue
 
         # Skip common header/footer/artifact lines completely
         if session_header_pattern.match(stripped_line):
             continue
         if ocr_marker_pattern.match(stripped_line):
             continue
+        if page_break_pattern.match(stripped_line):
+            continue
+        if procedural_pattern.match(stripped_line):
+            continue
+
+        # Check for report end markers and skip everything after
+        if report_end_pattern.search(stripped_line):
+            skip_after_report_end = True
+            continue
+        
+        if skip_after_report_end:
+            continue
 
         # Remove timing markers from the content of the line
         stripped_line = timing_marker_pattern.sub('', stripped_line)
+
+        # Remove other common artifacts
+        stripped_line = re.sub(r'^\s*\d+\s*$', '', stripped_line)  # Remove lone page numbers
+        stripped_line = re.sub(r'^\s*\-+\s*$', '', stripped_line)  # Remove dash-only lines
 
         # Normalize all whitespace to a single space
         cleaned_line = re.sub(r'\s+', ' ', stripped_line).strip()
