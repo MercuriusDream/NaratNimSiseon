@@ -117,7 +117,7 @@ class Bill(models.Model):
                                        verbose_name=_("정책 키워드"))
     
     # Structured category relationships
-    primary_categories = models.ManyToManyField(Category,
+    primary_categories = models.ManyToManyField('Category',
                                                through='BillCategoryMapping',
                                                related_name='primary_bills',
                                                verbose_name=_("주요 정책 범주"))
