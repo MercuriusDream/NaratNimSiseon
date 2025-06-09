@@ -149,6 +149,17 @@ cd backend
 python manage.py start_collection
 ```
 
+### 📋 정책 카테고리 로드
+정책 분석을 위한 카테고리 데이터를 CSV 파일에서 로드:
+```bash
+cd backend
+python manage.py load_policy_categories --csv-file=../Additional_Files/code.txt
+```
+
+**옵션**:
+- `--csv-file`: CSV 파일 경로 (필수)
+- `--clear-existing`: 기존 카테고리 데이터 삭제 후 로드
+
 **데이터 수집 모드**:
 - **Redis 사용 가능**: 비동기 백그라운드 처리로 빠른 수집
 - **Redis 불가능**: 동기식 처리로 안정적인 수집 (Replit 환경에서 권장)

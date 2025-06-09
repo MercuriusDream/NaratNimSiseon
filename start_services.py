@@ -1,4 +1,3 @@
-
 import subprocess
 import sys
 import os
@@ -133,7 +132,7 @@ def kill_redis_processes():
                 killed_any = True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
-    
+
     if killed_any:
         time.sleep(2)  # Wait for processes to fully terminate
         print("✅ Redis processes killed")
@@ -191,34 +190,34 @@ def is_redis_running():
 def start_redis():
     """Start Redis with proper configuration for Replit/Nix environment"""
     print("🚀 Starting Redis server...")
-    
+
     # Kill any existing Redis processes first
     kill_redis_processes()
-    
+
     # Try multiple Redis startup strategies
     redis_commands = [
         # Strategy 1: Use env LD_PRELOAD= to bypass jemalloc issues
         "env LD_PRELOAD= redis-server --save '' --appendonly no --bind 0.0.0.0 --port 6379 --daemonize yes --maxmemory 100mb --maxmemory-policy allkeys-lru",
-        
+
         # Strategy 2: Use alternative allocator
         "env MALLOC_ARENA_MAX=1 redis-server --save '' --appendonly no --bind 0.0.0.0 --port 6379 --daemonize yes --maxmemory 100mb",
-        
+
         # Strategy 3: Simple Redis with minimal config
         "redis-server --save '' --appendonly no --bind 0.0.0.0 --port 6379 --daemonize yes --maxmemory 50mb"
     ]
-    
+
     for i, redis_cmd in enumerate(redis_commands, 1):
         print(f"📋 Trying Redis startup strategy {i}...")
         print(f"📝 Command: {redis_cmd}")
-        
+
         try:
             result = subprocess.run(redis_cmd, shell=True, capture_output=True, text=True, timeout=10)
-            
+
             if result.returncode == 0:
                 print(f"✅ Redis command executed successfully")
                 # Wait a moment for Redis to start
                 time.sleep(3)
-                
+
                 # Check if Redis is actually running
                 if is_redis_running():
                     print("✅ Redis is running and responding to pings")
@@ -229,16 +228,16 @@ def start_redis():
                 print(f"❌ Redis startup failed with return code {result.returncode}")
                 if result.stderr:
                     print(f"[REDIS-ERR] {result.stderr}")
-                    
+
         except subprocess.TimeoutExpired:
             print("⚠️ Redis startup command timed out")
         except Exception as e:
             print(f"❌ Redis startup error: {e}")
-            
+
         # If this strategy failed, try the next one
         kill_redis_processes()
         time.sleep(2)
-    
+
     print("❌ All Redis startup strategies failed")
     return False
 
@@ -321,7 +320,7 @@ def main():
     # Start Celery components only if Redis is running
     celery_worker_process = None
     celery_beat_process = None
-    
+
     if redis_started:
         # Start Celery worker
         print("🚀 Starting Celery worker...")
@@ -342,11 +341,15 @@ def main():
         print("⚠️ Skipping Celery services due to Redis issues")
         print("   Data collection will run synchronously when triggered")
 
-    print("\n🎉 Services started!")
+    print("🎉 Services started!")
     print("=" * 50)
     print("🌐 Django server running at: http://localhost:3000")
     print("🌐 Django admin: http://localhost:3000/admin/")
     print("🌐 Django API: http://localhost:3000/api/")
+    print("=" * 50)
+    print("💡 Additional commands:")
+    print("   📊 Start data collection: cd backend && python manage.py start_collection")
+    print("   📋 Load policy categories: cd backend && python manage.py load_policy_categories --csv-file=../Additional_Files/code.txt")
     print("=" * 50)
     print("📊 Process monitoring:")
     print(f"  - Django PID: {django_process.pid}")
@@ -368,7 +371,7 @@ def main():
 
             # Check if any process died
             processes = [("Django", django_process)]
-            
+
             if celery_worker_process:
                 processes.append(("Celery-Worker", celery_worker_process))
             if celery_beat_process:
@@ -383,7 +386,7 @@ def main():
 
         # Stop all processes gracefully
         processes_to_stop = [("Django", django_process)]
-        
+
         if celery_worker_process:
             processes_to_stop.append(("Celery-Worker", celery_worker_process))
         if celery_beat_process:
