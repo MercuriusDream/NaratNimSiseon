@@ -1,0 +1,90 @@
+def _process_single_bill_segmentation_batch(segmentation_llm, text_batch,
+                                            bill_names, batch_offset):
+    """Process a single batch for bill segmentation and extract bill-level metadata."""
+    try:
+        bill_segmentation_prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+국회 회의록 텍스트 배치에서 논의된 주요 의안(법안)별로 구간을 나누고, 각 의안별로 정책 카테고리, 핵심 정책 어구, 의안 관련 키워드를 추출해 주세요.
+
+의안 목록 (반드시 이 정확한 문자열을 사용하세요):
+{chr(10).join([f"- {bill}" for bill in bill_names])}
+
+회의록 텍스트 배치 (전체 문서의 {batch_offset}-{batch_offset+len(text_batch)} 구간):
+---
+{text_batch}
+---
+
+이 배치에서 각 의안에 대한 논의 시작 지점 및 정책 정보를 알려주세요. JSON 형식 응답:
+{{
+  "bill_discussion_segments": [
+    {{
+      "bill_name_identified": "위 목록에서 복사한 정확한 의안명 (한 글자도 바꾸지 말고 그대로 복사)",
+      "discussion_start_idx": 해당 의안 논의가 시작되는 배치 내 문자 위치 (숫자),
+      "confidence": 0.0-1.0 (매칭 확신도),
+      "policy_categories": [
+        {{
+          "main_category": "주요 정책 분야 (경제, 복지, 교육, 외교안보, 환경, 법제, 과학기술, 문화, 농림, 국토교통, 행정, 기타 중 택1)",
+          "sub_category": "세부 정책 분야 (예: '저출생 대응', '부동산 안정', 'AI 육성 등, 없으면 '일반')",
+          "confidence": 0.0 부터 1.0 사이의 분류 확신도 (숫자)
+        }}
+      ],
+      "key_policy_phrases": ["발언의 핵심 정책 관련 어구 (최대 5개 배열)"],
+      "bill_specific_keywords_found": ["발언 내용 중 해당 의안 또는 이와 관련된 직접적인 키워드가 있다면 배열로 제공 (최대 3개)"]
+    }}
+  ]
+}}
+
+중요한 규칙:
+- "bill_name_identified"는 반드시 위 의안 목록에서 정확히 복사해야 합니다 (변경, 단축, 수정 금지)
+- 의안명을 찾기 어려우면 부분적 키워드로 매칭하되, 응답할 때는 원본 목록의 정확한 문자열을 사용하세요
+- discussion_start_idx는 이 배치 내에서의 상대적 위치입니다 (0부터 시작)
+- confidence가 0.7 미만인 경우는 포함하지 마세요
+- 배치 경계에서 잘린 논의는 다음 배치에서 처리됩니다
+"""
+
+        response = segmentation_llm.generate_content(bill_segmentation_prompt)
+
+        if not response or not response.text:
+            logger.warning("No response from LLM for bill segmentation batch")
+            return []
+
+        response_text_cleaned = response.text.strip().replace(
+            "```json", "").replace("```", "").strip()
+
+        try:
+            data = json.loads(response_text_cleaned)
+            segments = data.get("bill_discussion_segments", [])
+
+            valid_segments = []
+            for segment in segments:
+                if (isinstance(segment, dict)
+                        and segment.get('confidence', 0) >= 0.7
+                        and segment.get('bill_name_identified', '').strip()
+                        and isinstance(segment.get('discussion_start_idx', -1),
+                                       (int, float))
+                        and segment.get('discussion_start_idx', -1) >= 0):
+
+                    valid_segments.append({
+                        'a':
+                        segment['bill_name_identified'].strip(),
+                        'b':
+                        int(segment['discussion_start_idx']),
+                        'c':
+                        float(segment['confidence']),
+                        'policy_categories':
+                        segment.get('policy_categories', []),
+                        'key_policy_phrases':
+                        segment.get('key_policy_phrases', []),
+                        'bill_specific_keywords_found':
+                        segment.get('bill_specific_keywords_found', [])
+                    })
+
+            return valid_segments
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON decode error in bill segmentation: {e}")
+            return []
+
+    except Exception as e:
+        logger.error(f"Error in bill segmentation batch: {e}")
+        return []
