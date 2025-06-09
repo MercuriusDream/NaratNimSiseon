@@ -110,9 +110,8 @@ class Command(BaseCommand):
                         elif hasattr(func, '__wrapped__'):
                             func = func.__wrapped__
                         
-                        # Call with self=None for bound tasks
+                        # Call directly (bound tasks don't need self when called directly)
                         func(
-                            self=None,
                             force=True,
                             debug=debug,
                             start_date=start_date.isoformat() if start_date else None)
@@ -206,8 +205,8 @@ class Command(BaseCommand):
                             elif hasattr(func, '__wrapped__'):
                                 func = func.__wrapped__
                             
-                            # Call the function directly
-                            func(self=None, session_id=session.conf_id, force=True, debug=debug)
+                            # Call the function directly (bound tasks don't need self when called directly)
+                            func(session_id=session.conf_id, force=True, debug=debug)
                         else:
                             logger.error(f"Function {func_name} not found in tasks module")
                     except Exception as e_fallback:
