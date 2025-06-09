@@ -3618,6 +3618,79 @@ def clean_pdf_text(text):
     return cleaned_text
 
 
+def discover_bills_from_content_llm(full_text, max_bills=10, debug=False):
+    """Let LLM discover what bills are actually discussed in the PDF content"""
+    if not genai or debug:
+        return []
+    
+    try:
+        discovery_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        
+        # Use first 50k chars for discovery to avoid token limits
+        discovery_text = full_text[:50000] if len(full_text) > 50000 else full_text
+        
+        prompt = f"""
+당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+
+국회 회의록에서 **실제로 논의되고 있는** 법안들을 찾아주세요. 단순히 목록에 나열된 것이 아니라, 의원들이 실제로 발언하고 토론하는 법안만 찾으세요.
+
+회의록 텍스트:
+---
+{discovery_text}
+---
+
+실제로 토론이 이루어지는 법안들을 찾아 JSON으로 응답:
+{{
+  "discussed_bills": [
+    {{
+      "bill_name": "실제로 논의되는 법안명 (정확한 이름)",
+      "discussion_type": "detailed_debate|simple_vote|procedural_mention",
+      "confidence": 0.0-1.0
+    }}
+  ]
+}}
+
+규칙:
+1. 실제 의원 발언(◯로 시작)에서 언급되는 법안만 포함
+2. 단순 목록 나열은 제외
+3. confidence 0.7 미만은 제외
+4. 최대 {max_bills}개까지만
+5. "discussion_type"이 "detailed_debate"인 것을 우선적으로 포함
+"""
+
+        response = discovery_model.generate_content(prompt)
+        
+        if not response or not response.text:
+            logger.warning("No response from LLM for bill discovery")
+            return []
+            
+        response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+        
+        try:
+            data = json.loads(response_text)
+            discussed_bills = data.get('discussed_bills', [])
+            
+            valid_bills = []
+            for bill_info in discussed_bills:
+                if (bill_info.get('confidence', 0) >= 0.7 and 
+                    bill_info.get('bill_name', '').strip()):
+                    valid_bills.append(bill_info['bill_name'].strip())
+                    
+            logger.info(f"🔍 LLM discovered {len(valid_bills)} actually discussed bills")
+            for bill in valid_bills:
+                logger.info(f"   📋 {bill[:80]}...")
+                
+            return valid_bills
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error in bill discovery: {e}")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Error in bill discovery: {e}")
+        return []
+
+
 def process_pdf_text_for_statements(full_text,
                                     session_id,
                                     session_obj,
@@ -3679,69 +3752,67 @@ def process_pdf_text_for_statements(full_text,
         )
         segmentation_llm = None
 
+    # First, let the LLM discover what bills are actually discussed
+    logger.info(f"🔍 Step 1: Discovering bills actually discussed in session {session_id}")
+    discovered_bills = discover_bills_from_content_llm(full_text, max_bills=15, debug=debug)
+    
     bill_segments_from_llm = []
-    if segmentation_llm:
-        if bill_names_list and len(bill_names_list) > 0:
-            logger.info(
-                f"🔍 Getting bill segments with indices for session {session_id} (found {len(bill_names_list)} bills)"
-            )
+    if segmentation_llm and discovered_bills:
+        logger.info(
+            f"🔍 Step 2: Getting bill segments for {len(discovered_bills)} discovered bills"
+        )
+        for bill in discovered_bills:
+            logger.info(f"   📋 Will segment: {bill[:80]}...")
 
-            try:
-                bill_segments_from_llm = _process_bill_segmentation_with_batching(
-                    segmentation_llm, full_text, bill_names_list)
-            except Exception as e_seg:
-                logger.error(f"Error during LLM bill segmentation: {e_seg}")
-                # Create equal segments as fallback
-                if bill_names_list:
-                    text_per_bill = len(full_text) // len(bill_names_list)
-                    for i, bill_name in enumerate(bill_names_list):
-                        start_idx = i * text_per_bill
-                        end_idx = (i + 1) * text_per_bill if i < len(
-                            bill_names_list) - 1 else len(full_text)
-                        bill_segments_from_llm.append({
-                            "a": bill_name,
-                            "b": start_idx,
-                            "e": end_idx,
-                            "c": 0.5
-                        })
-                    logger.info(
-                        f"Created {len(bill_segments_from_llm)} equal fallback segments"
-                    )
-        else:
-            logger.warning(
-                f"⚠️ No bill names found for session {session_id}, will process entire text as general discussion"
-            )
+        try:
+            bill_segments_from_llm = _process_bill_segmentation_with_batching(
+                segmentation_llm, full_text, discovered_bills)
+        except Exception as e_seg:
+            logger.error(f"Error during LLM bill segmentation: {e_seg}")
             
-            # Debug information
-            try:
-                session = Session.objects.get(conf_id=session_id)
-                logger.error(f"🔍 DEBUG INFO for session {session_id}:")
-                logger.error(f"   - Session title: {session.title}")
-                logger.error(f"   - Session committee: {session.cmit_nm}")
-                logger.error(f"   - Session date: {session.conf_dt}")
-                logger.error(f"   - PDF URL exists: {bool(session.down_url)}")
-                
-                # Check if bills exist in database
-                bills_in_db = Bill.objects.filter(session=session)
-                logger.error(f"   - Bills in database: {bills_in_db.count()}")
-                
-                if bills_in_db.exists():
-                    logger.error(f"   - Bill names from DB:")
-                    for bill in bills_in_db[:5]:  # Show first 5
-                        logger.error(f"     * {bill.bill_nm}")
-                    if bills_in_db.count() > 5:
-                        logger.error(f"     ... and {bills_in_db.count() - 5} more")
-                else:
-                    logger.error(f"   - No bills found in database for this session")
-                    logger.error(f"   - This may be an administrative session or bills haven't been fetched yet")
-                    
-            except Session.DoesNotExist:
-                logger.error(f"   - Session {session_id} not found in database!")
-            except Exception as e:
-                logger.error(f"   - Error getting debug info: {e}")
+    elif segmentation_llm and bill_names_list and len(bill_names_list) > 0:
+        # Fallback to predetermined list if discovery fails
+        logger.info(
+            f"🔄 Fallback: Using predetermined bill list for session {session_id} ({len(bill_names_list)} bills)"
+        )
+
+        try:
+            bill_segments_from_llm = _process_bill_segmentation_with_batching(
+                segmentation_llm, full_text, bill_names_list)
+        except Exception as e_seg:
+            logger.error(f"Error during fallback bill segmentation: {e_seg}")
+            
     else:
-        logger.error(
-            f"❌ Segmentation LLM not available for session {session_id}")
+        logger.warning(
+            f"⚠️ No bills discovered or found for session {session_id}, will process entire text as general discussion"
+        )
+        
+        # Debug information
+        try:
+            session = Session.objects.get(conf_id=session_id)
+            logger.info(f"🔍 Session info for {session_id}:")
+            logger.info(f"   - Title: {session.title}")
+            logger.info(f"   - Committee: {session.cmit_nm}")
+            logger.info(f"   - Date: {session.conf_dt}")
+            
+            # Check if bills exist in database
+            bills_in_db = Bill.objects.filter(session=session)
+            logger.info(f"   - Bills in database: {bills_in_db.count()}")
+            
+            if bills_in_db.exists():
+                logger.info(f"   - Sample bill names from DB:")
+                for bill in bills_in_db[:3]:  # Show first 3
+                    logger.info(f"     * {bill.bill_nm[:60]}...")
+                if bills_in_db.count() > 3:
+                    logger.info(f"     ... and {bills_in_db.count() - 3} more")
+            else:
+                logger.info(f"   - No bills found in database for this session")
+                logger.info(f"   - This may be an administrative/voting session without detailed debate")
+                
+        except Session.DoesNotExist:
+            logger.error(f"   - Session {session_id} not found in database!")
+        except Exception as e:
+            logger.error(f"   - Error getting session info: {e}")
 
 
 def _process_bill_segmentation_with_batching(segmentation_llm,
