@@ -2713,6 +2713,38 @@ def create_placeholder_bill_from_llm(session_obj, bill_title):
     return bill
 
 
+@with_db_retry
+def update_bill_policy_data(bill_obj, segment_data):
+    """Update bill with policy analysis data from segmentation."""
+    try:
+        policy_categories = segment_data.get('policy_categories', [])
+        key_policy_phrases = segment_data.get('key_policy_phrases', [])
+        bill_specific_keywords = segment_data.get('bill_specific_keywords', [])
+        
+        # Update bill fields
+        bill_obj.policy_categories = policy_categories
+        bill_obj.key_policy_phrases = key_policy_phrases
+        bill_obj.bill_specific_keywords = bill_specific_keywords
+        
+        # Create category analysis text
+        if policy_categories:
+            category_analysis = f"정책 분야: {', '.join(policy_categories)}"
+            if key_policy_phrases:
+                category_analysis += f"\n핵심 정책: {', '.join(key_policy_phrases)}"
+            bill_obj.category_analysis = category_analysis
+        
+        # Create policy keywords string
+        if key_policy_phrases:
+            bill_obj.policy_keywords = ', '.join(key_policy_phrases)
+            
+        bill_obj.save()
+        logger.info(f"✅ Updated policy data for bill: {bill_obj.bill_nm[:50]}...")
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating bill policy data: {e}")
+        logger.exception("Full traceback for bill policy update:")
+
+
 import json
 import logging
 
@@ -2743,27 +2775,43 @@ def extract_statements_with_llm_discovery(full_text,
         known_bills_str = "No known bills were provided."
 
     prompt = f"""You are a world-class legislative analyst AI. Your task is to read a parliamentary transcript
-and perfectly segment the entire discussion for all topics.
+and perfectly segment the entire discussion for all topics, while also analyzing policy content.
 
 **CONTEXT:**
 I already know about the following bills. You MUST find the discussion for these if they exist.
 --- KNOWN BILLS ---
 {known_bills_str}
 
-    **YOUR CRITICAL MISSION:**
-    1. Read the entire transcript below.
-    2. Identify the exact start and end character index for the complete discussion of each **KNOWN BILL**.
-    3. Discover any additional bills/topics not in the known list, and identify their discussion spans.
-    4. Return a JSON object with two arrays: `bills_found` (known bills) and `newly_discovered` (others).
+**YOUR CRITICAL MISSION:**
+1. Read the entire transcript below.
+2. Identify the exact start and end character index for the complete discussion of each **KNOWN BILL**.
+3. Discover any additional bills/topics not in the known list, and identify their discussion spans.
+4. For each bill/topic, analyze the policy content and categorize it.
+5. Return a JSON object with segmentation AND policy analysis.
 
-    **RULES:**
-    - Ignore any mentions that occur in the table-of-contents or front-matter portion of the document
-      (before the Chair officially opens the debate).
-    - A discussion segment **must** be substantive, containing actual debate or remarks from multiple speakers.
-      Do not segment short procedural announcements.
-    - `bill_name` for known bills MUST EXACTLY MATCH the provided list.
-    - For new items, create a concise, accurate `bill_name`.
-    - Return **ONLY** the final JSON object.
+**POLICY CATEGORIES:**
+- 경제/산업: 경제정책, 산업진흥, 금융, 무역, 중소기업, 벤처
+- 사회복지: 복지정책, 사회보장, 의료보험, 연금, 돌봄서비스
+- 교육/문화: 교육정책, 대학, 문화예술, 체육, 관광
+- 환경/에너지: 환경보호, 기후변화, 신재생에너지, 원자력
+- 국방/외교: 국방정책, 외교관계, 통일, 안보
+- 행정/법무: 행정개혁, 사법제도, 인권, 개인정보보호
+- 과학기술: 과학기술진흥, IT, 디지털전환, 인공지능
+- 농림/해양: 농업, 임업, 수산업, 농촌개발
+- 국토/교통: 국토개발, 교통정책, 주택, 도시계획
+- 보건/의료: 보건정책, 의료서비스, 질병관리, 건강증진
+
+**RULES:**
+- Ignore any mentions that occur in the table-of-contents or front-matter portion of the document
+  (before the Chair officially opens the debate).
+- A discussion segment **must** be substantive, containing actual debate or remarks from multiple speakers.
+  Do not segment short procedural announcements.
+- `bill_name` for known bills MUST EXACTLY MATCH the provided list.
+- For new items, create a concise, accurate `bill_name`.
+- Analyze policy content for each segment and assign appropriate categories.
+- Extract key policy phrases and specific keywords related to the bill.
+- Return **ONLY** the final JSON object.
+
 **TRANSCRIPT:**
 ---
 {full_text}
@@ -2775,7 +2823,10 @@ I already know about the following bills. You MUST find the discussion for these
     {{
       "bill_name": "Exact name of a KNOWN bill",
       "start_index": 1234,
-      "end_index": 5678
+      "end_index": 5678,
+      "policy_categories": ["경제/산업", "사회복지"],
+      "key_policy_phrases": ["중소기업 지원", "일자리 창출", "사회안전망"],
+      "bill_specific_keywords": ["세제혜택", "금융지원", "고용보험"]
     }}
     // …more known bills
   ],
@@ -2783,7 +2834,10 @@ I already know about the following bills. You MUST find the discussion for these
     {{
       "bill_name": "Name of a newly discovered topic",
       "start_index": 2345,
-      "end_index": 6789
+      "end_index": 6789,
+      "policy_categories": ["환경/에너지"],
+      "key_policy_phrases": ["탄소중립", "재생에너지"],
+      "bill_specific_keywords": ["태양광", "풍력", "배터리"]
     }}
     // …more new topics
   ]
@@ -2825,14 +2879,17 @@ I already know about the following bills. You MUST find the discussion for these
         logger.info(
             f"✅ LLM segmented {len(all_segments)} total discussion topics.")
 
-        # Create placeholders for newly discovered bills
+        # Create placeholders for newly discovered bills with policy analysis
         if not debug:
             for segment in all_segments:
                 if segment.get("is_newly_discovered"):
-                    create_placeholder_bill_from_llm(session_obj,
-                                                     segment["bill_name"])
+                    bill_obj = create_placeholder_bill_from_llm(session_obj,
+                                                               segment["bill_name"])
+                    # Update bill with policy analysis from segmentation
+                    if bill_obj:
+                        update_bill_policy_data(bill_obj, segment)
 
-        # Process each segment to extract statements
+        # Process each segment to extract statements and update policy data
         all_statements = []
         for segment in sorted(all_segments,
                               key=lambda x: x.get('start_index', 0)):
@@ -2843,6 +2900,19 @@ I already know about the following bills. You MUST find the discussion for these
             if not bill_name or end <= start:
                 continue
 
+            # Update policy data for known bills as well
+            if not debug and not segment.get("is_newly_discovered"):
+                try:
+                    # Find the existing bill and update its policy data
+                    existing_bill = Bill.objects.filter(
+                        session=session_obj,
+                        bill_nm__iexact=bill_name
+                    ).first()
+                    if existing_bill:
+                        update_bill_policy_data(existing_bill, segment)
+                except Exception as e:
+                    logger.warning(f"Could not update policy data for known bill '{bill_name}': {e}")
+
             segment_text = full_text[start:end]
             logger.info(
                 f"--- Processing segment for: '{bill_name}' (Chars {start}-{end}) ---"
@@ -2851,9 +2921,13 @@ I already know about the following bills. You MUST find the discussion for these
             statements_in_segment = extract_statements_for_bill_segment(
                 segment_text, session_id, bill_name, debug)
 
-            # Associate these statements with the correct bill name
+            # Associate these statements with the correct bill name and policy data
             for stmt in statements_in_segment:
                 stmt['associated_bill_name'] = bill_name
+                # Add policy context to statements
+                stmt['policy_categories'] = segment.get('policy_categories', [])
+                stmt['policy_keywords'] = segment.get('key_policy_phrases', [])
+                stmt['bill_specific_keywords'] = segment.get('bill_specific_keywords', [])
 
             all_statements.extend(statements_in_segment)
 
