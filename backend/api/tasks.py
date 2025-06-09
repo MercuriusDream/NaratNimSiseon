@@ -4398,6 +4398,51 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
             )
 
 
+def process_pdf_text_for_statements(full_text, session_id, session_obj, bills_context_str, bill_names_list, debug=False):
+    """
+    Main function to process PDF text and extract statements.
+    Uses bill-based chunking with LLM for optimal performance.
+    """
+    if not full_text:
+        logger.warning(f"No text provided for session {session_id}")
+        return
+
+    logger.info(f"🔄 Processing PDF text for session {session_id} ({len(full_text)} chars)")
+    
+    # Clean the PDF text first
+    cleaned_text = clean_pdf_text(full_text)
+    
+    if not cleaned_text:
+        logger.warning(f"No text remaining after cleaning for session {session_id}")
+        return
+
+    # Extract statements using bill-based chunking
+    try:
+        if bill_names_list and len(bill_names_list) > 0:
+            logger.info(f"🎯 Using bill-based processing for {len(bill_names_list)} bills")
+            statements_data = extract_statements_with_bill_based_chunking(
+                cleaned_text, session_id, bill_names_list, debug
+            )
+        else:
+            logger.info("📄 No bills found, using keyword fallback extraction")
+            statements_data = extract_statements_with_keyword_fallback(
+                cleaned_text, session_id, debug
+            )
+            
+        if not statements_data:
+            logger.warning(f"No statements extracted for session {session_id}")
+            return
+            
+        logger.info(f"✅ Extracted {len(statements_data)} statements for session {session_id}")
+        
+        # Save to database
+        process_extracted_statements_data(statements_data, session_obj, debug)
+        
+    except Exception as e:
+        logger.error(f"❌ Error processing PDF text for session {session_id}: {e}")
+        logger.exception("Full traceback for PDF text processing error:")
+
+
 def clean_pdf_text(text: str) -> str:
     """
     Cleans the entire raw PDF text by removing session headers, OCR markers,
