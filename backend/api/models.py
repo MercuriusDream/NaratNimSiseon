@@ -91,10 +91,15 @@ class Bill(models.Model):
     link_url = models.URLField(blank=True,
                                help_text=_("의안 상세 URL"),
                                verbose_name=_("의안 상세 URL"))
+    # Enhanced policy analysis fields
     policy_categories = models.JSONField(default=list,
                                          blank=True,
-                                         help_text=_("정책 카테고리 분석 결과"),
+                                         help_text=_("LLM 분석된 정책 대범주 목록"),
                                          verbose_name=_("정책 카테고리"))
+    policy_subcategories = models.JSONField(default=list,
+                                           blank=True,
+                                           help_text=_("LLM 분석된 정책 소범주 목록"),
+                                           verbose_name=_("정책 소범주"))
     key_policy_phrases = models.JSONField(default=list,
                                           blank=True,
                                           help_text=_("핵심 정책 키워드 목록"),
@@ -110,6 +115,26 @@ class Bill(models.Model):
     policy_keywords = models.TextField(blank=True,
                                        help_text=_("정책 키워드 (쉼표 구분)"),
                                        verbose_name=_("정책 키워드"))
+    
+    # Structured category relationships
+    primary_categories = models.ManyToManyField(Category,
+                                               through='BillCategoryMapping',
+                                               related_name='primary_bills',
+                                               verbose_name=_("주요 정책 범주"))
+    
+    # LLM analysis metadata
+    llm_analysis_version = models.CharField(max_length=20,
+                                           blank=True,
+                                           help_text=_("LLM 분석 버전"),
+                                           verbose_name=_("분석 버전"))
+    llm_confidence_score = models.FloatField(null=True,
+                                            blank=True,
+                                            help_text=_("LLM 분석 신뢰도 (0-1)"),
+                                            verbose_name=_("분석 신뢰도"))
+    policy_impact_score = models.FloatField(null=True,
+                                           blank=True,
+                                           help_text=_("정책 영향도 점수 (0-10)"),
+                                           verbose_name=_("정책 영향도"))
     created_at = models.DateTimeField(auto_now_add=True,
                                       verbose_name=_("생성일시"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
@@ -346,13 +371,29 @@ class Statement(models.Model):
 
 
 class Category(models.Model):
+    """
+    Major policy categories (대범주) from CSV data:
+    - 경제정책 (Economic Policy)
+    - 사회정책 (Social Policy) 
+    - 외교안보정책 (Foreign Affairs & Security Policy)
+    - 법행정제도 (Legal & Administrative System)
+    - 과학기술정책 (Science & Technology Policy)
+    - 문화체육정책 (Culture & Sports Policy)
+    - 인권소수자정책 (Human Rights & Minority Policy)
+    - 지역균형정책 (Regional Balance Policy)
+    - 정치정책 (Political Policy)
+    """
     name = models.CharField(max_length=100,
                             unique=True,
-                            help_text=_("카테고리명"),
-                            verbose_name=_("카테고리명"))
+                            help_text=_("대범주명 (예: 경제정책, 사회정책)"),
+                            verbose_name=_("대범주명"))
     description = models.TextField(blank=True,
                                    help_text=_("카테고리 설명"),
                                    verbose_name=_("카테고리 설명"))
+    policy_area_code = models.CharField(max_length=20,
+                                       blank=True,
+                                       help_text=_("정책영역 코드"),
+                                       verbose_name=_("정책영역 코드"))
     created_at = models.DateTimeField(auto_now_add=True,
                                       verbose_name=_("생성일시"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
@@ -360,23 +401,39 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+    def get_subcategory_count(self):
+        """Returns the number of subcategories under this category"""
+        return self.subcategories.count()
+
     class Meta:
         ordering = ['name']
-        verbose_name = "카테고리"
-        verbose_name_plural = "카테고리 목록"
+        verbose_name = "정책 대범주"
+        verbose_name_plural = "정책 대범주 목록"
 
 
 class Subcategory(models.Model):
+    """
+    Specific policy subcategories (소범주) from CSV data:
+    Each subcategory belongs to a major category and represents
+    specific policy positions or implementation approaches.
+    """
     category = models.ForeignKey(Category,
                                  on_delete=models.CASCADE,
                                  related_name='subcategories',
-                                 verbose_name=_("상위 카테고리"))
+                                 verbose_name=_("상위 대범주"))
     name = models.CharField(max_length=100,
-                            help_text=_("하위카테고리명"),
-                            verbose_name=_("하위카테고리명"))
+                            help_text=_("소범주명 (예: 확장재정, 긴축재정)"),
+                            verbose_name=_("소범주명"))
     description = models.TextField(blank=True,
-                                   help_text=_("하위카테고리 설명"),
-                                   verbose_name=_("하위카테고리 설명"))
+                                   help_text=_("소범주 정책 설명"),
+                                   verbose_name=_("소범주 설명"))
+    policy_stance = models.CharField(max_length=50,
+                                    blank=True,
+                                    help_text=_("정책 성향 (진보/보수/중도)"),
+                                    verbose_name=_("정책 성향"))
+    implementation_approach = models.TextField(blank=True,
+                                              help_text=_("구체적 실행 방안"),
+                                              verbose_name=_("실행 방안"))
     created_at = models.DateTimeField(auto_now_add=True,
                                       verbose_name=_("생성일시"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
@@ -384,11 +441,91 @@ class Subcategory(models.Model):
     def __str__(self):
         return f"{self.category.name} > {self.name}"
 
+    def get_related_bills_count(self):
+        """Returns the number of bills related to this subcategory"""
+        return self.bill_subcategories.count()
+
     class Meta:
         ordering = ['category__name', 'name']
         unique_together = ['category', 'name']
-        verbose_name = "하위카테고리"
-        verbose_name_plural = "하위카테고리 목록"
+        verbose_name = "정책 소범주"
+        verbose_name_plural = "정책 소범주 목록"
+
+
+class BillCategoryMapping(models.Model):
+    """Mapping between Bills and Categories with confidence scores"""
+    bill = models.ForeignKey(Bill,
+                            on_delete=models.CASCADE,
+                            related_name='category_mappings',
+                            verbose_name=_("의안"))
+    category = models.ForeignKey(Category,
+                                on_delete=models.CASCADE,
+                                related_name='bill_mappings',
+                                verbose_name=_("정책 대범주"))
+    confidence_score = models.FloatField(default=0.0,
+                                        help_text=_("LLM 분류 신뢰도 (0-1)"),
+                                        verbose_name=_("분류 신뢰도"))
+    is_primary = models.BooleanField(default=False,
+                                    help_text=_("주요 범주 여부"),
+                                    verbose_name=_("주요 범주"))
+    analysis_method = models.CharField(max_length=50,
+                                      default="llm_analysis",
+                                      help_text=_("분석 방법 (llm_analysis, manual, etc.)"),
+                                      verbose_name=_("분석 방법"))
+    created_at = models.DateTimeField(auto_now_add=True,
+                                     verbose_name=_("생성일시"))
+
+    def __str__(self):
+        return f"{self.bill.bill_nm[:30]}... - {self.category.name}"
+
+    class Meta:
+        ordering = ['-confidence_score', '-is_primary']
+        unique_together = ['bill', 'category']
+        verbose_name = "의안-대범주 매핑"
+        verbose_name_plural = "의안-대범주 매핑 목록"
+
+
+class BillSubcategoryMapping(models.Model):
+    """Mapping between Bills and Subcategories with detailed analysis"""
+    bill = models.ForeignKey(Bill,
+                            on_delete=models.CASCADE,
+                            related_name='subcategory_mappings',
+                            verbose_name=_("의안"))
+    subcategory = models.ForeignKey(Subcategory,
+                                   on_delete=models.CASCADE,
+                                   related_name='bill_subcategories',
+                                   verbose_name=_("정책 소범주"))
+    relevance_score = models.FloatField(default=0.0,
+                                       help_text=_("관련성 점수 (0-1)"),
+                                       verbose_name=_("관련성 점수"))
+    supporting_evidence = models.TextField(blank=True,
+                                          help_text=_("분류 근거 텍스트"),
+                                          verbose_name=_("분류 근거"))
+    extracted_keywords = models.JSONField(default=list,
+                                         blank=True,
+                                         help_text=_("추출된 관련 키워드"),
+                                         verbose_name=_("관련 키워드"))
+    policy_position = models.CharField(max_length=20,
+                                      blank=True,
+                                      choices=[
+                                          ('support', '지지'),
+                                          ('oppose', '반대'),
+                                          ('neutral', '중립'),
+                                          ('unknown', '불명')
+                                      ],
+                                      help_text=_("해당 정책에 대한 입장"),
+                                      verbose_name=_("정책 입장"))
+    created_at = models.DateTimeField(auto_now_add=True,
+                                     verbose_name=_("생성일시"))
+
+    def __str__(self):
+        return f"{self.bill.bill_nm[:30]}... - {self.subcategory.name}"
+
+    class Meta:
+        ordering = ['-relevance_score']
+        unique_together = ['bill', 'subcategory']
+        verbose_name = "의안-소범주 매핑"
+        verbose_name_plural = "의안-소범주 매핑 목록"
 
 
 class StatementCategory(models.Model):
