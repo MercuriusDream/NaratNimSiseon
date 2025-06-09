@@ -27,6 +27,7 @@ from rest_framework import filters
 from django.db import models
 from django.db.models import F
 from django.db import connection
+from .utils import ensure_basic_data_exists
 
 logger = logging.getLogger(__name__)
 
@@ -854,6 +855,7 @@ def bill_list(request):
 
         return paginator.get_paginated_response(serializer.data)
 
+```python
     except Exception as e:
         logger.error(f"Error in bill_list: {e}")
         return Response({'error': 'Failed to fetch bills'},
@@ -1756,11 +1758,11 @@ def category_sentiment_analysis(request):
                 avg_sentiment=Avg('sentiment_score'))['avg_sentiment'] or 0
 
             statement_count = category_statements.count()
-            positive_count = category_statements.filter(
+            positive_statements = category_statements.filter(
                 sentiment_score__gt=0.3).count()
-            negative_count = category_statements.filter(
+            negative_statements = category_statements.filter(
                 sentiment_score__lt=-0.3).count()
-            neutral_count = statement_count - positive_count - negative_count
+            neutral_count = statement_count - positive_statements - negative_statements
 
             # Get party breakdown for this category
             party_breakdown = category_statements.values(
@@ -1877,6 +1879,11 @@ def trigger_statement_analysis(request):
 def parties_list(request):
     """Get list of all parties with basic statistics and trigger additional data fetch"""
     try:
+        # Ensure basic data exists before processing
+        data_fetched = ensure_basic_data_exists()
+        if data_fetched:
+            logger.info("Basic data was fetched during party list request")
+
         # Check if we should fetch additional data
         fetch_additional = request.GET.get('fetch_additional',
                                            'false').lower() == 'true'
@@ -2472,8 +2479,15 @@ def stats_overview(request):
 
 @api_view(['GET'])
 def home_data(request):
-    """Get aggregated data for home page with simple ORM queries"""
+    """
+    API endpoint to get homepage data including recent sessions, bills, and overall statistics
+    """
     try:
+        # Ensure basic data exists before processing
+        data_fetched = ensure_basic_data_exists()
+        if data_fetched:
+            logger.info("Basic data was fetched during home data request")
+
         # Get recent sessions - keep it simple and fast
         recent_sessions = Session.objects.filter(
             era_co__in=['22', '제22대']).order_by('-conf_dt')[:5]

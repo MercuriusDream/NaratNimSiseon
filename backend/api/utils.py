@@ -1,3 +1,63 @@
+
+import logging
+from django.core.management import call_command
+from api.models import Party, Speaker
+from api.tasks import fetch_party_membership_data, fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
+
+logger = logging.getLogger(__name__)
+
+def ensure_basic_data_exists():
+    """
+    Check if basic data exists in the database and fetch it if missing.
+    Returns True if data was fetched, False if data already exists.
+    """
+    data_fetched = False
+    
+    # Check if we have any speakers
+    speaker_count = Speaker.objects.count()
+    logger.info(f"Found {speaker_count} speakers in database")
+    
+    if speaker_count == 0:
+        logger.info("No speakers found. Fetching member data...")
+        try:
+            # Fetch basic member data synchronously
+            fetch_party_membership_data(debug=False)
+            data_fetched = True
+            logger.info("Successfully fetched member data")
+        except Exception as e:
+            logger.error(f"Error fetching member data: {e}")
+    
+    # Check if we have any parties
+    party_count = Party.objects.count()
+    logger.info(f"Found {party_count} parties in database")
+    
+    if party_count == 0:
+        logger.info("No parties found. Creating parties from speaker data...")
+        try:
+            # Create parties from existing speaker data
+            call_command('sync_party_members', '--create-missing-parties')
+            data_fetched = True
+            logger.info("Successfully created parties from speaker data")
+        except Exception as e:
+            logger.error(f"Error creating parties: {e}")
+    
+    # Fetch additional party data if we have parties but they lack detailed info
+    if party_count > 0:
+        parties_with_description = Party.objects.exclude(description='').count()
+        if parties_with_description < party_count / 2:  # If less than half have descriptions
+            logger.info("Fetching additional party data...")
+            try:
+                if is_celery_available():
+                    fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=False, debug=False)
+                else:
+                    fetch_additional_data_nepjpxkkabqiqpbvk(force=False, debug=False)
+                data_fetched = True
+                logger.info("Successfully initiated additional party data fetch")
+            except Exception as e:
+                logger.error(f"Error fetching additional party data: {e}")
+    
+    return data_fetched
+
 import logging
 import requests
 from functools import wraps

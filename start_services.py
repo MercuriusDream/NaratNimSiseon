@@ -242,6 +242,59 @@ def start_redis():
     return False
 
 
+def run_management_commands():
+    """Run Django management commands"""
+    print("🔧 Running Django management commands...")
+
+    # Apply migrations
+    print("📦 Applying migrations...")
+    subprocess.run([
+        sys.executable, "manage.py", "migrate"
+    ], cwd="backend", check=True)
+
+    # Load policy categories
+    print("📂 Loading policy categories...")
+    try:
+        subprocess.run([
+            sys.executable, "manage.py", "load_policy_categories", 
+            "--csv-file=../Additional_Files/code.txt"
+        ], cwd="backend", check=True)
+        print("✅ Policy categories loaded successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️ Policy categories loading failed: {e}")
+
+    # Check and fetch basic data if needed
+    print("👥 Checking for party and member data...")
+    try:
+        # Check if we have speakers and parties
+        result = subprocess.run([
+            sys.executable, "manage.py", "load_assembly_members", "--count-only"
+        ], cwd="backend", capture_output=True, text=True)
+
+        if "Total speakers in database: 0" in result.stdout:
+            print("📥 No speakers found. Fetching party and member data...")
+            subprocess.run([
+                sys.executable, "manage.py", "fetch_party_data"
+            ], cwd="backend", check=True)
+
+            subprocess.run([
+                sys.executable, "manage.py", "sync_party_members", "--create-missing-parties"
+            ], cwd="backend", check=True)
+
+            subprocess.run([
+                sys.executable, "manage.py", "fetch_party_additional_data"
+            ], cwd="backend", check=True)
+
+            print("✅ Party and member data fetched successfully")
+        else:
+            print("✅ Party and member data already exists")
+
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️ Party and member data fetching failed: {e}")
+
+    print("✅ Management commands completed")
+
+
 def main():
     print("🎯 Starting Assembly Sentiment Analysis Services")
     print("=" * 50)
@@ -309,6 +362,9 @@ def main():
         print("✅ Static files collected successfully")
     else:
         print("⚠️ Static files collection failed, continuing anyway...")
+
+    # Running management commands (including data fetching)
+    run_management_commands()
 
     print("🚀 Starting Django server...")
     django_cmd = f"cd {project_root}/backend && {python_cmd} manage.py runserver 0.0.0.0:3000"
