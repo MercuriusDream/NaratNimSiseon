@@ -3836,7 +3836,7 @@ def _process_bill_segmentation_with_batching(segmentation_llm,
 
 def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                                        bill_names_list, offset):
-    """Process a single chunk for bill segmentation with improved matching and end indices."""
+    """Process a single chunk for bill segmentation to find ENTIRE conversations, not just mentions."""
     import json
     try:
         # Estimate tokens for rate limiting
@@ -3855,54 +3855,55 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
             bill_info.append({'full': bill, 'core': core_name})
 
         bill_list_str = '\n'.join([f"- {b['full']}" for b in bill_info])
-        keywords_str = ', '.join(
-            [b['core'] for b in bill_info if len(b['core']) > 3])
 
         # DEBUG: Log the input data
-        logger.error(f"🐛 DEBUG: Text chunk length for segmentation: {len(text_chunk)}")
-        logger.error(f"🐛 DEBUG: Text chunk first 500 chars: {text_chunk[:500]}")
-        logger.error(f"🐛 DEBUG: Text chunk last 500 chars: {text_chunk[-500:]}")
-        logger.error(f"🐛 DEBUG: Bill list for segmentation: {bill_list_str}")
-        logger.error(f"🐛 DEBUG: Keywords for segmentation: {keywords_str}")
+        logger.info(f"🔍 Segmenting text chunk: {len(text_chunk)} chars")
+        logger.info(f"📋 Bills to find: {len(bill_names_list)} bills")
 
         prompt = f"""
 당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-국회 회의록에서 법안별 논의 구간을 정확히 식별해주세요.
+
+국회 회의록에서 법안별 **전체 토론 구간**을 찾아주세요. 단순한 언급이 아닌, 해당 법안에 대한 **완전한 논의 전체**를 찾아야 합니다.
 
 대상 법안들:
 {bill_list_str}
 
-핵심 키워드: {keywords_str}
-
-회의록 텍스트 (이미 의안 목록과 의사진행 부분은 제거됨):
+회의록 텍스트:
 ---
 {text_chunk}
 ---
 
-각 법안의 실제 논의 구간을 찾아 JSON으로 응답:
+각 법안에 대한 **전체 논의 구간**을 찾아 JSON으로 응답:
 {{
   "segments": [
     {{
-      "bill_name": "위 목록에서 복사한 정확한 법안명 (한 글자도 바꾸지 말 것)",
-      "start_index": 시작위치,
-      "end_index": 종료위치
+      "bill_name": "위 목록에서 복사한 정확한 법안명",
+      "start_index": 해당_법안_논의_시작점,
+      "end_index": 해당_법안_논의_종료점
     }}
   ]
 }}
 
-중요한 조건:
-- bill_name은 반드시 위 법안 목록에서 정확히 복사해야 합니다 (변경, 단축, 수정 금지)
-- 법안을 찾기 어려우면 부분적 키워드로 매칭하되, 응답할 때는 원본 목록의 정확한 문자열을 사용하세요
-- start_index와 end_index는 반드시 위 텍스트에서 해당 법안 논의가 시작되고 끝나는 구간의 '정확한 문자 인덱스(파이썬 문자열 인덱스, 0부터 시작, start_index는 포함, end_index는 포함하지 않음)'를 사용해야 합니다.
-- ◯로 시작하는 실제 발언 구간에서만 찾기
-- start_index는 해당 법안 논의가 시작되는 ◯ 위치
-- end_index는 다음 법안 논의 시작 전까지 또는 구간 끝까지
-- 실제 토론/발언이 있는 구간만 포함 (단순 언급 제외)
-- 각 법안별로 반드시 하나의 구간만 반환
-- 의안 목록이나 의사진행 발언은 이미 제거되었으므로 ◯ 발언만 분석
+**매우 중요한 조건들:**
+
+1. **전체 대화 구간 찾기**: 해당 법안에 대한 모든 발언, 토론, 질의응답을 포함하는 완전한 구간을 찾으세요
+   - 법안 소개부터 마지막 관련 발언까지 전체를 포함
+   - 최소 1000자 이상의 의미있는 토론 구간이어야 함
+   - 단순 언급(8자 같은 짧은 구간)은 절대 안됨
+
+2. **정확한 인덱스**: 
+   - start_index: 해당 법안 논의가 **처음 시작되는** ◯ 위치
+   - end_index: 해당 법안 논의가 **완전히 끝나는** 지점 (다음 법안 시작 전 또는 텍스트 끝)
+
+3. **법안명 정확성**: bill_name은 위 목록에서 한 글자도 바꾸지 말고 정확히 복사
+
+4. **실제 토론만**: ◯로 시작하는 의원 발언들의 연속된 블록을 찾으세요
+
+5. **검증**: 만약 해당 법안에 대한 실질적인 토론이 텍스트에 없다면 start_index: -1, end_index: -1로 표시
 
 예시:
-만약 논의 구간이 텍스트의 123번째 문자에서 시작해 456번째 문자에서 끝난다면, start_index=123, end_index=456로 표기해 주세요."""
+- 좋은 예: start_index: 1500, end_index: 4200 (2700자의 완전한 토론)
+- 나쁜 예: start_index: 1882, end_index: 1890 (8자의 짧은 언급)"""
 
         try:
             response = segmentation_llm.generate_content(prompt)
@@ -3993,6 +3994,13 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                         start_idx = int(seg.get('start_index', 0))
                         end_idx = int(seg.get('end_index', start_idx + 1000))  # Default to reasonable segment size
                         
+                        # Skip if LLM couldn't find substantial discussion (-1 indices)
+                        if start_idx == -1 or end_idx == -1:
+                            logger.info(
+                                f"LLM found no substantial discussion for bill '{bill_name}' (indices: {start_idx}, {end_idx})"
+                            )
+                            continue
+                            
                         # Validate indices within chunk bounds
                         if start_idx < 0 or start_idx >= len(text_chunk):
                             logger.warning(
@@ -4000,33 +4008,22 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                             )
                             continue
                             
-                        # If end_idx is invalid or same as start, estimate a reasonable end
+                        # Ensure end_idx is valid and creates a substantial segment
                         if end_idx <= start_idx or end_idx > len(text_chunk):
-                            # Try to find a reasonable end point
-                            estimated_end = min(start_idx + 5000, len(text_chunk))  # 5k chars max
-                            
-                            # Look for natural break points
-                            remaining_text = text_chunk[start_idx:estimated_end]
-                            natural_breaks = ['○', '◯', '\n\n', '의사일정']
-                            
-                            for break_pattern in natural_breaks:
-                                break_pos = remaining_text.find(break_pattern, 500)  # At least 500 chars in
-                                if break_pos != -1:
-                                    estimated_end = start_idx + break_pos
-                                    break
-                            
-                            end_idx = estimated_end
-                            logger.info(
-                                f"Fixed invalid end_index for bill '{bill_name}': {seg.get('end_index')} -> {end_idx}"
+                            logger.warning(
+                                f"Invalid end_index {end_idx} for bill '{bill_name}' (start: {start_idx}, chunk length: {len(text_chunk)})"
                             )
+                            continue
                         
                         # Apply offset for global positioning
                         global_start = start_idx + offset
                         global_end = end_idx + offset
                         
-                        # Final validation
+                        # Validate segment is substantial (minimum 1000 chars for meaningful conversation)
                         segment_length = global_end - global_start
-                        if segment_length > 100:  # Minimum meaningful content
+                        MIN_CONVERSATION_LENGTH = 1000  # Require at least 1000 chars for substantial discussion
+                        
+                        if segment_length >= MIN_CONVERSATION_LENGTH:
                             valid_segments.append({
                                 'a': matched_bill_name,
                                 'b': global_start,
@@ -4035,7 +4032,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                             seen_bills.add(matched_bill_name)
                             
                             logger.info(
-                                f"✅ Valid segment for '{matched_bill_name}': {global_start}-{global_end} ({segment_length} chars)"
+                                f"✅ Found substantial conversation for '{matched_bill_name}': {global_start}-{global_end} ({segment_length} chars)"
                             )
                             
                             if bill_name != matched_bill_name:
@@ -4044,7 +4041,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                                 )
                         else:
                             logger.warning(
-                                f"Segment too small for bill '{bill_name}': {segment_length} chars"
+                                f"Segment too short for meaningful conversation - bill '{bill_name}': {segment_length} chars (minimum: {MIN_CONVERSATION_LENGTH})"
                             )
                             
                     except (ValueError, TypeError) as e:
@@ -4056,17 +4053,142 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                     logger.debug(
                         f"Could not match LLM response '{bill_name}' to any original bill name"
                     )
+            # If no valid segments found, try intelligent fallback
+            if not valid_segments and bill_names_list:
+                logger.warning(f"LLM segmentation found no substantial conversations. Trying intelligent fallback.")
+                return _fallback_bill_segmentation(text_chunk, bill_names_list, offset)
+            
             return valid_segments
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             logger.error(f"Error parsing segmentation response: {e}")
             logger.debug(
                 f"Raw response that caused error: {response_text[:500]}...")
+            # Try fallback when JSON parsing fails
+            if bill_names_list:
+                logger.info("Attempting fallback segmentation due to JSON parsing error")
+                return _fallback_bill_segmentation(text_chunk, bill_names_list, offset)
             return []
 
     except Exception as e:
         logger.error(f"Error in single segmentation chunk: {e}")
+        # Try fallback when any error occurs
+        if bill_names_list:
+            logger.info("Attempting fallback segmentation due to processing error")
+            return _fallback_bill_segmentation(text_chunk, bill_names_list, offset)
         return []
+
+
+def _fallback_bill_segmentation(text_chunk, bill_names_list, offset):
+    """Intelligent fallback for bill segmentation when LLM fails"""
+    import re
+    
+    logger.info(f"🔄 Using intelligent fallback segmentation for {len(bill_names_list)} bills")
+    
+    valid_segments = []
+    
+    # Find all speaker markers (◯) to identify conversation boundaries
+    speaker_positions = []
+    for match in re.finditer(r'◯', text_chunk):
+        speaker_positions.append(match.start())
+    
+    if len(speaker_positions) < 2:
+        logger.warning("Not enough speaker markers for meaningful segmentation")
+        return []
+    
+    # Try to find each bill by searching for keywords
+    for bill_name in bill_names_list:
+        # Extract key terms from bill name
+        bill_keywords = []
+        
+        # Remove common suffixes and extract core terms
+        clean_name = bill_name.replace('법률안', '').replace('일부개정', '').strip()
+        if '(' in clean_name:
+            clean_name = clean_name.split('(')[0].strip()
+        
+        # Split into meaningful keywords (remove short words)
+        words = [w.strip() for w in clean_name.split() if len(w.strip()) > 2]
+        bill_keywords.extend(words)
+        
+        if not bill_keywords:
+            continue
+        
+        # Search for the bill in the text
+        best_match_pos = -1
+        best_match_score = 0
+        
+        # Look for keyword combinations
+        for i, keyword in enumerate(bill_keywords):
+            for match in re.finditer(re.escape(keyword), text_chunk, re.IGNORECASE):
+                pos = match.start()
+                
+                # Calculate score based on surrounding context
+                context_start = max(0, pos - 100)
+                context_end = min(len(text_chunk), pos + 100)
+                context = text_chunk[context_start:context_end].lower()
+                
+                # Score based on how many bill keywords appear in context
+                score = sum(1 for kw in bill_keywords if kw.lower() in context)
+                
+                if score > best_match_score:
+                    best_match_score = score
+                    best_match_pos = pos
+        
+        if best_match_pos == -1 or best_match_score < 2:  # Need at least 2 keyword matches
+            logger.info(f"Could not find substantial content for bill: {bill_name[:50]}...")
+            continue
+        
+        # Find the conversation segment around this position
+        # Find the nearest speaker marker before the match
+        start_speaker_pos = -1
+        for pos in reversed(speaker_positions):
+            if pos <= best_match_pos:
+                start_speaker_pos = pos
+                break
+        
+        if start_speaker_pos == -1:
+            start_speaker_pos = 0
+        
+        # Find a reasonable end point (next few speaker markers or reasonable distance)
+        end_pos = len(text_chunk)
+        speakers_after = [pos for pos in speaker_positions if pos > best_match_pos]
+        
+        if speakers_after:
+            # Take several speakers to ensure we get the full conversation
+            num_speakers_to_include = min(10, len(speakers_after))  # Include up to 10 speakers
+            if num_speakers_to_include > 0:
+                end_pos = speakers_after[num_speakers_to_include - 1]
+                
+                # Extend to find natural break
+                remaining_text = text_chunk[end_pos:end_pos + 1000]
+                for break_pattern in ['\n\n', '의사일정', '○']:
+                    break_match = remaining_text.find(break_pattern)
+                    if break_match != -1:
+                        end_pos += break_match
+                        break
+        
+        # Ensure substantial length
+        segment_length = end_pos - start_speaker_pos
+        if segment_length >= 1000:  # Minimum 1000 chars
+            global_start = start_speaker_pos + offset
+            global_end = end_pos + offset
+            
+            valid_segments.append({
+                'a': bill_name,
+                'b': global_start,
+                'e': global_end
+            })
+            
+            logger.info(
+                f"✅ Fallback found conversation for '{bill_name[:50]}...': {global_start}-{global_end} ({segment_length} chars)"
+            )
+        else:
+            logger.info(
+                f"Fallback segment too short for '{bill_name[:30]}...': {segment_length} chars"
+            )
+    
+    logger.info(f"🔄 Fallback segmentation completed: {len(valid_segments)} substantial segments found")
+    return valid_segments
 
     # Stage 2: Process bill segments by slicing text using indices
     if bill_segments_from_llm:
