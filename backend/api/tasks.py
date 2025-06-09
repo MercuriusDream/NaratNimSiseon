@@ -3951,8 +3951,10 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
             # NOTE: start_idx and end_idx below are expected to be precise Python string indices (0-based, inclusive start, exclusive end)
             valid_segments = []
             seen_bills = set()
-
-            for seg in segments:
+            
+            logger.error(f"🐛 DEBUG: Processing {len(segments)} segments from LLM")
+            for i, seg in enumerate(segments):
+                logger.error(f"🐛 DEBUG: Segment {i+1}: {seg}")
                 # Ensure seg is a dictionary
                 if not isinstance(seg, dict):
                     logger.warning(
@@ -3989,21 +3991,63 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
 
                 if matched_bill_name and matched_bill_name not in seen_bills:
                     try:
-                        start_idx = int(seg.get('start_index', 0)) + offset
-                        end_idx = int(seg.get('end_index', 0)) + offset
-                        # These should be PRECISE indices in text_chunk (0-based, [start_idx:end_idx])
-                        if start_idx < end_idx and (end_idx - start_idx) > 200:
+                        start_idx = int(seg.get('start_index', 0))
+                        end_idx = int(seg.get('end_index', start_idx + 1000))  # Default to reasonable segment size
+                        
+                        # Validate indices within chunk bounds
+                        if start_idx < 0 or start_idx >= len(text_chunk):
+                            logger.warning(
+                                f"Invalid start_index {start_idx} for bill '{bill_name}' (chunk length: {len(text_chunk)})"
+                            )
+                            continue
+                            
+                        # If end_idx is invalid or same as start, estimate a reasonable end
+                        if end_idx <= start_idx or end_idx > len(text_chunk):
+                            # Try to find a reasonable end point
+                            estimated_end = min(start_idx + 5000, len(text_chunk))  # 5k chars max
+                            
+                            # Look for natural break points
+                            remaining_text = text_chunk[start_idx:estimated_end]
+                            natural_breaks = ['○', '◯', '\n\n', '의사일정']
+                            
+                            for break_pattern in natural_breaks:
+                                break_pos = remaining_text.find(break_pattern, 500)  # At least 500 chars in
+                                if break_pos != -1:
+                                    estimated_end = start_idx + break_pos
+                                    break
+                            
+                            end_idx = estimated_end
+                            logger.info(
+                                f"Fixed invalid end_index for bill '{bill_name}': {seg.get('end_index')} -> {end_idx}"
+                            )
+                        
+                        # Apply offset for global positioning
+                        global_start = start_idx + offset
+                        global_end = end_idx + offset
+                        
+                        # Final validation
+                        segment_length = global_end - global_start
+                        if segment_length > 100:  # Minimum meaningful content
                             valid_segments.append({
-                                'a':
-                                matched_bill_name,  # Always use the original bill name
-                                'b': start_idx,
-                                'e': end_idx
+                                'a': matched_bill_name,
+                                'b': global_start,
+                                'e': global_end
                             })
                             seen_bills.add(matched_bill_name)
+                            
+                            logger.info(
+                                f"✅ Valid segment for '{matched_bill_name}': {global_start}-{global_end} ({segment_length} chars)"
+                            )
+                            
                             if bill_name != matched_bill_name:
                                 logger.info(
                                     f"Mapped LLM response '{bill_name}' to original bill '{matched_bill_name}'"
                                 )
+                        else:
+                            logger.warning(
+                                f"Segment too small for bill '{bill_name}': {segment_length} chars"
+                            )
+                            
                     except (ValueError, TypeError) as e:
                         logger.warning(
                             f"Error processing indices for segment {bill_name}: {e}"
