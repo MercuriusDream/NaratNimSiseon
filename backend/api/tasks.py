@@ -3370,227 +3370,135 @@ def process_session_pdf(self,
 
         # Core logic: Process the extracted text to get statements
         # This will use the multi-stage LLM approach (bill segmentation, then speaker/content)
-        process_pdf_text_for_statements(full_text, session_id, session,
-                                        bills_context_str, bills_for_session,
-                                        debug)
+# In tasks.py, replace the existing function with this one.
 
-    except RequestException as re_exc:
-        logger.error(
-            f"Request error downloading PDF for session {session_id}: {re_exc}"
-        )
-        try:
-            self.retry(exc=re_exc)
-        except MaxRetriesExceededError:
-            logger.error(f"Max retries for PDF download {session_id}.")
-    except Exception as e:
-        logger.error(
-            f"❌ Unexpected error processing PDF for session {session_id}: {e}")
-        logger.exception(f"Full traceback for PDF processing {session_id}:")
-        try:
-            self.retry(exc=e)  # Retry for other unexpected errors too
-        except MaxRetriesExceededError:
-            logger.error(
-                f"Max retries after unexpected PDF error {session_id}.")
-        # raise # Optionally
-    finally:
-        if temp_pdf_path and temp_pdf_path.exists():
-            try:
-                temp_pdf_path.unlink()
-                logger.info(f"🗑️ Deleted temporary PDF: {temp_pdf_path}")
-            except OSError as e_del:
-                logger.error(
-                    f"Error deleting temporary PDF {temp_pdf_path}: {e_del}")
+def process_pdf_text_for_statements(full_text,
+                                    session_id,
+                                    session_obj,
+                                    bills_context_str, # Unused, for compatibility
+                                    bill_names_list_from_db, # This is the list from the DB
+                                    debug=False):
+    """
+    Orchestrates PDF text processing using a "Database-First" approach.
+    1. Uses bills already stored in the DB for the session.
+    2. If no bills are in the DB, falls back to LLM-based discovery.
+    3. Segments the text and extracts statements.
+    """
+    global model, genai
 
-
-@shared_task(bind=True, max_retries=1,
-             default_retry_delay=300)  # Less retries for costly LLM task
-def analyze_statement_categories(self,
-                                 statement_id=None):  # Celery provides 'self'
-    """Analyze categories and sentiment for an existing statement using LLM. (Usually part of initial processing)"""
-    if not statement_id:
-        logger.error(
-            "statement_id is required for analyze_statement_categories.")
-        return
-
-    global model
-
-    if not model:  # Global 'model'
-        logger.warning(
-            "❌ Main LLM ('model') not available. Cannot analyze statement categories."
-        )
-        return
-
-    try:
-        statement = Statement.objects.get(id=statement_id)
-        # Potentially skip if already analyzed to a satisfactory degree, unless forced
-        if statement.sentiment_score is not None and statement.category_analysis and not getattr(
-                self, 'force_reanalyze', False):
-            logger.info(
-                f"Statement {statement_id} already analyzed. Skipping re-analysis."
-            )
+    logger.info(f"🔍 Checking LLM availability - model: {model is not None}, genai: {genai is not None}")
+    if not model or not genai:
+        if not reinitialize_gemini():
+            logger.error("❌ LLM not available and failed to re-initialize. Aborting.")
             return
 
-    except Statement.DoesNotExist:
-        logger.error(
-            f"Statement with id {statement_id} not found for analysis.")
-        return
+    # --- Step 1: Clean the entire PDF text ---
+    logger.info(f"🧹 Cleaning PDF text for session {session_id}")
+    cleaned_full_text = clean_pdf_text(full_text)
+    logger.info(f"📄 Cleaned text length: ~{len(cleaned_full_text)} chars")
 
-    logger.info(
-        f"Analyzing categories for statement ID: {statement_id} by {statement.speaker.naas_nm}"
-    )
-    text_to_analyze = statement.text
-    text_for_prompt = text_to_analyze
-
-    # Generic analysis prompt (not bill-specific, as bill context might not be available here)
-    # This function is more for re-analysis or if initial processing missed it.
-    # The `analyze_single_statement_with_bill_context` is preferred during initial PDF processing.
-    prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-
-국회 발언 분석 요청:
-발언자: {statement.speaker.naas_nm}
-발언 내용:
----
-{text_for_prompt}
----
-
-위 발언 내용을 분석하여 다음 JSON 형식으로 결과를 제공해주세요.
-{{
-  "sentiment_score": -1.0 부터 1.0 사이의 감성 점수 (숫자),
-  "sentiment_reason": "감성 판단의 주요 근거 (간략히)",
-  "policy_categories": [
-    {{
-      "main_category": "주요 정책 분야 (경제, 복지, 교육, 외교안보, 환경, 법제, 과학기술, 문화, 농림, 국토교통, 행정, 기타 중 택1)",
-      "sub_category": "세부 정책 분야 (없으면 '일반')",
-      "confidence": 0.0 부터 1.0 사이의 분류 확신도 (숫자)
-    }}
-  ],
-  "key_policy_phrases": ["발언의 핵심 정책 관련 어구 (최대 5개 배열)"]
-}}
-(가이드라인은 analyze_single_statement_with_bill_context 와 유사하게 적용)
-응답은 반드시 유효한 JSON 형식이어야 합니다.
-"""
-    try:
-        response = model.generate_content(prompt)
-        if not response or not response.text:
-            logger.warning(
-                f"❌ No LLM response for category analysis of statement {statement_id}"
-            )
-            return
-
-        response_text_cleaned = response.text.strip().replace(
-            "```json", "").replace("```", "").strip()
-        analysis_json = json.loads(response_text_cleaned)
-
-        statement.sentiment_score = analysis_json.get(
-            'sentiment_score',
-            statement.sentiment_score)  # Keep old if new is missing
-        statement.sentiment_reason = analysis_json.get(
-            'sentiment_reason', statement.sentiment_reason)
-        statement.policy_keywords = ', '.join(
-            analysis_json.get('key_policy_phrases', []))
-
-        policy_categories_json = analysis_json.get('policy_categories', [])
-        statement.category_analysis = json.dumps(
-            policy_categories_json, ensure_ascii=False
-        ) if policy_categories_json else statement.category_analysis
-
-        statement.save()
-
-        # Update/Create category associations in StatementCategory model
-        if policy_categories_json:
-            create_statement_categories(statement, policy_categories_json)
-
-        logger.info(
-            f"✅ LLM Category analysis completed for statement {statement_id}.")
-
-    except json.JSONDecodeError as e:
-        logger.error(
-            f"❌ JSON parsing error for LLM category analysis (statement {statement_id}): {e}. Response: {response_text_cleaned if 'response_text_cleaned' in locals() else 'N/A'}"
-        )
-    except Exception as e:
-        logger.error(
-            f"❌ Error analyzing categories for statement {statement_id}: {e}")
-        logger.exception("Full traceback for category analysis error:")
-        try:
-            self.retry(exc=e)
-        except MaxRetriesExceededError:
-            logger.error(f"Max retries for category analysis {statement_id}.")
-        # raise # Optionally
-
-
-def split_text_into_chunks(text, max_chunk_size):
-    """Split text into chunks, trying to break at speaker markers (◯) when possible."""
-    if len(text) <= max_chunk_size:
-        return [text]
-
-    chunks = []
-    current_pos = 0
-
-    while current_pos < len(text):
-        # Define the end position for this chunk
-        chunk_end = min(current_pos + max_chunk_size, len(text))
-
-        # If we're not at the end of the text, try to find a good break point
-        if chunk_end < len(text):
-            # Look for speaker markers (◯) within the last 2000 characters of the chunk
-            search_start = max(current_pos, chunk_end - 2000)
-            last_speaker_pos = text.rfind('◯', search_start, chunk_end)
-
-            if last_speaker_pos != -1 and last_speaker_pos > current_pos:
-                # Found a speaker marker, break there
-                chunk_end = last_speaker_pos
-            else:
-                # No speaker marker found, try to break at a line break
-                last_newline = text.rfind('\n', search_start, chunk_end)
-                if last_newline != -1 and last_newline > current_pos:
-                    chunk_end = last_newline
-
-        chunk = text[current_pos:chunk_end]
-        if chunk.strip():  # Only add non-empty chunks
-            chunks.append(chunk)
-
-        current_pos = chunk_end
-
-        # Skip any whitespace at the beginning of the next chunk
-        while current_pos < len(text) and text[current_pos].isspace():
-            current_pos += 1
-
-    return chunks
-
-
-def clean_pdf_text(text):
-    """Clean PDF text while preserving agenda section for bill extraction."""
-    import re
-
-    if not text:
-        return text
-
-    # Find the start of actual discussion (marked by time like "(14시07분 개의)")
-    timing_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
-    timing_match = re.search(timing_pattern, text)
-    
-    if timing_match:
-        # Keep agenda section as-is, clean only the discussion part
-        agenda_section = text[:timing_match.end()]
-        discussion_section = text[timing_match.end():]
-        
-        logger.info(f"🔍 Preserving agenda section: {len(agenda_section)} chars")
-        logger.info(f"🧹 Cleaning discussion section: {len(discussion_section)} chars")
-        
-        # Clean the discussion section
-        cleaned_discussion = clean_discussion_text(discussion_section)
-        
-        # Combine preserved agenda with cleaned discussion
-        cleaned_text = agenda_section + '\n' + cleaned_discussion
+    # --- Step 2: Determine which list of bills to use (Your excellent idea) ---
+    bills_to_process = []
+    if bill_names_list_from_db:
+        logger.info(f"✅ Using {len(bill_names_list_from_db)} bills already stored in the database for session {session_id}.")
+        bills_to_process = bill_names_list_from_db
     else:
-        # No timing marker found, clean the entire text but more conservatively
-        logger.info("⚠️ No timing marker found, applying conservative cleaning")
-        cleaned_text = clean_discussion_text(text)
-    
-    logger.info(f"🧹 Text cleaning: {len(text)} -> {len(cleaned_text)} chars")
-    return cleaned_text
+        logger.info(f"⚠️ No bills found in DB for session {session_id}. Attempting LLM discovery as a fallback.")
+        bills_to_process = discover_bills_from_content_llm(cleaned_full_text, debug=debug)
 
+    # If still no bills, create a placeholder for general discussion
+    if not bills_to_process:
+        logger.warning(f"⚠️ No bills found by any method. Processing entire text as 'General Discussion'.")
+        bills_to_process = ["General Discussion"]
+
+    # --- Step 3: Find the start of the actual debate ---
+    discussion_start_index = 0
+    start_marker_pattern = re.compile(r'\(\d{1,2}시\s*\d{1,2}분\s+개의\)')
+    match = start_marker_pattern.search(cleaned_full_text)
+    if match:
+        discussion_start_index = match.end()
+        logger.info(f"✅ Found discussion start at index {discussion_start_index}")
+    else:
+        logger.warning("⚠️ No discussion start marker found. Analyzing from beginning of cleaned text.")
+
+    discussion_text = cleaned_full_text[discussion_start_index:]
+
+    # --- Step 4: Get bill segments (start/end indices) from the discussion text ---
+    all_extracted_statements_data = []
+    bill_segments = []
+    # Only run segmentation if there are multiple distinct topics to separate
+    if len(bills_to_process) > 1:
+        logger.info(f"🔍 Segmenting discussion text for {len(bills_to_process)} bills...")
+        segmentation_llm = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        bill_segments = _process_bill_segmentation_with_batching(segmentation_llm, discussion_text, bills_to_process)
+    else:
+        # If there's only one bill or "General Discussion", the whole text is the segment
+        bill_segments.append({'a': bills_to_process[0], 'b': 0, 'e': len(discussion_text)})
+
+    # --- Step 5: Process each identified segment ---
+    if bill_segments:
+        bill_segments.sort(key=lambda x: x.get('b', 0)) # Sort by start index
+        for i, seg_info in enumerate(bill_segments):
+            bill_name = seg_info['a']
+            start_idx = seg_info.get('b', 0)
+            # End index is the start of the next segment, or the end of the entire text
+            end_idx = bill_segments[i + 1]['b'] if i + 1 < len(bill_segments) else len(discussion_text)
+
+            bill_text_segment = discussion_text[start_idx:end_idx]
+
+            logger.info(f"--- Processing Bill Segment: '{bill_name}' (chars {start_idx}-{end_idx}, length: {len(bill_text_segment)}) ---")
+            if len(bill_text_segment.strip()) < 200:
+                 logger.warning(f"Segment for '{bill_name}' is too short. Skipping.")
+                 continue
+
+            statements_in_bill = extract_statements_for_bill_segment(bill_text_segment, session_id, bill_name, debug)
+
+            for stmt_data in statements_in_bill:
+                stmt_data['associated_bill_name'] = bill_name
+            all_extracted_statements_data.extend(statements_in_bill)
+
+    # --- Step 6: Save all found statements ---
+    logger.info(f"📊 Collected {len(all_extracted_statements_data)} total statements for session {session_id}")
+    if not debug and all_extracted_statements_data:
+        process_extracted_statements_data(all_extracted_statements_data, session_obj, debug)
+        logger.info(f"✅ Successfully processed and saved statements.")
+        
+def clean_pdf_text(text: str) -> str:
+    """
+    Cleans the entire raw PDF text by removing session headers, OCR markers,
+    and normalizing whitespace. This prepares the text for both bill discovery
+    and content analysis.
+    """
+    import re
+    if not text:
+        return ""
+
+    # This pattern matches full-line headers like "제423회-제4차(2025년4월3일) 1"
+    session_header_pattern = re.compile(r'^제\d+회-제\d+차\s*\(.+?\)\s*\d+\s*$')
+    # This pattern matches the OCR markers
+    ocr_marker_pattern = re.compile(r'^==\s*(Start|End) of OCR for page \d+\s*==$')
+
+    lines = text.split('\n')
+    cleaned_lines = []
+
+    for line in lines:
+        stripped_line = line.strip()
+
+        # Skip common header/footer/artifact lines
+        if session_header_pattern.match(stripped_line):
+            continue
+        if ocr_marker_pattern.match(stripped_line):
+            continue
+
+        # Normalize all whitespace (including newlines within the line, tabs, etc.) to a single space
+        cleaned_line = re.sub(r'\s+', ' ', stripped_line)
+
+        if cleaned_line:  # Only add non-empty lines
+            cleaned_lines.append(cleaned_line)
+
+    cleaned_text = '\n'.join(cleaned_lines)
+    logger.info(f"🧹 Text cleaning: Original length {len(text)} -> Cleaned length {len(cleaned_text)}")
+    return cleaned_text
 
 def clean_discussion_text(text):
     """Clean discussion text by normalizing line breaks and removing artifacts."""
@@ -3624,209 +3532,157 @@ def clean_discussion_text(text):
     return '\n'.join(cleaned_lines)
 
 
-def discover_bills_from_agenda_section(full_text, debug=False):
-    """Extract bills from the agenda section at the beginning of the PDF"""
-    import re
-    
-    try:
-        # Find the agenda section and extract text before the meeting starts
-        # Look for patterns like "(14시07분 개의)" or similar time markers
-        time_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
-        time_match = re.search(time_pattern, full_text)
-        
-        if time_match:
-            agenda_section = full_text[:time_match.start()]
-            logger.info(f"🔍 Found agenda section: {len(agenda_section)} chars before meeting start")
-        else:
-            # Fallback: use first 10k chars if no time marker found
-            agenda_section = full_text[:10000]
-            logger.info(f"⚠️ No time marker found, using first 10k chars as agenda section")
-        
-        discovered_bills = []
-        
-        # Look for bill patterns in the agenda section
-        # Pattern 1: "번호. 법안명(...)(의안번호 xxxxxx)"
-        bill_pattern_1 = r'\d+\.\s*([^(]+법률안)[^(]*\([^)]*\)\(의안번호\s*(\d+)\)'
-        matches_1 = re.findall(bill_pattern_1, agenda_section)
-        
-        for bill_name, bill_number in matches_1:
-            clean_bill_name = bill_name.strip()
-            if clean_bill_name and len(clean_bill_name) > 10:  # Filter out too short names
-                discovered_bills.append(clean_bill_name)
-                logger.info(f"📋 Found bill from agenda: {clean_bill_name[:60]}... (의안번호: {bill_number})")
-        
-        # Pattern 2: Look for bills in "상정된 안건" section specifically
-        # This is more reliable as it shows what was actually presented
-        presented_section_match = re.search(r'상정된\s*안건(.*?)(?=\(?\d{1,2}시\d{2}분|\Z)', agenda_section, re.DOTALL)
-        if presented_section_match:
-            presented_section = presented_section_match.group(1)
-            logger.info(f"📋 Found '상정된 안건' section: {len(presented_section)} chars")
-            
-            # Extract bills from presented section
-            presented_pattern = r'\d+\.\s*([^(]+법률안)[^(]*\([^)]*\)\(의안번호\s*(\d+)\)'
-            presented_matches = re.findall(presented_pattern, presented_section)
-            
-            presented_bills = []
-            for bill_name, bill_number in presented_matches:
-                clean_bill_name = bill_name.strip()
-                if clean_bill_name and len(clean_bill_name) > 10:
-                    presented_bills.append(clean_bill_name)
-                    logger.info(f"✅ Found presented bill: {clean_bill_name[:60]}... (의안번호: {bill_number})")
-            
-            # Prefer presented bills over planned bills
-            if presented_bills:
-                discovered_bills = presented_bills
-                logger.info(f"🎯 Using {len(presented_bills)} bills from '상정된 안건' section")
-        
-        # Remove duplicates while preserving order
-        unique_bills = []
-        seen = set()
-        for bill in discovered_bills:
-            if bill not in seen:
-                unique_bills.append(bill)
-                seen.add(bill)
-        
-        if debug:
-            logger.debug(f"🐛 DEBUG: Would extract {len(unique_bills)} bills from agenda")
-            for i, bill in enumerate(unique_bills[:5]):  # Show first 5
-                logger.debug(f"🐛 DEBUG: Bill {i+1}: {bill[:80]}...")
-        
-        logger.info(f"🔍 Agenda parsing discovered {len(unique_bills)} bills")
-        return unique_bills
-        
-    except Exception as e:
-        logger.error(f"❌ Error parsing agenda section: {e}")
+def discover_bills_from_content_llm(full_text, debug=False):
+    """
+    Uses the LLM to discover bills discussed in the transcript.
+    This is more robust than regex as it can handle various formats.
+    """
+    global genai
+    if not genai or debug:
+        logger.info("Skipping LLM bill discovery in debug mode or if genai is not available.")
         return []
 
+    try:
+        # Use a lightweight model for this task
+        discovery_model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+
+        # Provide the start of the text, which is most likely to contain the agenda
+        text_for_discovery = full_text[:15000] # Use first 15k chars for discovery
+
+        prompt = f"""
+        Analyze the provided start of a Korean National Assembly transcript.
+        Identify the main bills or agenda items that are listed for discussion.
+        Focus on the '의사일정' and '상정된 안건' sections.
+        Return ONLY a JSON array of the exact bill names.
+
+        Example output:
+        ["양육비 대지급제", "아이돌봄 지원법 일부개정법률안", "국민연금개혁안"]
+
+        Transcript snippet:
+        ---
+        {text_for_discovery}
+        ---
+
+        Return a JSON array of strings, or an empty array [] if no bills are found.
+        """
+
+        estimated_tokens = len(prompt) // 3
+        if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+            logger.warning("Rate limit prevented LLM bill discovery.")
+            return []
+
+        response = discovery_model.generate_content(prompt)
+        gemini_rate_limiter.record_request(estimated_tokens, success=True)
+
+        if not response or not response.text:
+            logger.warning("LLM returned no response for bill discovery.")
+            return []
+
+        response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        discovered_bills = json.loads(response_text)
+
+        if isinstance(discovered_bills, list):
+            logger.info(f"🔍 LLM discovered {len(discovered_bills)} actually discussed bills")
+            for bill in discovered_bills:
+                logger.info(f"   📋 {bill[:80]}...")
+            return discovered_bills
+        else:
+            logger.warning(f"LLM did not return a list for bill discovery. Got: {type(discovered_bills)}")
+            return []
+
+    except Exception as e:
+        logger.error(f"❌ Error during LLM bill discovery: {e}")
+        gemini_rate_limiter.record_error("api_error")
+        return []
+# tasks.py
 
 def process_pdf_text_for_statements(full_text,
                                     session_id,
                                     session_obj,
-                                    bills_context_str,
-                                    bill_names_list,
+                                    bills_context_str, # This is now unused but kept for signature compatibility
+                                    bill_names_list, # This is the old list from the DB
                                     debug=False):
     """
-    Simplified orchestrator for processing full PDF text.
-    1. Get bill segments with start/end indices
-    2. Slice text by indices and assign statements to corresponding bills
-    3. Process statements for each bill segment
+    Orchestrates the processing of full PDF text with a robust, multi-stage approach.
+    1. Clean the entire text.
+    2. Discover bills using the LLM from the cleaned text.
+    3. Find the actual start of discussion.
+    4. Segment the discussion text by bill and extract statements.
     """
     global model, genai
 
-    logger.info(
-        f"🔍 Checking LLM availability - model: {model is not None}, genai: {genai is not None}"
-    )
-
+    logger.info(f"🔍 Checking LLM availability - model: {model is not None}, genai: {genai is not None}")
     if not model or not genai:
-        logger.error("❌ LLM not available. Attempting to re-initialize...")
-
         if not reinitialize_gemini():
-            logger.error(
-                "❌ Failed to re-initialize Gemini. Using fallback extraction.")
-            # Use fallback extraction method
-            statements_from_fallback = extract_statements_with_keyword_fallback(
-                full_text, session_id, debug)
-
-            for stmt_data in statements_from_fallback:
-                stmt_data['associated_bill_name'] = "General Discussion"
-
-            if not debug and statements_from_fallback:
-                process_extracted_statements_data(statements_from_fallback,
-                                                  session_obj, debug)
-
-            logger.info(
-                f"📊 Fallback extraction completed: {len(statements_from_fallback)} statements"
-            )
+            logger.error("❌ LLM not available and failed to re-initialize. Aborting.")
             return
 
-    # Clean the full text before processing
+    # Step 1: Clean the entire PDF text first
     logger.info(f"🧹 Cleaning PDF text for session {session_id}")
-    full_text = clean_pdf_text(full_text)
-    logger.info(f"📄 Cleaned text length: ~{len(full_text)} chars")
+    cleaned_full_text = clean_pdf_text(full_text)
+    logger.info(f"📄 Cleaned text length: ~{len(cleaned_full_text)} chars")
 
-    logger.info(
-        f"🤖 Starting simplified bill-based statement processing for session PDF {session_id}."
-    )
+    # Step 2: Discover bills from the cleaned text using the LLM
+    logger.info(f"🤖 Starting bill-based statement processing for session PDF {session_id}.")
+    logger.info(f"🔍 Step 1: Discovering bills discussed in session {session_id}")
+    discovered_bills = discover_bills_from_content_llm(cleaned_full_text, debug=debug)
 
-    all_extracted_statements_data = []
+    if not discovered_bills:
+        logger.warning(f"⚠️ No bills discovered for session {session_id}. Will process entire text as general discussion.")
+        # Create a placeholder to process the whole text
+        discovered_bills = ["General Discussion"]
 
-    # Stage 1: Get bill segments with indices
-    try:
-        segmentation_model_name = 'gemini-2.5-flash-preview-05-20'
-        segmentation_llm = genai.GenerativeModel(segmentation_model_name)
-    except Exception as e_model:
-        logger.error(
-            f"Failed to initialize segmentation model ({segmentation_model_name}): {e_model}"
-        )
-        segmentation_llm = None
-
-    # First, extract bills from the agenda section at the beginning
-    logger.info(
-        f"🔍 Step 1: Extracting bills from agenda section for session {session_id}"
-    )
-    discovered_bills = discover_bills_from_agenda_section(full_text, debug=debug)
-
-    bill_segments_from_llm = []
-    if segmentation_llm and discovered_bills:
-        logger.info(
-            f"🔍 Step 2: Getting bill segments for {len(discovered_bills)} discovered bills"
-        )
-        for bill in discovered_bills:
-            logger.info(f"   📋 Will segment: {bill[:80]}...")
-
-        try:
-            bill_segments_from_llm = _process_bill_segmentation_with_batching(
-                segmentation_llm, full_text, discovered_bills)
-        except Exception as e_seg:
-            logger.error(f"Error during LLM bill segmentation: {e_seg}")
-
-    elif segmentation_llm and bill_names_list and len(bill_names_list) > 0:
-        # Fallback to predetermined list if discovery fails
-        logger.info(
-            f"🔄 Fallback: Using predetermined bill list for session {session_id} ({len(bill_names_list)} bills)"
-        )
-
-        try:
-            bill_segments_from_llm = _process_bill_segmentation_with_batching(
-                segmentation_llm, full_text, bill_names_list)
-        except Exception as e_seg:
-            logger.error(f"Error during fallback bill segmentation: {e_seg}")
-
+    # Step 3: Find the start of the actual debate to slice the text
+    discussion_start_index = 0
+    start_marker_pattern = re.compile(r'\(\d{1,2}시\s*\d{1,2}분\s+개의\)')
+    match = start_marker_pattern.search(cleaned_full_text)
+    if match:
+        discussion_start_index = match.end() # Start AFTER the marker
+        logger.info(f"✅ Found discussion start at index {discussion_start_index}")
     else:
-        logger.warning(
-            f"⚠️ No bills discovered or found for session {session_id}, will process entire text as general discussion"
-        )
+        logger.warning("⚠️ No discussion start marker found. Analyzing from beginning of cleaned text.")
 
-        # Debug information
-        try:
-            session = Session.objects.get(conf_id=session_id)
-            logger.info(f"🔍 Session info for {session_id}:")
-            logger.info(f"   - Title: {session.title}")
-            logger.info(f"   - Committee: {session.cmit_nm}")
-            logger.info(f"   - Date: {session.conf_dt}")
+    discussion_text = cleaned_full_text[discussion_start_index:]
 
-            # Check if bills exist in database
-            bills_in_db = Bill.objects.filter(session=session)
-            logger.info(f"   - Bills in database: {bills_in_db.count()}")
+    # Step 4: Get bill segments (start/end indices) from the discussion text
+    all_extracted_statements_data = []
+    bill_segments = []
+    if len(discovered_bills) > 1: # Only segment if there's more than one bill
+        logger.info(f"🔍 Step 2: Getting bill segments for {len(discovered_bills)} discovered bills")
+        segmentation_llm = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        bill_segments = _process_bill_segmentation_with_batching(segmentation_llm, discussion_text, discovered_bills)
+    else: # If only one bill (or general discussion), the whole text is the segment
+        bill_segments.append({'a': discovered_bills[0], 'b': 0, 'e': len(discussion_text)})
 
-            if bills_in_db.exists():
-                logger.info(f"   - Sample bill names from DB:")
-                for bill in bills_in_db[:3]:  # Show first 3
-                    logger.info(f"     * {bill.bill_nm[:60]}...")
-                if bills_in_db.count() > 3:
-                    logger.info(f"     ... and {bills_in_db.count() - 3} more")
-            else:
-                logger.info(
-                    f"   - No bills found in database for this session")
-                logger.info(
-                    f"   - This may be an administrative/voting session without detailed debate"
-                )
+    # Step 5: Process each segment
+    if bill_segments:
+        # Sort segments by start index
+        bill_segments.sort(key=lambda x: x['b'])
+        for i, seg_info in enumerate(bill_segments):
+            bill_name = seg_info['a']
+            start_idx = seg_info['b']
+            # Determine end index: it's the start of the next segment, or the end of the text
+            end_idx = bill_segments[i + 1]['b'] if i + 1 < len(bill_segments) else len(discussion_text)
 
-        except Session.DoesNotExist:
-            logger.error(f"   - Session {session_id} not found in database!")
-        except Exception as e:
-            logger.error(f"   - Error getting session info: {e}")
+            # Slice the discussion text for this bill
+            bill_text_segment = discussion_text[start_idx:end_idx]
 
+            logger.info(f"--- Processing Bill: {bill_name} (chars {start_idx}-{end_idx}, length: {len(bill_text_segment)}) ---")
+            if len(bill_text_segment.strip()) < 200:
+                 logger.warning(f"Segment for '{bill_name}' is too short. Skipping.")
+                 continue
+
+            statements_in_bill = extract_statements_for_bill_segment(bill_text_segment, session_id, bill_name, debug)
+
+            for stmt_data in statements_in_bill:
+                stmt_data['associated_bill_name'] = bill_name
+            all_extracted_statements_data.extend(statements_in_bill)
+
+    # Step 6: Save all found statements
+    logger.info(f"📊 Collected {len(all_extracted_statements_data)} total statements for session {session_id}")
+    if not debug and all_extracted_statements_data:
+        process_extracted_statements_data(all_extracted_statements_data, session_obj, debug)
+        logger.info(f"✅ Successfully processed {len(all_extracted_statements_data)} statements")
 
 def _process_bill_segmentation_with_batching(segmentation_llm,
                                              segmentation_text,
