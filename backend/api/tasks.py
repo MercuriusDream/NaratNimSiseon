@@ -3934,7 +3934,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
         prompt = f"""
 당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
 
-국회 회의록에서 법안별 **전체 토론 구간**을 찾아주세요. 단순한 언급이 아닌, 해당 법안에 대한 **완전한 논의 전체**를 찾아야 합니다.
+국회 회의록에서 각 법안에 대한 **완전한 대화 전체**를 찾아주세요. 법안이 처음 언급되는 순간부터 그 법안에 대한 논의가 완전히 끝나는 순간까지의 모든 내용을 포함해야 합니다.
 
 대상 법안들:
 {bill_list_str}
@@ -3944,37 +3944,49 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
 {text_chunk}
 ---
 
-각 법안에 대한 **전체 논의 구간**을 찾아 JSON으로 응답:
+**중요한 작업 단계:**
+
+1. **각 법안의 첫 언급 찾기**: 법안명이나 관련 키워드가 처음 나타나는 지점
+2. **대화의 완전한 끝 찾기**: 해당 법안에 대한 모든 논의, 질의응답, 표결까지 포함하여 완전히 끝나는 지점
+3. **연속된 대화 블록 확인**: ◯ 발언들이 해당 법안에 대해 연속적으로 이어지는 전체 구간
+
+각 법안에 대한 **완전한 대화 구간**을 찾아 JSON으로 응답:
 {{
   "segments": [
     {{
       "bill_name": "위 목록에서 복사한 정확한 법안명",
-      "start_index": 해당_법안_논의_시작점,
-      "end_index": 해당_법안_논의_종료점
+      "start_index": 해당_법안_첫_언급_지점,
+      "end_index": 해당_법안_논의_완전_종료_지점
     }}
   ]
 }}
 
-**매우 중요한 조건들:**
+**절대적 조건들:**
 
-1. **전체 대화 구간 찾기**: 해당 법안에 대한 모든 발언, 토론, 질의응답을 포함하는 완전한 구간을 찾으세요
-   - 법안 소개부터 마지막 관련 발언까지 전체를 포함
-   - 최소 1000자 이상의 의미있는 토론 구간이어야 함
-   - 단순 언급(8자 같은 짧은 구간)은 절대 안됨
+1. **완전한 대화 포함**: 
+   - 법안 첫 언급부터 마지막 관련 발언까지 **모든 것** 포함
+   - 의사진행 발언, 질의응답, 표결 과정 모두 포함
+   - 최소 2000자 이상이어야 완전한 대화로 인정
 
-2. **정확한 인덱스**: 
-   - start_index: 해당 법안 논의가 **처음 시작되는** ◯ 위치
-   - end_index: 해당 법안 논의가 **완전히 끝나는** 지점 (다음 법안 시작 전 또는 텍스트 끝)
+2. **정확한 범위 설정**:
+   - start_index: 해당 법안이 **처음 언급되는** 지점 (법안명 언급 시작점)
+   - end_index: 해당 법안 관련 **마지막 발언이 끝나는** 지점 (다음 주제로 넘어가기 직전)
 
-3. **법안명 정확성**: bill_name은 위 목록에서 한 글자도 바꾸지 말고 정확히 복사
+3. **연속성 확인**: 
+   - 해당 법안에 대한 ◯ 발언들이 연속적으로 이어지는 전체 블록
+   - 중간에 다른 주제가 끼어들면 해당 지점까지만 포함
 
-4. **실제 토론만**: ◯로 시작하는 의원 발언들의 연속된 블록을 찾으세요
+4. **품질 검증**:
+   - 2000자 미만이면 완전한 대화가 아니므로 start_index: -1, end_index: -1
+   - 단순 언급만 있고 실제 토론이 없으면 start_index: -1, end_index: -1
 
-5. **검증**: 만약 해당 법안에 대한 실질적인 토론이 텍스트에 없다면 start_index: -1, end_index: -1로 표시
+**올바른 예시:**
+- 법안 첫 언급: 위치 500 → 논의 완전 종료: 위치 8500 (8000자의 완전한 대화)
+- 법안 첫 언급: 위치 1200 → 논의 완전 종료: 위치 4800 (3600자의 완전한 대화)
 
-예시:
-- 좋은 예: start_index: 1500, end_index: 4200 (2700자의 완전한 토론)
-- 나쁜 예: start_index: 1882, end_index: 1890 (8자의 짧은 언급)"""
+**잘못된 예시:**
+- start_index: 1882, end_index: 1890 (8자 - 너무 짧음, 완전한 대화 아님)
+- start_index: 80, end_index: 1265 (1185자 - 부분적 대화만 포함, 완전하지 않음)"""
 
         try:
             response = segmentation_llm.generate_content(prompt)
@@ -4090,9 +4102,9 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                         global_start = start_idx + offset
                         global_end = end_idx + offset
                         
-                        # Validate segment is substantial (minimum 1000 chars for meaningful conversation)
+                        # Validate segment is substantial (minimum 2000 chars for complete conversation)
                         segment_length = global_end - global_start
-                        MIN_CONVERSATION_LENGTH = 1000  # Require at least 1000 chars for substantial discussion
+                        MIN_CONVERSATION_LENGTH = 2000  # Require at least 2000 chars for complete conversation
                         
                         if segment_length >= MIN_CONVERSATION_LENGTH:
                             valid_segments.append({
@@ -4112,7 +4124,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                                 )
                         else:
                             logger.warning(
-                                f"Segment too short for meaningful conversation - bill '{bill_name}': {segment_length} chars (minimum: {MIN_CONVERSATION_LENGTH})"
+                                f"Segment too short for complete conversation - bill '{bill_name}': {segment_length} chars (minimum: {MIN_CONVERSATION_LENGTH} required for full conversation)"
                             )
                             
                     except (ValueError, TypeError) as e:
@@ -4240,7 +4252,7 @@ def _fallback_bill_segmentation(text_chunk, bill_names_list, offset):
         
         # Ensure substantial length
         segment_length = end_pos - start_speaker_pos
-        if segment_length >= 1000:  # Minimum 1000 chars
+        if segment_length >= 2000:  # Minimum 2000 chars for complete conversation
             global_start = start_speaker_pos + offset
             global_end = end_pos + offset
             
