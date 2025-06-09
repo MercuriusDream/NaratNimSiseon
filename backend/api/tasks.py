@@ -3824,10 +3824,36 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
         return None
 
     @with_db_retry
+    def _find_existing_speaker():
+        # Try to find by exact cleaned name first
+        return Speaker.objects.filter(naas_nm=speaker_name_cleaned).first()
+
+    @with_db_retry
+    def _create_fallback_speaker():
+        # Fallback: Create a temporary/basic speaker record if API fetch fails or in debug
+        # Use a unique naas_cd for these temporary entries.
+        temp_naas_cd = f"TEMP_{speaker_name_cleaned.replace(' ', '_')}_{int(time.time())}"
+
+        speaker_obj, created = Speaker.objects.get_or_create(
+            naas_nm=speaker_name_cleaned,  # Try to create with the cleaned name
+            defaults={  # Provide all required non-nullable fields with placeholders
+                'naas_cd': temp_naas_cd,
+                'naas_ch_nm': '',
+                'plpt_nm': '정보없음',
+                'elecd_nm': '',
+                'elecd_div_nm': '',
+                'cmit_nm': '',
+                'blng_cmit_nm': '',
+                'rlct_div_nm': '',
+                'gtelt_eraco': '',
+                'ntr_div': '',
+                'naas_pic': ''
+            })
+        return speaker_obj, created
+
     def _get_or_create_speaker_db():
         # Try to find by exact cleaned name first
-        speaker_obj = Speaker.objects.filter(
-            naas_nm=speaker_name_cleaned).first()
+        speaker_obj = _find_existing_speaker()
 
         if speaker_obj:
             if debug:
@@ -3853,26 +3879,8 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
                     f"Failed to fetch details for new speaker '{speaker_name_cleaned}' from API."
                 )
 
-        # Fallback: Create a temporary/basic speaker record if API fetch fails or in debug
-        # Use a unique naas_cd for these temporary entries.
-        temp_naas_cd = f"TEMP_{speaker_name_cleaned.replace(' ', '_')}_{int(time.time())}"
-
-        speaker_obj, created = Speaker.objects.get_or_create(
-            naas_nm=speaker_name_cleaned,  # Try to create with the cleaned name
-            defaults=
-            {  # Provide all required non-nullable fields with placeholders
-                'naas_cd': temp_naas_cd,
-                'naas_ch_nm': '',
-                'plpt_nm': '정보없음',
-                'elecd_nm': '',
-                'elecd_div_nm': '',
-                'cmit_nm': '',
-                'blng_cmit_nm': '',
-                'rlct_div_nm': '',
-                'gtelt_eraco': '',
-                'ntr_div': '',
-                'naas_pic': ''
-            })
+        # Use the retry-wrapped fallback creation
+        speaker_obj, created = _create_fallback_speaker()
         if created:
             logger.info(
                 f"Created basic/temporary speaker record for: {speaker_name_cleaned} (ID: {speaker_obj.naas_cd}). Details might be incomplete."
