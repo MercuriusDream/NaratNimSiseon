@@ -3858,6 +3858,13 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
         keywords_str = ', '.join(
             [b['core'] for b in bill_info if len(b['core']) > 3])
 
+        # DEBUG: Log the input data
+        logger.error(f"🐛 DEBUG: Text chunk length for segmentation: {len(text_chunk)}")
+        logger.error(f"🐛 DEBUG: Text chunk first 500 chars: {text_chunk[:500]}")
+        logger.error(f"🐛 DEBUG: Text chunk last 500 chars: {text_chunk[-500:]}")
+        logger.error(f"🐛 DEBUG: Bill list for segmentation: {bill_list_str}")
+        logger.error(f"🐛 DEBUG: Keywords for segmentation: {keywords_str}")
+
         prompt = f"""
 당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
 국회 회의록에서 법안별 논의 구간을 정확히 식별해주세요.
@@ -3909,11 +3916,18 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
             return []
 
         if not response or not response.text:
+            logger.error("🐛 DEBUG: Empty response from LLM segmentation")
             return []
 
         response_text = response.text.strip().replace('```json',
                                                       '').replace('```',
                                                                   '').strip()
+
+        # DEBUG: Log the full LLM response
+        logger.error(f"🐛 DEBUG: Full LLM response for bill segmentation:")
+        logger.error(f"🐛 DEBUG: Raw response length: {len(response.text)}")
+        logger.error(f"🐛 DEBUG: Cleaned response: {response_text}")
+        logger.error(f"🐛 DEBUG: Bill names provided to LLM: {bill_names_list}")
 
         try:
             data = json.loads(response_text)
