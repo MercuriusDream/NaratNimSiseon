@@ -203,12 +203,16 @@ class Command(BaseCommand):
                         # Import the actual task function
                         from api.tasks import process_session_pdf
                         
-                        # For bound tasks, call the underlying function directly
-                        if hasattr(process_session_pdf, '__wrapped__'):
-                            # Call the wrapped function with self=None for bound tasks
+                        # For bound tasks (@shared_task(bind=True)), we need to call the underlying function
+                        # The bound task expects 'self' as first parameter when called directly
+                        if hasattr(process_session_pdf, 'run'):
+                            # Use the .run() method which is the actual function without Celery wrapper
+                            process_session_pdf.run(session_id=session.conf_id, force=True, debug=debug)
+                        elif hasattr(process_session_pdf, '__wrapped__'):
+                            # Alternative: call the wrapped function directly with self=None
                             process_session_pdf.__wrapped__(None, session_id=session.conf_id, force=True, debug=debug)
                         else:
-                            # Try calling with keyword arguments only
+                            # Last resort: try calling directly with keyword arguments
                             process_session_pdf(session_id=session.conf_id, force=True, debug=debug)
                         
                         logger.info(f"✅ Successfully processed PDF for session {session.conf_id} synchronously")
@@ -216,19 +220,19 @@ class Command(BaseCommand):
                     except Exception as e_fallback:
                         logger.error(f"Failed to call process_session_pdf directly: {e_fallback}")
                         
-                        # Final fallback - try importing as module and calling function
+                        # Final fallback - create a simple wrapper to handle the bound task properly
                         try:
-                            import importlib
-                            tasks_module = importlib.import_module('api.tasks')
-                            func = getattr(tasks_module, 'process_session_pdf')
+                            # Import and call with proper signature handling
+                            def call_bound_task():
+                                from api.tasks import process_session_pdf
+                                # Call the function with a mock self parameter
+                                class MockSelf:
+                                    pass
+                                mock_self = MockSelf()
+                                return process_session_pdf(mock_self, session_id=session.conf_id, force=True, debug=debug)
                             
-                            # Try calling the function directly
-                            if hasattr(func, '__wrapped__'):
-                                func.__wrapped__(None, session_id=session.conf_id, force=True, debug=debug)
-                            else:
-                                func(session_id=session.conf_id, force=True, debug=debug)
-                            
-                            logger.info(f"✅ Successfully processed PDF for session {session.conf_id} using module import fallback")
+                            call_bound_task()
+                            logger.info(f"✅ Successfully processed PDF for session {session.conf_id} using mock self fallback")
                             
                         except Exception as e_final:
                             logger.error(f"Final fallback failed for session {session.conf_id}: {e_final}")
