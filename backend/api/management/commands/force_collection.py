@@ -21,12 +21,18 @@ def celery_or_sync(task_func):
     """
 
     def wrapper(*args, **kwargs):
+        # Get task name safely
+        try:
+            task_name = task_func.__name__
+        except (AttributeError, Exception):
+            # Fallback if __name__ is not accessible (common with Celery proxies)
+            task_name = str(task_func).split('.')[-1] if hasattr(task_func, '__module__') else 'unknown_task'
+        
         if is_celery_available():
-            logger.info(
-                f"🚀 Calling '{task_func.__name__}' asynchronously via Celery.")
+            logger.info(f"🚀 Calling '{task_name}' asynchronously via Celery.")
             task_func.delay(*args, **kwargs)
         else:
-            logger.info(f"🔄 Calling '{task_func.__name__}' synchronously.")
+            logger.info(f"🔄 Calling '{task_name}' synchronously.")
             # Call the actual Python function wrapped by the @shared_task decorator
             if hasattr(task_func, '__wrapped__'):
                 # For bound tasks, the first argument 'self' is not passed in a direct call
