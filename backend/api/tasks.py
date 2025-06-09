@@ -2689,417 +2689,182 @@ def analyze_speech_segment_with_llm(speech_segment,
                                            assembly_members)
 
 
-def analyze_single_statement_with_bill_context(statement_data_dict,
-                                               session_id,
-                                               bill_name,
-                                               debug=False):
-    """Analyze a single statement's text using LLM, with context of a specific bill. Now only returns sentiment and bill relevance."""
-    global model
+@with_db_retry
+def create_placeholder_bill_from_llm(session_obj, bill_title):
+    """Creates a placeholder Bill from a title discovered by the LLM."""
+    if not bill_title:
+        return None
 
-    if not model:  # Global 'model' for detailed analysis (e.g., gemma-3)
-        logger.warning(
-            "❌ Main LLM ('model') not available. Cannot analyze statement for bill context."
-        )
-        statement_data_dict.update({
-            'sentiment_score': 0.0,
-            'sentiment_reason': 'LLM N/A',
-            'bill_relevance_score': 0.0
+    # Generate a unique ID based on the title and session
+    unique_id = f"LLM_{session_obj.conf_id}_{hash(bill_title)}"
+
+    bill, created = Bill.objects.get_or_create(
+        bill_id=unique_id,
+        defaults={
+            'session': session_obj,
+            'bill_nm': bill_title,
+            # Let the model's default "정보 없음" handle the proposer field.
+            # bill_no will be NULL (if your model allows it).
         })
-        return statement_data_dict
-
-    speaker_name = statement_data_dict.get('speaker_name', 'Unknown')
-    text_to_analyze = statement_data_dict.get('text', '')
-
-    if not text_to_analyze:
-        logger.warning(
-            f"No text to analyze for speaker '{speaker_name}' regarding bill '{bill_name}'."
-        )
-        return statement_data_dict
-
-    MAX_STATEMENT_LENGTH = 8000
-    if len(text_to_analyze) > MAX_STATEMENT_LENGTH:
+    if created:
         logger.info(
-            f"Statement text too long ({len(text_to_analyze)} chars), processing first {MAX_STATEMENT_LENGTH} chars"
+            f"✨ LLM discovered and created placeholder for: '{bill_title[:60]}...'"
         )
-        text_for_prompt = text_to_analyze[:MAX_STATEMENT_LENGTH] + "... [발언이 길이 제한으로 잘렸습니다]"
+    return bill
+
+
+import json
+import logging
+
+
+def extract_statements_with_llm_discovery(full_text,
+                                          session_id,
+                                          known_bill_names,
+                                          session_obj,
+                                          debug=False):
+    """
+    Uses a single, powerful LLM call to:
+    1. Find discussion segments for a list of known bills.
+    2. Discover and segment any additional bills/topics discussed in the text.
+    3. Creates placeholder bills for newly discovered items.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info(
+        f"🤖 Starting LLM discovery and segmentation for session: {session_id}")
+
+    if not reinitialize_gemini():
+        logger.error("❌ Gemini not available. Cannot perform LLM discovery.")
+        return []
+
+    # Prepare the list of known bills for the prompt
+    if known_bill_names:
+        known_bills_str = "\n".join(f"- {name}" for name in known_bill_names)
     else:
-        text_for_prompt = text_to_analyze
+        known_bills_str = "No known bills were provided."
 
-    prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+    prompt = f"""You are a world-class legislative analyst AI. Your task is to read a parliamentary transcript
+and perfectly segment the entire discussion for all topics.
 
-국회 발언 분석 요청:
-발언자: {speaker_name}
-논의 중인 특정 의안: "{bill_name}"
-발언 내용:
+**CONTEXT:**
+I already know about the following bills. You MUST find the discussion for these if they exist.
+--- KNOWN BILLS ---
+{known_bills_str}
+
+    **YOUR CRITICAL MISSION:**
+    1. Read the entire transcript below.
+    2. Identify the exact start and end character index for the complete discussion of each **KNOWN BILL**.
+    3. Discover any additional bills/topics not in the known list, and identify their discussion spans.
+    4. Return a JSON object with two arrays: `bills_found` (known bills) and `newly_discovered` (others).
+
+    **RULES:**
+    - Ignore any mentions that occur in the table-of-contents or front-matter portion of the document
+      (before the Chair officially opens the debate).
+    - A discussion segment **must** be substantive, containing actual debate or remarks from multiple speakers.
+      Do not segment short procedural announcements.
+    - `bill_name` for known bills MUST EXACTLY MATCH the provided list.
+    - For new items, create a concise, accurate `bill_name`.
+    - Return **ONLY** the final JSON object.
+**TRANSCRIPT:**
 ---
-{text_for_prompt}
+{full_text}
 ---
 
-위 발언 내용을 분석하여 다음 JSON 형식으로 결과를 제공해주세요.
+**REQUIRED JSON OUTPUT FORMAT:**
 {{
-  "sentiment_score": -1.0 (매우 부정적) 부터 1.0 (매우 긍정적) 사이의 감성 점수 (숫자),
-  "sentiment_reason": "감성 판단의 주요 근거 (간략히, 1-2 문장)",
-  "bill_relevance_score": 0.0 (의안과 무관) 부터 1.0 (의안과 매우 직접적 관련) 사이의 점수 (숫자). 이 발언이 구체적으로 "{bill_name}"에 대해 얼마나 논하고 있는지 판단해주세요."
+  "bills_found": [
+    {{
+      "bill_name": "Exact name of a KNOWN bill",
+      "start_index": 1234,
+      "end_index": 5678
+    }}
+    // …more known bills
+  ],
+  "newly_discovered": [
+    {{
+      "bill_name": "Name of a newly discovered topic",
+      "start_index": 2345,
+      "end_index": 6789
+    }}
+    // …more new topics
+  ]
 }}
-
-분석 가이드라인:
-1.  **Sentiment**: 발언자의 어조와 내용의 긍/부정성을 평가합니다. 중립은 0.0.
-2.  **Bill Relevance**: 발언이 명시된 의안 "{bill_name}"과 얼마나 직접적으로 연관되어 있는지 평가합니다. 단순히 의안이 언급되는 회의에서의 발언이라고 높은 점수를 주지 마십시오. 내용 자체가 의안을 다루어야 합니다.
-3.  **Policy Categories**: 발언의 주제를 가장 잘 나타내는 정책 분야를 선택합니다. 여러 분야에 걸칠 경우 가장 주요한 1~2개만 포함합니다. 다만 지역 관련의 경우, 그 지역의 명칭은 "서울", "제주" 와 같은 형식으로 분야의 개수를 제외하고 포함될 수 있습니다. confidence는 해당 분류에 대한 모델의 확신도입니다.
-4.  **Key Policy Phrases**: 발언의 핵심 내용을 담고 있는 정책 관련 어구를 간결하게 추출합니다.
-5.  **Bill Specific Keywords**: 발언 텍스트 내에서 "{bill_name}"의 전부 또는 일부, 혹은 이 의안의 핵심 내용을 지칭하는 특정 단어가 발견되면 기록합니다.
-
-응답은 반드시 유효한 JSON 형식이어야 하며, 모든 문자열 값은 큰따옴표로 감싸야 합니다.
 """
     try:
-        response = model.generate_content(
-            prompt)  # Uses the global 'model' (e.g. gemma-3)
-        if not response or not response.text:
-            logger.warning(
-                f"❌ No LLM analysis response for '{speaker_name}' on bill '{bill_name}'."
-            )
-            return statement_data_dict  # Return original dict
+        segmentation_model = genai.GenerativeModel(
+            'gemini-2.5-flash-preview-05-20')
+        estimated_tokens = len(prompt) // 3
 
-        response_text_cleaned = response.text.strip().replace(
-            "```json", "").replace("```", "").strip()
-        analysis_json = json.loads(response_text_cleaned)
+        if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+            logger.error("Rate limit timeout for LLM discovery. Aborting.")
+            return []
 
-        statement_data_dict.update({
-            'sentiment_score':
-            analysis_json.get('sentiment_score', 0.0),
-            'sentiment_reason':
-            analysis_json.get('sentiment_reason', 'LLM 분석 완료'),
-            'bill_relevance_score':
-            analysis_json.get('bill_relevance_score', 0.0),
-            'policy_categories':
-            analysis_json.get('policy_categories', []),
-            'policy_keywords':
-            analysis_json.get('key_policy_phrases',
-                              []),  # Matched to prompt output key
-            'bill_specific_keywords':
-            analysis_json.get('bill_specific_keywords_found',
-                              [])  # Matched to prompt output key
-        })
-        if debug:
-            logger.debug(
-                f"🐛 DEBUG: Analyzed '{speaker_name}' on '{bill_name}' - Sent: {statement_data_dict['sentiment_score']}, BillRel: {statement_data_dict['bill_relevance_score']}"
+        response = segmentation_model.generate_content(prompt)
+        gemini_rate_limiter.record_request(estimated_tokens, success=True)
+
+        # Strip markdown fences if present
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            response_text = response_text.split("```", 2)[-1].strip()
+
+        data = json.loads(response_text)
+        if not isinstance(data, dict):
+            logger.error("LLM discovery did not return a JSON object.")
+            return []
+
+        # Merge the two arrays into one flat list, tagging each entry
+        all_segments = []
+
+        for seg in data.get("bills_found", []):
+            seg["is_newly_discovered"] = False
+            all_segments.append(seg)
+
+        for seg in data.get("newly_discovered", []):
+            seg["is_newly_discovered"] = True
+            all_segments.append(seg)
+
+        logger.info(
+            f"✅ LLM segmented {len(all_segments)} total discussion topics.")
+
+        # Create placeholders for newly discovered bills
+        if not debug:
+            for segment in all_segments:
+                if segment.get("is_newly_discovered"):
+                    create_placeholder_bill_from_llm(session_obj,
+                                                     segment["bill_name"])
+
+        # Process each segment to extract statements
+        all_statements = []
+        for segment in sorted(all_segments,
+                              key=lambda x: x.get('start_index', 0)):
+            bill_name = segment.get("bill_name")
+            start = segment.get("start_index", 0)
+            end = segment.get("end_index", 0)
+
+            if not bill_name or end <= start:
+                continue
+
+            segment_text = full_text[start:end]
+            logger.info(
+                f"--- Processing segment for: '{bill_name}' (Chars {start}-{end}) ---"
             )
-        return statement_data_dict
-    except json.JSONDecodeError as e:
-        logger.error(
-            f"❌ JSON parsing error for LLM analysis ('{speaker_name}' on '{bill_name}'): {e}. Response: {response_text_cleaned if 'response_text_cleaned' in locals() else 'N/A'}"
-        )
+
+            statements_in_segment = extract_statements_for_bill_segment(
+                segment_text, session_id, bill_name, debug)
+
+            # Associate these statements with the correct bill name
+            for stmt in statements_in_segment:
+                stmt['associated_bill_name'] = bill_name
+
+            all_statements.extend(statements_in_segment)
+
+        return all_statements
+
     except Exception as e:
+        gemini_rate_limiter.record_error("llm_discovery_error")
         logger.error(
-            f"❌ Error during LLM analysis of statement for '{speaker_name}' on bill '{bill_name}': {e}"
-        )
-        logger.exception("Full traceback for statement analysis error:")
-    # If error, return original dict to avoid breaking loop, but it won't have LLM data
-    return statement_data_dict
-
-
-def extract_statements_with_bill_based_chunking(full_text,
-                                                session_id,
-                                                bill_names_list,
-                                                debug=False):
-    """
-    Process full text by first identifying bill segments using LLM,
-    then processing each bill segment in chunks for statement extraction with multithreading.
-    """
-    logger.info(
-        f"🔄 Using bill-based chunked processing for session: {session_id}")
-
-    if not genai or not hasattr(genai, 'GenerativeModel'):
-        logger.warning(
-            "❌ Gemini API not configured. Cannot perform bill-based chunked processing."
-        )
+            f"❌ Critical error during LLM discovery and segmentation: {e}")
+        logger.exception("Full traceback for LLM discovery:")
         return []
-
-    try:
-        segmentation_model_name = 'gemini-2.5-flash-preview-05-20'
-        segmentation_llm = genai.GenerativeModel(segmentation_model_name)
-        speaker_detection_llm = genai.GenerativeModel(segmentation_model_name)
-    except Exception as e_model:
-        logger.error(
-            f"Failed to initialize models ({segmentation_model_name}): {e_model}"
-        )
-        return []
-
-    all_analyzed_statements = []
-
-    # Step 1: Get bill segments using LLM (use existing bill segmentation logic)
-    bill_segments_from_llm = []
-    if bill_names_list and len(bill_names_list) > 0:
-        logger.info(
-            f"🔍 Step 1: Identifying bill segments for session {session_id}")
-
-        # Use batch processing for bill segmentation on very long texts
-        MAX_SEGMENTATION_LENGTH = 100000
-        if len(full_text) > MAX_SEGMENTATION_LENGTH:
-            logger.info(
-                f"Text too long for single segmentation ({len(full_text)} chars), processing in batches of {MAX_SEGMENTATION_LENGTH}"
-            )
-            # Process in overlapping batches to ensure we don't miss bill discussions at boundaries
-            batch_overlap = 5000  # 5K character overlap between batches
-            all_bill_segments = []
-
-            for batch_start in range(0, len(full_text),
-                                     MAX_SEGMENTATION_LENGTH - batch_overlap):
-                batch_end = min(batch_start + MAX_SEGMENTATION_LENGTH,
-                                len(full_text))
-                batch_text = full_text[batch_start:batch_end]
-
-                logger.info(
-                    f"Processing segmentation batch: chars {batch_start}-{batch_end}"
-                )
-
-                batch_segmentation_prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-국회 회의록 텍스트 배치에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
-
-의안 목록:
-{chr(10).join([f"- {bill}" for bill in bill_names_list])}
-
-회의록 텍스트 배치 (전체 문서의 {batch_start}-{batch_end} 구간):
----
-{batch_text}
----
-
-이 배치에서 각 의안에 대한 논의 시작 지점을 알려주세요. JSON 형식 응답:
-{{
-  "bill_discussion_segments": [
-    {{
-      "bill_name_identified": "제공된 목록에서 정확히 일치하는 의안명",
-      "discussion_start_idx": 해당 의안 논의가 시작되는 배치 내 문자 위치 (숫자),
-      "confidence": 0.0-1.0 (매칭 확신도)
-    }}
-  ]
-}}
-
-중요한 규칙:
-- "bill_name_identified"는 반드시 제공된 의안 목록에서 정확히 선택해야 합니다
-- discussion_start_idx는 이 배치 내에서의 상대적 위치입니다 (0부터 시작)
-- confidence가 0.7 미만인 경우는 포함하지 마세요
-- 배치 경계에서 잘린 논의는 다음 배치에서 처리됩니다
-"""
-
-                try:
-                    batch_response = segmentation_llm.generate_content(
-                        batch_segmentation_prompt)
-                    if batch_response and batch_response.text:
-                        batch_text_cleaned = batch_response.text.strip(
-                        ).replace("```json", "").replace("```", "").strip()
-                        batch_data = json.loads(batch_text_cleaned)
-                        batch_segments = batch_data.get(
-                            "bill_discussion_segments", [])
-
-                        # Adjust indices to be relative to full document
-                        for segment in batch_segments:
-                            if 'discussion_start_idx' in segment:
-                                segment['discussion_start_idx'] += batch_start
-
-                        all_bill_segments.extend(batch_segments)
-                        logger.info(
-                            f"Found {len(batch_segments)} bill segments in batch {batch_start}-{batch_end}"
-                        )
-
-                    # Rate limiting between batches
-                    if batch_end < len(full_text):
-                        time.sleep(2)
-
-                except (json.JSONDecodeError, Exception) as e:
-                    logger.warning(
-                        f"Error processing segmentation batch {batch_start}-{batch_end}: {e}"
-                    )
-                    continue
-
-            # Remove duplicates and sort by position
-            seen_bills = set()
-            unique_segments = []
-            for segment in sorted(
-                    all_bill_segments,
-                    key=lambda x: x.get('discussion_start_idx', 0)):
-                bill_name = segment.get('bill_name_identified', '')
-                if bill_name and bill_name not in seen_bills:
-                    seen_bills.add(bill_name)
-                    unique_segments.append(segment)
-
-            bill_segments_from_llm = unique_segments
-            logger.info(
-                f"Batch segmentation completed: {len(bill_segments_from_llm)} unique bill segments identified"
-            )
-        else:
-            segmentation_text = full_text
-
-        bill_segmentation_prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-국회 회의록 전체 텍스트에서 논의된 주요 의안(법안)별로 구간을 나누어주세요.
-
-의안 목록:
-{chr(10).join([f"- {bill}" for bill in bill_names_list])}
-
-회의록 텍스트:
----
-{segmentation_text}
----
-
-각 의안에 대한 논의 시작 지점을 알려주세요. JSON 형식 응답:
-{{
-  "bill_discussion_segments": [
-    {{
-      "bill_name_identified": "제공된 목록에서 정확히 일치하는 의안명",
-      "discussion_start_idx": 해당 의안 논의가 시작되는 텍스트 내 문자 위치 (숫자),
-      "confidence": 0.0-1.0 (매칭 확신도)
-    }}
-  ]
-}}
-
-중요한 규칙:
-- "bill_name_identified"는 반드시 제공된 의안 목록에서 정확히 선택해야 합니다
-- 의안명을 줄이거나 변경하지 마세요 (예: "○○법 일부개정법률안" -> "○○법 일부개정법률안")
-- 회의록에서 해당 의안에 대한 실질적 논의가 시작되는 지점을 찾으세요
-- 순서는 회의록에 나타난 순서대로 정렬해주세요
-- confidence가 0.7 미만인 경우는 포함하지 마세요
-- 의안 목록이나 의사진행 발언은 이미 제거되었으므로 ◯ 발언만 분석
-
-예시:
-만약 논의 구간이 텍스트의 123번째 문자에서 시작해 456번째 문자에서 끝난다면, discussion_start_idx=123, end_idx=456로 표기해 주세요."""
-        try:
-            seg_response = segmentation_llm.generate_content(
-                bill_segmentation_prompt)
-            if seg_response and seg_response.text:
-                seg_text_cleaned = seg_response.text.strip().replace(
-                    "```json", "").replace("```", "").strip()
-                seg_data = json.loads(seg_text_cleaned)
-                bill_segments_from_llm = seg_data.get(
-                    "bill_discussion_segments", [])
-                logger.info(
-                    f"LLM identified {len(bill_segments_from_llm)} bill segments"
-                )
-        except (json.JSONDecodeError, Exception) as e:
-            logger.error(
-                f"Error in bill segmentation: {e}. Will process as single bill segment."
-            )
-            # Fallback: treat entire text as one bill segment
-            if bill_names_list:
-                bill_segments_from_llm = [{
-                    "bill_name_identified":
-                    bill_names_list[0],
-                    "discussion_start_idx":
-                    0,
-                    "relevance_to_provided_list":
-                    0.5
-                }]
-
-    # Step 2: Create ordered bill segments with text
-    sorted_segments_with_text = []
-    if bill_segments_from_llm:
-        valid_segments_for_sort = []
-        for seg_info in bill_segments_from_llm:
-            start_idx = seg_info.get("discussion_start_idx")
-            if start_idx is not None and isinstance(
-                    start_idx, int) and 0 <= start_idx < len(full_text):
-                seg_info['start_index'] = start_idx
-                valid_segments_for_sort.append(seg_info)
-
-        # Sort by start_index
-        valid_segments_for_sort.sort(key=lambda x: x['start_index'])
-
-        # Define text segments
-        for i, current_seg_info in enumerate(valid_segments_for_sort):
-            segment_text_start_index = current_seg_info['start_index']
-            segment_text_end_index = len(full_text)
-
-            if i + 1 < len(valid_segments_for_sort):
-                next_segment_start_index = valid_segments_for_sort[
-                    i + 1]['start_index']
-                segment_text_end_index = next_segment_start_index
-
-            segment_actual_text = full_text[
-                segment_text_start_index:segment_text_end_index]
-            sorted_segments_with_text.append({
-                "bill_name":
-                current_seg_info.get("bill_name_identified",
-                                     "Unknown Bill Segment"),
-                "text":
-                segment_actual_text
-            })
-
-    # If no LLM segments identified, process bills iteratively one by one
-    if not sorted_segments_with_text and bill_names_list:
-        logger.info(
-            f"No LLM segments found, processing {len(bill_names_list)} bills iteratively"
-        )
-
-        # Process each bill individually by searching for its discussion in the text
-        for bill_name in bill_names_list:
-            logger.info(f"🔍 Processing bill iteratively: {bill_name}")
-
-            # Try to find bill-specific content in the text
-            bill_segment_text = extract_bill_specific_content(
-                full_text, bill_name)
-
-            if bill_segment_text and len(bill_segment_text.strip()
-                                         ) > 100:  # Minimum content threshold
-                sorted_segments_with_text.append({
-                    "bill_name": bill_name,
-                    "text": bill_segment_text
-                })
-                logger.info(
-                    f"✅ Found content for bill: {bill_name} ({len(bill_segment_text)} chars)"
-                )
-            else:
-                logger.info(
-                    f"⚠️ No specific content found for bill: {bill_name}, skipping"
-                )
-
-    # If still no segments and we have bills, create equal segments as last resort
-    if not sorted_segments_with_text and bill_names_list:
-        logger.warning(
-            f"Creating equal segments for {len(bill_names_list)} bills as last resort"
-        )
-        text_length = len(full_text)
-        segment_size = text_length // len(bill_names_list)
-
-        for i, bill_name in enumerate(bill_names_list):
-            start_pos = i * segment_size
-            end_pos = (i + 1) * segment_size if i < len(
-                bill_names_list) - 1 else text_length
-            segment_text = full_text[start_pos:end_pos]
-
-            sorted_segments_with_text.append({
-                "bill_name": bill_name,
-                "text": segment_text
-            })
-            logger.info(
-                f"Created equal segment for bill: {bill_name} ({len(segment_text)} chars)"
-            )
-
-    # Step 3: Process each bill segment in chunks with multithreading
-    logger.info(
-        f"🔍 Step 2: Processing {len(sorted_segments_with_text)} bill segments in chunks with multithreading"
-    )
-
-    for seg_data in sorted_segments_with_text:
-        bill_name_for_seg = seg_data["bill_name"]
-        bill_segment_text = seg_data["text"]
-
-        logger.info(
-            f"--- Processing bill segment: {bill_name_for_seg} ({len(bill_segment_text)} chars) ---"
-        )
-
-        # Process with multithreading regardless of size for consistent performance
-        statements_in_segment = extract_statements_for_bill_segment(
-            bill_segment_text, session_id, bill_name_for_seg, debug)
-        for stmt_data in statements_in_segment:
-            stmt_data['associated_bill_name'] = bill_name_for_seg
-        all_analyzed_statements.extend(statements_in_segment)
-
-    logger.info(
-        f"✅ Bill-based chunked processing for session {session_id} completed: {len(all_analyzed_statements)} statements"
-    )
-    return all_analyzed_statements
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -3476,27 +3241,13 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
 
 
 def extract_statements_with_regex_fallback(text, session_id, debug=False):
-    """
-    Very basic regex fallback. Highly unreliable for complex transcripts.
-    Primarily for contingency if LLMs are completely down.
-    This does NOT perform any semantic analysis, just pattern matching.
-    """
     import re
     logger.warning(
         f"⚠️ Using basic regex fallback for statement extraction (session: {session_id}). Results will be very rough."
     )
 
-    cleaned_text = re.sub(r'\n+', '\n', text).replace('\r',
-                                                      '')  # Normalize newlines
+    cleaned_text = re.sub(r'\n+', '\n', text).replace('\r', '')
 
-    # Regex attempts to find "◯ Speaker Name potentially with (title) some speech content"
-    # until the next "◯ Speaker" or end of text. This is very greedy and simple.
-    # Pattern: ◯ (Anything not ◯ or newline: speaker part) (newline or space) (Anything until next ◯ or end of text)
-    # This is extremely basic and prone to errors.
-    # A more robust regex would need careful crafting and testing on transcript data.
-    # Example: ◯(?P<speaker>[^◯\n]+?)(?:의원|위원장|장관| 차관| 실장| 대변인)?\s*(?P<content>.+?)(?=◯|$)
-
-    # Simpler version: find lines starting with ◯, assume name is up to first space or (
     statements = []
     current_speaker = None
     current_speech_lines = []
@@ -3720,34 +3471,28 @@ def create_statement_categories(statement_obj,
 
 
 def get_or_create_speaker(speaker_name_raw, debug=False):
-    '''Get or create speaker. Relies on `fetch_speaker_details` for new speakers. LLM should provide a cleaned name, but this function can handle some variation.'''
+    '''Get or create speaker. Relies on `fetch_speaker_details` for new speakers.'''
     if not speaker_name_raw or not speaker_name_raw.strip():
         logger.warning(
             "Empty speaker_name_raw provided to get_or_create_speaker.")
         return None
 
     speaker_name_cleaned = speaker_name_raw.strip()
-
-    if not speaker_name_cleaned:  # If stripping resulted in empty name
+    if not speaker_name_cleaned:
         logger.warning(
             f"Speaker name '{speaker_name_raw}' became empty after cleaning.")
         return None
 
     @with_db_retry
     def _find_existing_speaker():
-        # Try to find by exact cleaned name first
         return Speaker.objects.filter(naas_nm=speaker_name_cleaned).first()
 
     @with_db_retry
     def _create_fallback_speaker():
-        # Fallback: Create a temporary/basic speaker record if API fetch fails or in debug
-        # Use a unique naas_cd for these temporary entries.
         temp_naas_cd = f"TEMP_{speaker_name_cleaned.replace(' ', '_')}_{int(time.time())}"
-
         speaker_obj, created = Speaker.objects.get_or_create(
-            naas_nm=speaker_name_cleaned,  # Try to create with the cleaned name
-            defaults=
-            {  # Provide all required non-nullable fields with placeholders
+            naas_nm=speaker_name_cleaned,
+            defaults={
                 'naas_cd': temp_naas_cd,
                 'naas_ch_nm': '',
                 'plpt_nm': '정보없음',
@@ -3762,23 +3507,19 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
             })
         return speaker_obj, created
 
-    def _get_or_create_speaker_db():
+    try:
         # Try to find by exact cleaned name first
         speaker_obj = _find_existing_speaker()
-
         if speaker_obj:
             if debug:
                 logger.debug(f"Found existing speaker: {speaker_name_cleaned}")
             return speaker_obj
 
-        # If still not found, this speaker is new to our DB.
-        # Attempt to fetch full details from API.
+        # If not found, attempt to fetch full details from API.
         logger.info(
             f"Speaker '{speaker_name_cleaned}' not found in DB. Attempting to fetch details from API."
         )
-
-        # `fetch_speaker_details` tries to get/create from API and returns the Speaker object.
-        if not debug:  # Avoid external API calls in some debug scenarios for speed/cost
+        if not debug:
             speaker_obj_from_api = fetch_speaker_details(speaker_name_cleaned)
             if speaker_obj_from_api:
                 logger.info(
@@ -3790,160 +3531,24 @@ def get_or_create_speaker(speaker_name_raw, debug=False):
                     f"Failed to fetch details for new speaker '{speaker_name_cleaned}' from API."
                 )
 
-        # Use the retry-wrapped fallback creation
+        # Finally, use the retry-wrapped fallback creation
         speaker_obj, created = _create_fallback_speaker()
         if created:
             logger.info(
-                f"Created basic/temporary speaker record for: {speaker_name_cleaned} (ID: {speaker_obj.naas_cd}). Details might be incomplete."
+                f"Created basic/temporary speaker record for: {speaker_name_cleaned} (ID: {speaker_obj.naas_cd})."
             )
-        else:  # Should not happen if previous checks were exhaustive, but good fallback
+        else:
             logger.info(
                 f"Found speaker {speaker_name_cleaned} via get_or_create after API attempt."
             )
         return speaker_obj
 
-    try:
-        return _get_or_create_speaker_db()
     except Exception as e:
         logger.error(
             f"❌ Error in get_or_create_speaker for '{speaker_name_raw}' after retries: {e}"
         )
         logger.exception("Full traceback for get_or_create_speaker error:")
         return None
-
-    api_endpoint_name = "nepjpxkkabqiqpbvk"  # Store endpoint name for logging
-    logger.info(
-        f"🔍 Fetching additional data from {api_endpoint_name} API (force={force}, debug={debug})"
-    )
-
-    if debug:
-        logger.debug(
-            f"🐛 DEBUG: Skipping actual API call for {api_endpoint_name} in debug mode."
-        )
-        return
-
-    try:
-        if not hasattr(settings,
-                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
-            logger.error(
-                f"ASSEMBLY_API_KEY not configured for {api_endpoint_name}.")
-            return
-
-        url = f"https://open.assembly.go.kr/portal/openapi/{api_endpoint_name}"
-
-        # Paginate through results if necessary
-        all_items = []
-        current_page = 1
-        page_size = 100  # Adjust as per API limit, usually 100 or 1000
-        max_pages = 10  # Safety break for pagination
-
-        while current_page <= max_pages:
-            params = {
-                "KEY": settings.ASSEMBLY_API_KEY,
-                "Type": "json",
-                "pIndex": current_page,
-                "pSize": page_size
-                # Add other API-specific parameters if needed (e.g., date range, DAE_NUM)
-            }
-            logger.info(
-                f"Fetching page {current_page} from {api_endpoint_name} with params: {params}"
-            )
-            response = requests.get(url, params=params, timeout=60)
-            response.raise_for_status()
-            data = response.json()
-
-            # Generic API response parsing, adapt to specific structure of 'nepjpxkkabqiqpbvk'
-            items_on_page = []
-            if data and api_endpoint_name in data and isinstance(
-                    data[api_endpoint_name], list):
-                if len(data[api_endpoint_name]) > 1 and isinstance(
-                        data[api_endpoint_name][1], dict):
-                    items_on_page = data[api_endpoint_name][1].get('row', [])
-                elif len(data[api_endpoint_name]) > 0 and isinstance(
-                        data[api_endpoint_name][0], dict):
-                    head_info = data[api_endpoint_name][0].get('head')
-                    if head_info and head_info[0].get('RESULT', {}).get(
-                            'CODE', '').startswith("INFO-200"):  # No more data
-                        logger.info(
-                            f"API result for {api_endpoint_name} (page {current_page}) indicates no more data."
-                        )
-                        break  # End pagination
-                    elif 'row' in data[api_endpoint_name][0]:
-                        items_on_page = data[api_endpoint_name][0].get(
-                            'row', [])
-
-            if not items_on_page:
-                logger.info(
-                    f"No items found on page {current_page} for {api_endpoint_name}. Ending pagination."
-                )
-                break  # End pagination if no items or API indicates end of data
-
-            all_items.extend(items_on_page)
-            logger.info(
-                f"Fetched {len(items_on_page)} items from page {current_page}. Total so far: {len(all_items)}."
-            )
-
-            # Check if this was the last page (e.g., if less items than pSize returned)
-            if len(items_on_page) < page_size:
-                logger.info(
-                    "Fetched less items than page size, assuming last page.")
-                break
-
-            current_page += 1
-            if not debug: time.sleep(1)  # Be respectful
-
-        if not all_items:
-            logger.info(
-                f"ℹ️  No data items found from {api_endpoint_name} API after checking pages."
-            )
-            return
-
-        logger.info(
-            f"✅ Found a total of {len(all_items)} items from {api_endpoint_name} API."
-        )
-
-        processed_count = 0
-        # Placeholder: Actual processing logic depends on the data from 'nepjpxkkabqiqpbvk'
-        # Example: if items are bill proposals, committee activities, member updates, etc.
-        for item in all_items:
-            try:
-                # EXAMPLE: item_id = item.get('UNIQUE_ID_FIELD')
-                # if not item_id: continue
-                # YourModel.objects.update_or_create(api_id=item_id, defaults={...})
-                logger.debug(
-                    f"Processing item (placeholder): {str(item)[:200]}...")
-                processed_count += 1
-            except Exception as e_item:
-                logger.error(
-                    f"❌ Error processing item from {api_endpoint_name}: {e_item}. Item: {str(item)[:100]}"
-                )
-                continue
-
-        logger.info(
-            f"🎉 Processed {processed_count} items from {api_endpoint_name} API."
-        )
-
-    except RequestException as re_exc:
-        logger.error(
-            f"Request error fetching from {api_endpoint_name} API: {re_exc}")
-        try:
-            self.retry(exc=re_exc)
-        except MaxRetriesExceededError:
-            logger.error(f"Max retries for {api_endpoint_name} fetch.")
-    except json.JSONDecodeError as json_e:
-        logger.error(
-            f"JSON decode error from {api_endpoint_name} API: {json_e}")
-    except Exception as e:
-        logger.error(
-            f"❌ Unexpected error fetching/processing from {api_endpoint_name} API: {e}"
-        )
-        logger.exception(f"Full traceback for {api_endpoint_name} error:")
-        try:
-            self.retry(exc=e)
-        except MaxRetriesExceededError:
-            logger.error(
-                f"Max retries after unexpected error for {api_endpoint_name}.")
-        # raise # Optionally
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -4353,16 +3958,31 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
             )
 
 
-def process_pdf_text_for_statements(full_text,
-                                    session_id,
-                                    session_obj,
-                                    bills_context_str,
-                                    bill_names_list,
-                                    debug=False):
-    """
-    Main function to process PDF text and extract statements.
-    Uses bill-based chunking with LLM for optimal performance.
-    """
+@with_db_retry
+def create_placeholder_bill(session_obj, title, bill_no=None):
+    """Creates a placeholder Bill for agenda items found only in the PDF."""
+    unique_id_str = f"PDF_{session_obj.conf_id}_{hash(title)}"
+
+    bill, created = Bill.objects.get_or_create(
+        bill_id=unique_id_str,
+        defaults={
+            'session': session_obj,
+            'bill_nm': title,
+            'bill_no': bill_no,  # Will be None if not provided
+            'proposer': None,  # Proposer is unknown from PDF agenda
+        })
+    if created:
+        logger.info(f"✨ Created placeholder bill for: '{title[:60]}...'")
+    return bill
+
+
+def process_pdf_text_for_statements(
+        full_text,
+        session_id,
+        session_obj,
+        bills_context_str,  # Deprecated
+        bill_names_list_from_api,  # Now used as the "known_bill_names"
+        debug=False):
     if not full_text:
         logger.warning(f"No text provided for session {session_id}")
         return
@@ -4371,136 +3991,80 @@ def process_pdf_text_for_statements(full_text,
         f"🔄 Processing PDF text for session {session_id} ({len(full_text)} chars)"
     )
 
-    # Clean the PDF text first
     cleaned_text = clean_pdf_text(full_text)
-
     if not cleaned_text:
         logger.warning(
             f"No text remaining after cleaning for session {session_id}")
         return
 
-    # Extract statements using bill-based chunking
-    try:
-        if bill_names_list and len(bill_names_list) > 0:
-            logger.info(
-                f"🎯 Using bill-based processing for {len(bill_names_list)} bills"
-            )
-            statements_data = extract_statements_with_bill_based_chunking(
-                cleaned_text, session_id, bill_names_list, debug)
-        else:
-            logger.info("📄 No bills found, using keyword fallback extraction")
-            statements_data = extract_statements_with_keyword_fallback(
-                cleaned_text, session_id, debug)
+    # Call the new all-in-one function. It handles discovery, placeholder creation, and segmentation.
+    statements_data = extract_statements_with_llm_discovery(
+        cleaned_text, session_id, bill_names_list_from_api, session_obj, debug)
 
-        if not statements_data:
-            logger.warning(f"No statements extracted for session {session_id}")
-            return
-
-        logger.info(
-            f"✅ Extracted {len(statements_data)} statements for session {session_id}"
+    if not statements_data:
+        logger.warning(
+            f"No statements were extracted by the LLM discovery process for session {session_id}"
         )
+        return
 
-        # Save to database
-        process_extracted_statements_data(statements_data, session_obj, debug)
-
-    except Exception as e:
-        logger.error(
-            f"❌ Error processing PDF text for session {session_id}: {e}")
-        logger.exception("Full traceback for PDF text processing error:")
+    logger.info(
+        f"✅ Extracted {len(statements_data)} statements in total for session {session_id}"
+    )
+    process_extracted_statements_data(statements_data, session_obj, debug)
 
 
 def clean_pdf_text(text: str) -> str:
-    """
-    Cleans the entire raw PDF text by removing session headers, OCR markers,
-    session end markers, and normalizing whitespace. This is the single source of truth for text cleaning.
-    """
-    import re
     if not text:
         return ""
 
-    # First, truncate text at session end markers to remove unimportant content
-    session_end_patterns = [
-        r'\(\d{1,2}시\s*\d{1,2}분\s+산회\)',  # (10시38분 산회)
-        r'\(\d{1,2}시\s*\d{1,2}분\s+폐회\)',  # (10시38분 폐회)
-        r'\(\d{1,2}시\s*\d{1,2}분\s+정회\)',  # (10시38분 정회)
-        r'\(\d{1,2}시\s*\d{1,2}분\s+휴회\)',  # (10시38분 휴회)
+    original_len = len(text)
+    start_marker_match = re.search(r'\(\d{1,2}시\s*\d{1,2}분\s+개의\)', text)
+
+    if not start_marker_match:
+        logger.warning(
+            "⚠️ No meeting start marker '(xx시xx분 개의)' found. Unable to isolate discussion. Returning raw text."
+        )
+        return text
+
+    start_pos = start_marker_match.start()
+    end_marker_patterns = [
+        r'\(\d{1,2}시\s*\d{1,2}분\s+산회\)',
+        r'\(\d{1,2}시\s*\d{1,2}분\s+폐회\)',
     ]
 
-    # Find the earliest session end marker and truncate text there
-    earliest_end_pos = len(text)
-    for pattern in session_end_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            end_pos = match.end()
-            if end_pos < earliest_end_pos:
-                earliest_end_pos = end_pos
+    end_pos = len(text)
+    for pattern in end_marker_patterns:
+        end_marker_match = re.search(
+            pattern, text[start_pos:])  # Search *after* the start
+        if end_marker_match:
+            end_pos = start_pos + end_marker_match.end()
+            break
 
-    if earliest_end_pos < len(text):
-        text = text[:earliest_end_pos]
-        logger.info(
-            f"🚫 Truncated text at session end marker (removed {len(text) - earliest_end_pos} chars after session end)"
-        )
+    discussion_block = text[start_pos:end_pos]
+    logger.info(
+        f"📖 Isolated discussion block of {len(discussion_block)} chars (from original {original_len})."
+    )
 
-    # This pattern matches full-line headers like "제423회-제4차(2025년4월3일) 1"
-    session_header_pattern = re.compile(r'^제\d+회-제\d+차\s*\(.+?\)\s*\d+\s*$')
-    # This pattern matches the OCR markers
-    ocr_marker_pattern = re.compile(
-        r'^==\s*(Start|End) of OCR for page \d+\s*==$')
-    # Remove meeting start/end time markers from the flow of text, as they are not part of speech.
-    timing_marker_pattern = re.compile(r'\(\d{1,2}시\s*\d{1,2}분\s+개의?\)')
-    # Remove report markers that indicate end of substantive content
-    report_end_pattern = re.compile(r'\(보고사항은 끝에 실음\)')
-    # Remove page break markers and similar artifacts
-    page_break_pattern = re.compile(r'^-+\s*페이지\s*\d+\s*-+$')
-    # Remove empty procedural lines
-    procedural_pattern = re.compile(r'^[\s\-\=\*]+$')
+    # Step 2
+    header_pattern = re.compile(r'^제\d+회-제\d+차\s*\(.+?\)\s*\d+\s*$')
+    report_note_pattern = re.compile(r'\(보고사항은\s*끝에\s*실음\)')
 
-    lines = text.split('\n')
     cleaned_lines = []
-    skip_after_report_end = False
+    lines = discussion_block.split('\n')
 
     for line in lines:
+        # First, remove the report note from the line content
+        line = report_note_pattern.sub('', line)
         stripped_line = line.strip()
 
-        # Skip empty lines
-        if not stripped_line:
+        # Skip empty lines or lines that are just headers
+        if not stripped_line or header_pattern.match(stripped_line):
             continue
 
-        # Skip common header/footer/artifact lines completely
-        if session_header_pattern.match(stripped_line):
-            continue
-        if ocr_marker_pattern.match(stripped_line):
-            continue
-        if page_break_pattern.match(stripped_line):
-            continue
-        if procedural_pattern.match(stripped_line):
-            continue
+        cleaned_lines.append(stripped_line)
+    final_text = "\n".join(cleaned_lines)
+    final_text = re.sub(r'\n{2,}', '\n',
+                        final_text)  # Collapse multiple newlines
 
-        # Check for report end markers and skip everything after
-        if report_end_pattern.search(stripped_line):
-            skip_after_report_end = True
-            continue
-
-        if skip_after_report_end:
-            continue
-
-        # Remove timing markers from the content of the line
-        stripped_line = timing_marker_pattern.sub('', stripped_line)
-
-        # Remove other common artifacts
-        stripped_line = re.sub(r'^\s*\d+\s*$', '',
-                               stripped_line)  # Remove lone page numbers
-        stripped_line = re.sub(r'^\s*\-+\s*$', '',
-                               stripped_line)  # Remove dash-only lines
-
-        # Normalize all whitespace to a single space
-        cleaned_line = re.sub(r'\s+', ' ', stripped_line).strip()
-
-        if cleaned_line:  # Only add non-empty lines
-            cleaned_lines.append(cleaned_line)
-
-    cleaned_text = '\n'.join(cleaned_lines)
-    logger.info(
-        f"🧹 Text cleaning: Original length {len(text)} -> Cleaned length {len(cleaned_text)}"
-    )
-    return cleaned_text
+    logger.info(f"🧹 Text cleaning complete. Final length: {len(final_text)}")
+    return final_text

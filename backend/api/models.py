@@ -75,10 +75,13 @@ class Bill(models.Model):
                                verbose_name=_("의안명"))
     bill_no = models.CharField(max_length=100,
                                blank=True,
+                               null=True,
                                help_text=_("의안번호"),
                                verbose_name=_("의안번호"))
     proposer = models.CharField(max_length=200,
-                                default="국회",
+                                default="정보 없음",
+                                null=True,
+                                blank=True,
                                 help_text=_("제안자/제안위원회"),
                                 verbose_name=_("제안자"))
     propose_dt = models.CharField(max_length=50,
