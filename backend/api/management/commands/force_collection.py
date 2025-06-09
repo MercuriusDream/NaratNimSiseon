@@ -118,7 +118,16 @@ class Command(BaseCommand):
                     else:
                         logger.error(f"Function {func_name} not found in tasks module")
                 except Exception as e_fallback:
-                    logger.error(f"Failed to call function directly: {e_fallback}")
+                    logger.error(f"Failed to call fetch_continuous_sessions directly: {e_fallback}")
+                    # Last resort - try importing and calling synchronously
+                    try:
+                        from api import tasks
+                        tasks.fetch_continuous_sessions(
+                            force=True,
+                            debug=debug,
+                            start_date=start_date.isoformat() if start_date else None)
+                    except Exception as e_final:
+                        logger.error(f"Final fallback for fetch_continuous_sessions failed: {e_final}")
 
             self.stdout.write(
                 self.style.SUCCESS(
@@ -189,29 +198,25 @@ class Command(BaseCommand):
                     else:
                         raise ImportError("Celery not available")
                 except (ImportError, Exception):
-                    # Call the function directly without trying to access Celery task attributes
+                    # Call the function directly without Celery
                     try:
-                        # Import the actual function from tasks module
-                        import importlib
-                        tasks_module = importlib.import_module('api.tasks')
-                        
-                        # Get the function by name - this bypasses Celery task wrapper issues
-                        func_name = 'process_session_pdf'
-                        if hasattr(tasks_module, func_name):
-                            func = getattr(tasks_module, func_name)
-                            # If it's a Celery task, try to get the original function
-                            if hasattr(func, 'func'):
-                                func = func.func
-                            elif hasattr(func, '__wrapped__'):
-                                func = func.__wrapped__
-                            
-                            # Call the function directly (bound tasks don't need self when called directly)
-                            func(session_id=session.conf_id, force=True, debug=debug)
+                        from api.tasks import process_session_pdf
+                        # Call the task function directly, bypassing Celery
+                        if hasattr(process_session_pdf, '__wrapped__'):
+                            # If it's a decorated function, get the original
+                            process_session_pdf.__wrapped__(None, session_id=session.conf_id, force=True, debug=debug)
                         else:
-                            logger.error(f"Function {func_name} not found in tasks module")
+                            # Try calling directly
+                            process_session_pdf(session_id=session.conf_id, force=True, debug=debug)
                     except Exception as e_fallback:
-                        logger.error(f"Failed to call function directly: {e_fallback}")
-                        continue
+                        logger.error(f"Failed to call process_session_pdf directly: {e_fallback}")
+                        # Last resort - try importing and calling synchronously
+                        try:
+                            from api import tasks
+                            tasks.process_session_pdf(session_id=session.conf_id, force=True, debug=debug)
+                        except Exception as e_final:
+                            logger.error(f"Final fallback failed: {e_final}")
+                            continue
             except Exception as e:
                 self.stderr.write(
                     self.style.ERROR(
