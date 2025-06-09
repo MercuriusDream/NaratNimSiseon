@@ -10,7 +10,7 @@ app = Celery('backend')
 # the configuration object to child processes.
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
-# Additional Celery configuration
+# Additional Celery configuration with database fallback
 app.conf.update(
     accept_content=['json'],
     task_serializer='json',
@@ -18,7 +18,10 @@ app.conf.update(
     timezone='Asia/Seoul',
     broker_connection_retry_on_startup=True,
     broker_connection_retry=True,
-    broker_connection_max_retries=10,
+    broker_connection_max_retries=3,
+    broker_connection_retry_delay=1,
+    worker_disable_rate_limits=True,
+    task_always_eager=False,  # Set to True for synchronous execution
 )
 
 # Using a string here means the worker doesn't have to serialize
