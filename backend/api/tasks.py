@@ -2811,6 +2811,7 @@ I already know about the following bills. You MUST find the discussion for these
 - Analyze policy content for each segment and assign appropriate categories.
 - Extract key policy phrases and specific keywords related to the bill.
 - Return **ONLY** the final JSON object.
+- bill_analysis shall be a short(80 char at max) summary of the bill's policy content in Korean.
 
 **TRANSCRIPT:**
 ---
@@ -2826,7 +2827,7 @@ I already know about the following bills. You MUST find the discussion for these
       "end_index": 5678,
       "policy_categories": ["경제/산업", "사회복지"],
       "key_policy_phrases": ["중소기업 지원", "일자리 창출", "사회안전망"],
-      "bill_analysis": ["dddd하는 의안입니다."]
+      "bill_analysis": "dddd하는 의안입니다."
     }}
     // …more known bills
   ],
@@ -2837,7 +2838,7 @@ I already know about the following bills. You MUST find the discussion for these
       "end_index": 6789,
       "policy_categories": ["환경/에너지"],
       "key_policy_phrases": ["탄소중립", "재생에너지"],
-      "bill_analysis": ["dddd하는 의안입니다."]
+      "bill_analysis": "dddd하는 의안입니다."
     }}
     // …more new topics
   ]
