@@ -980,8 +980,12 @@ def extract_sessions_from_response(data, debug=False):
     return sessions_data_list
 
 
+# In tasks.py, replace the existing process_sessions_data function
+
+
 def process_sessions_data(sessions_data, force=False, debug=False):
-    """Process the sessions data and create/update session objects"""
+    """Process the sessions data and create/update session objects.
+    This function now directly orchestrates the fetching of bills and processing of PDFs for each session."""
     if not sessions_data:
         logger.info("No sessions data provided to process.")
         return
@@ -993,14 +997,10 @@ def process_sessions_data(sessions_data, force=False, debug=False):
         return Session.objects.update_or_create(conf_id=confer_num,
                                                 defaults=session_defaults)
 
-    # Group by CONFER_NUM (session_id) as multiple agenda items can be part of the same physical session meeting
     sessions_by_confer_num = {}
     for item_data in sessions_data:
         confer_num = item_data.get('CONFER_NUM')
         if not confer_num:
-            logger.warning(
-                f"Skipping item due to missing CONFER_NUM: {item_data.get('TITLE', 'N/A')}"
-            )
             continue
         if confer_num not in sessions_by_confer_num:
             sessions_by_confer_num[confer_num] = []
@@ -1013,16 +1013,11 @@ def process_sessions_data(sessions_data, force=False, debug=False):
     updated_count = 0
 
     for confer_num, items_for_session in sessions_by_confer_num.items():
-        # Ensure connection is still alive for each session
         connection.ensure_connection()
-
-        # Use the first item for primary session details, assuming they are consistent for the same CONFER_NUM
         main_item = items_for_session[0]
         try:
             session_title = main_item.get('TITLE', '제목 없음')
-            logger.info(
-                f"Processing session ID {confer_num}: {session_title} ({len(items_for_session)} items)"
-            )
+            logger.info(f"Processing session ID {confer_num}: {session_title}")
 
             conf_date_val = None
             conf_date_str = main_item.get('CONF_DATE')
@@ -1036,22 +1031,16 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                             conf_date_str, '%Y-%m-%d').date()
                     except ValueError:
                         logger.warning(
-                            f"Could not parse date: {conf_date_str} for session {confer_num}. Skipping date."
-                        )
+                            f"Could not parse date: {conf_date_str}")
 
-            # Extract DAE_NUM, SESS, DGR from TITLE (example: 제22대국회 제400회국회(정기회) 제01차)
-            # This parsing is brittle. If API provides these fields separately, use them.
-            era_co_val = f"제{main_item.get('DAE_NUM', 'N/A')}대"  # Prefer direct DAE_NUM field
+            era_co_val = f"제{main_item.get('DAE_NUM', 'N/A')}대"
             sess_val = ''
             dgr_val = ''
             title_parts = session_title.split(' ')
-            # Example parsing logic - highly dependent on fixed title format
-            if len(title_parts
-                   ) > 1 and "회국회" in title_parts[1]:  # e.g. 제400회국회(정기회)
-                sess_val = title_parts[1].split('회국회')[0]  # 400
-                if "(" in sess_val:
-                    sess_val = sess_val.split("(")[0]  # clean (정기회)
-            if len(title_parts) > 2 and "차" in title_parts[2]:  # e.g. 제01차
+            if len(title_parts) > 1 and "회국회" in title_parts[1]:
+                sess_val = title_parts[1].split('회국회')[0]
+                if "(" in sess_val: sess_val = sess_val.split("(")[0]
+            if len(title_parts) > 2 and "차" in title_parts[2]:
                 dgr_val = title_parts[2].replace('차', '')
 
             session_defaults = {
@@ -1064,61 +1053,60 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                 'conf_dt':
                 conf_date_val,
                 'conf_knd':
-                main_item.get('CLASS_NAME', '국회본회의'),  # Or COMMITTEE_NAME
+                main_item.get('CLASS_NAME', '국회본회의'),
                 'cmit_nm':
-                main_item.get('CMIT_NAME', main_item.get(
-                    'CLASS_NAME', '국회본회의')),  # Prefer CMIT_NAME if available
+                main_item.get('CMIT_NAME',
+                              main_item.get('CLASS_NAME', '국회본회의')),
                 'down_url':
                 main_item.get('PDF_LINK_URL', ''),
                 'title':
-                session_title,  # Store the full title
-                # bg_ptm might come from VCONFDETAIL, initialize if not set
+                session_title,
                 'bg_ptm':
-                dt_time(9, 0)  # Default, can be updated later
+                dt_time(9, 0)
             }
 
             if debug:
                 logger.debug(
-                    f"🐛 DEBUG: Session {confer_num} defaults for DB: {session_defaults}"
-                )
-                logger.info(
-                    f"🐛 DEBUG PREVIEW: Would process session ID {confer_num}: {session_title}"
-                )
-                continue  # Skip database operations in debug mode for this part
+                    f"🐛 DEBUG PREVIEW: Would process session ID {confer_num}")
+                continue
 
-            # Use retry wrapper for database operations
             session_obj, created = _process_session_item(
                 session_defaults, confer_num)
 
-            if created:
-                created_count += 1
-                logger.info(
-                    f"✨ Created new session: {confer_num} - {session_title}")
-            else:
-                if force:  # If not created but force is true, it implies update_or_create updated it.
-                    updated_count += 1
-                    logger.info(
-                        f"🔄 Updated existing session: {confer_num} - {session_title}"
-                    )
-                else:
-                    logger.info(
-                        f"♻️ Session already exists and not in force mode: {confer_num}"
-                    )
+            status_log = "✨ Created new session" if created else "🔄 Updated existing session" if force else "♻️ Session already exists"
+            logger.info(f"{status_log}: {confer_num} - {session_title}")
 
-            # Regardless of created/updated, try to fetch more details
-            # Call for details which then calls for bills and PDF
+            # --- DIRECTLY TRIGGER THE NEXT STEPS ---
+            # This is the key fix. We no longer rely on fetch_session_details to do this.
+
+            # 1. Fetch bills for this session.
             if is_celery_available():
-                fetch_session_details.delay(session_id=confer_num,
-                                            force=force,
-                                            debug=debug)
+                fetch_session_bills.delay(session_id=confer_num,
+                                          force=force,
+                                          debug=debug)
             else:
-                fetch_session_details(session_id=confer_num,
-                                      force=force,
-                                      debug=debug)
+                fetch_session_bills(session_id=confer_num,
+                                    force=force,
+                                    debug=debug)
+
+            # 2. Process the PDF if a URL exists.
+            if session_obj.down_url:
+                if is_celery_available():
+                    process_session_pdf.delay(session_id=confer_num,
+                                              force=force,
+                                              debug=debug)
+                else:
+                    process_session_pdf(session_id=confer_num,
+                                        force=force,
+                                        debug=debug)
+            else:
+                logger.info(
+                    f"No PDF URL for session {confer_num}, skipping PDF processing."
+                )
 
         except Exception as e:
             logger.error(
-                f"❌ Error processing session data for CONFER_NUM {confer_num} (Title: {main_item.get('TITLE', 'N/A')}): {e}"
+                f"❌ Error processing session data for CONFER_NUM {confer_num}: {e}"
             )
             logger.exception("Full traceback for session processing error:")
             continue
@@ -2131,233 +2119,146 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
     return deduplicated_indices
 
 
-def _process_single_segmentation_batch(text_segment,
-                                       bill_name,
-                                       global_offset=0):
-    """Process a single batch of text for speech segmentation with proper chunking."""
-    try:
-        # Use lightweight model for segmentation
-        segmentation_model = genai.GenerativeModel(
-            'gemini-2.5-flash-preview-05-20')
+def _process_single_segmentation_chunk(segmentation_llm,
+                                       text_chunk,
+                                       bill_names_list,
+                                       offset,
+                                       max_retries=2):
+    """
+    Process a single chunk for bill segmentation with RETRY logic to handle transient API errors.
+    """
+    import json
 
-        # Ensure we have actual text content
-        if not text_segment or len(text_segment.strip()) < 100:
-            logger.warning(
-                f"Text segment too short or empty for segmentation (length: {len(text_segment) if text_segment else 0})"
-            )
-            return []
-
-        # Clean and validate text
-        clean_text = text_segment.strip()
-        if not clean_text:
-            logger.warning("Text segment is empty after cleaning")
-            return []
-
-        # Process in chunks if text is too long
-        max_chunk_size = 12000  # Increased chunk size for better context
-        if len(clean_text) <= max_chunk_size:
-            return _process_text_chunk_for_segmentation(
-                segmentation_model, clean_text, bill_name, 0)
-
-        # Split into overlapping chunks for better continuity
-        chunk_overlap = 1000  # 1k character overlap
-        all_indices = []
-
-        for chunk_start in range(0, len(clean_text),
-                                 max_chunk_size - chunk_overlap):
-            chunk_end = min(chunk_start + max_chunk_size, len(clean_text))
-            chunk_text = clean_text[chunk_start:chunk_end]
-
-            # Process this chunk
-            chunk_indices = _process_text_chunk_for_segmentation(
-                segmentation_model, chunk_text, bill_name, chunk_start)
-
-            # Adjust indices to global position and filter overlaps
-            for idx_pair in chunk_indices:
-                global_start = idx_pair['start'] + chunk_start + global_offset
-                global_end = idx_pair['end'] + chunk_start + global_offset
-
-                # Check for overlaps with existing indices
-                is_overlap = False
-                for existing in all_indices:
-                    if (global_start < existing['end']
-                            and global_end > existing['start']):
-                        is_overlap = True
-                        break
-
-                if not is_overlap:
-                    all_indices.append({
-                        'start': global_start,
-                        'end': global_end
-                    })
-
-            # Rate limiting between chunks
-            if chunk_end < len(clean_text):
-                time.sleep(1)
-
-        return all_indices
-
-    except Exception as e:
-        logger.error(f"Error in single segmentation batch: {e}")
-        return []
-
-
-def _process_text_chunk_for_segmentation(model, text_chunk, bill_name,
-                                         chunk_offset):
-    """Process a single text chunk for speech segmentation."""
-    try:
-
-        # Validate bill_name
-        safe_bill_name = str(bill_name)[:100] if bill_name else "알 수 없는 의안"
-
-        prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-한국 국회 회의록에서 개별 발언자의 발언 구간을 찾아주세요.
-
-의안: {safe_bill_name}
-
-회의록 텍스트:
-{text_chunk}
-
-다음 JSON 형식으로 응답해주세요:
-[
-  {{"start": 0, "end": 150}},
-  {{"start": 151, "end": 300}}
-]
-
-규칙:
-- ◯로 시작하는 발언자 구간을 찾으세요
-- start/end는 위 텍스트 내에서의 문자 위치입니다
-- 의사진행 발언은 제외하고 의원 발언만 포함
-- 최소 50자 이상의 발언만 포함
-- JSON 배열만 응답하세요"""
-
-        response = model.generate_content(prompt)
-
-        if not response or not response.text:
-            logger.warning(f"No response from LLM for chunk segmentation")
-            return []
-
-        response_text = response.text.strip()
-        if not response_text:
-            logger.warning("Empty response text from LLM")
-            return []
-
-        # Clean response text
-        response_text = response_text.replace("```json",
-                                              "").replace("```", "").strip()
-
-        # Handle cases where LLM responds with explanation instead of JSON
-        error_indicators = [
-            "죄송합니다", "정보가 부족", "텍스트가 제공되지 않았", "분석할 수 없습니다", "텍스트가 없습니다"
-        ]
-        if any(indicator in response_text for indicator in error_indicators):
-            logger.warning(
-                f"LLM returned explanation instead of JSON: {response_text[:100]}..."
-            )
-            return []
-
-        # Validate response has JSON-like structure
-        if not ("[" in response_text and "]" in response_text):
-            logger.warning(
-                f"Response doesn't contain JSON array: {response_text[:100]}..."
-            )
-            return []
-
+    for attempt in range(max_retries + 1):
         try:
-            indices = json.loads(response_text)
-            if isinstance(indices, list):
-                valid_indices = []
-                for idx_pair in indices:
-                    if isinstance(
-                            idx_pair, dict
-                    ) and 'start' in idx_pair and 'end' in idx_pair:
-                        start = int(idx_pair['start'])
-                        end = int(idx_pair['end'])
-                        # Validate indices are within this chunk
-                        if 0 <= start < end <= len(text_chunk):
-                            valid_indices.append({'start': start, 'end': end})
-                return valid_indices
-            else:
-                logger.warning(f"LLM response is not a list: {type(indices)}")
+            # (The existing logic of the function goes here...)
+            estimated_tokens = len(text_chunk) // 3 + 1000
+            if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+                logger.warning(
+                    "Rate limit timeout for segmentation chunk. Aborting.")
                 return []
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in chunk segmentation: {e}")
-            return []
-    except Exception as e:
-        logger.error(f"Error in chunk speech segmentation: {e}")
-        return []
 
-    if not bill_names_list:
-        logger.warning("No bill names provided for segmentation")
-        return []
+            bill_list_str = '\n'.join(
+                [f"- {bill}" for bill in bill_names_list])
 
-    # Clean and validate inputs
-    clean_text = full_text.strip()
-    safe_bill_names = [
-        str(bill)[:200] for bill in bill_names_list
-        if bill and str(bill).strip()
-    ]
+            logger.info(
+                f"🔍 Segmenting text chunk: {len(text_chunk)} chars, Attempt: {attempt + 1}/{max_retries + 1}"
+            )
+            logger.info(f"📋 Bills to find: {len(bill_names_list)} bills")
 
-    if not safe_bill_names:
-        logger.warning("No valid bill names after cleaning")
-        return []
+            prompt = f"""
+            You are an expert legislative analyst. Your task is to find the start and end of the entire discussion for each bill in the transcript.
 
-    # Process in batches if text is too long
-    max_batch_size = 80000  # 80k chars for bill segmentation
-    if len(clean_text) <= max_batch_size:
-        return _process_single_bill_segmentation_batch(segmentation_llm,
-                                                       clean_text,
-                                                       safe_bill_names, 0)
+            Target Bills:
+            {bill_list_str}
 
-    logger.info(
-        f"Processing bill segmentation in batches (text length: {len(clean_text)})"
-    )
+            Transcript:
+            ---
+            {text_chunk}
+            ---
 
-    # Split into overlapping batches
-    batch_overlap = 10000  # 10k character overlap
-    all_segments = []
+            Analyze the transcript and identify the complete, continuous discussion block for each bill. The discussion starts when the chairperson says "상정합니다" and ends when the next bill is introduced or a vote is concluded.
 
-    for batch_start in range(0, len(clean_text),
-                             max_batch_size - batch_overlap):
-        batch_end = min(batch_start + max_batch_size, len(clean_text))
-        batch_text = clean_text[batch_start:batch_end]
+            Return ONLY a valid JSON object in the following format. For bills not found or with discussions under 2000 characters, omit them from the output.
+            {{
+              "segments": [
+                {{
+                  "bill_name": "Exact bill name from the target list",
+                  "start_index": 1234,
+                  "end_index": 5678
+                }}
+              ]
+            }}
+            """
 
-        logger.info(
-            f"Processing bill segmentation batch: chars {batch_start}-{batch_end}"
-        )
+            # API Call
+            response = segmentation_llm.generate_content(prompt)
+            gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
-        # Process this batch
-        batch_segments = _process_single_bill_segmentation_batch(
-            segmentation_llm, batch_text, safe_bill_names, batch_start)
+            if not response or not response.text:
+                raise ValueError("LLM returned an empty response.")
 
-        # Adjust positions to global coordinates and check for duplicates
-        for segment in batch_segments:
-            global_start = segment['b'] + batch_start
+            response_text = response.text.strip().replace(
+                '```json', '').replace('```', '').strip()
+            data = json.loads(response_text)
 
-            # Check if we already have this bill
-            existing_bill = next(
-                (s for s in all_segments if s['a'] == segment['a']), None)
-            if existing_bill:
-                # Keep the one with higher confidence
-                if segment['c'] > existing_bill['c']:
-                    existing_bill['b'] = global_start
-                    existing_bill['c'] = segment['c']
+            # --- Start of existing validation logic ---
+            segments = []
+            if isinstance(data, dict):
+                segments = data.get('segments', [])
+            elif isinstance(data, list):
+                segments = data
             else:
-                all_segments.append({
-                    'a': segment['a'],
-                    'b': global_start,
-                    'c': segment['c']
-                })
+                logger.warning(f"Unexpected data type from LLM: {type(data)}")
+                return []
+            # ... (rest of your validation logic from the original function) ...
 
-        # Rate limiting between batches
-        if batch_end < len(clean_text):
-            time.sleep(2)
+            valid_segments = []
+            seen_bills = set()
+            MIN_CONVERSATION_LENGTH = 2000
 
-    logger.info(
-        f"Bill segmentation batching complete: {len(all_segments)} segments found"
-    )
-    return all_segments
+            for seg in segments:
+                if not isinstance(seg, dict): continue
+                bill_name = seg.get('bill_name')
+                if not bill_name or bill_name not in bill_names_list or bill_name in seen_bills:
+                    continue
+
+                start_idx = int(seg.get('start_index', -1))
+                end_idx = int(seg.get('end_index', -1))
+
+                if start_idx == -1 or end_idx <= start_idx:
+                    continue
+
+                segment_length = end_idx - start_idx
+                if segment_length >= MIN_CONVERSATION_LENGTH:
+                    valid_segments.append({
+                        'a': bill_name,
+                        'b': start_idx + offset,
+                        'e': end_idx + offset
+                    })
+                    seen_bills.add(bill_name)
+                    logger.info(
+                        f"✅ Found substantial conversation for '{bill_name}': {start_idx + offset}-{end_idx + offset} ({segment_length} chars)"
+                    )
+                else:
+                    logger.warning(
+                        f"Segment for '{bill_name}' too short: {segment_length} chars (min: {MIN_CONVERSATION_LENGTH})"
+                    )
+
+            # --- End of validation logic ---
+
+            if not valid_segments:
+                logger.warning(
+                    "LLM segmentation found no substantial conversations. Trying fallback."
+                )
+                return _fallback_bill_segmentation(text_chunk, bill_names_list,
+                                                   offset)
+
+            return valid_segments  # Success! Exit the retry loop.
+
+        except Exception as e:
+            error_message = str(e)
+            logger.error(
+                f"Error on attempt {attempt + 1} for segmentation: {error_message}"
+            )
+            gemini_rate_limiter.record_error(f"api_error_{attempt}")
+
+            if attempt < max_retries:
+                wait_time = 2**attempt  # Exponential backoff (1s, 2s, 4s)
+                logger.info(f"Waiting {wait_time}s before retrying...")
+                time.sleep(wait_time)
+            else:
+                logger.error(
+                    "Max retries exceeded for segmentation. Failing this step."
+                )
+                # After max retries, explicitly call the fallback
+                logger.info(
+                    "Attempting fallback segmentation after final API failure."
+                )
+                return _fallback_bill_segmentation(text_chunk, bill_names_list,
+                                                   offset)
+
+    return []  # Should not be reached, but good for safety
 
 
 def _process_single_bill_segmentation_batch(segmentation_llm, text_batch,
@@ -3258,10 +3159,10 @@ def extract_statements_with_bill_based_chunking(full_text,
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_session_pdf(self,
-                        session_id=None,
-                        force=False,
-                        debug=False):  # Celery provides 'self'
+# In tasks.py, replace the existing process_session_pdf function
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def process_session_pdf(self, session_id=None, force=False, debug=False):
     """Download, parse PDF transcript for a session, and extract statements."""
     if not session_id:
         logger.error("session_id is required for process_session_pdf.")
@@ -3280,38 +3181,30 @@ def process_session_pdf(self,
 
     if not session.down_url:
         logger.info(
-            f"ℹ️ No PDF URL (down_url) for session {session_id}. Skipping PDF processing."
+            f"ℹ️ No PDF URL for session {session_id}. Skipping PDF processing."
         )
         return
 
     if Statement.objects.filter(
             session=session).exists() and not force and not debug:
         logger.info(
-            f"Statements already exist for session {session_id} and not in force/debug mode. Skipping PDF reprocessing."
+            f"Statements already exist for session {session_id} and not in force/debug mode. Skipping."
         )
         return
 
     if debug:
-        logger.debug(
-            f"🐛 DEBUG: Simulating PDF processing for {session_id}. NOT downloading or parsing in debug."
-        )
-        # Create one dummy statement for flow testing if needed in debug
-        # get_or_create_speaker("테스트발언자", debug=True)
-        # Statement.objects.get_or_create(session=session, speaker=Speaker.objects.first(), text="디버그용 테스트 발언입니다.", defaults={'sentiment_score':0.1})
+        logger.debug(f"🐛 DEBUG: Simulating PDF processing for {session_id}.")
         return
 
-    temp_pdf_path = None  # Initialize
+    temp_pdf_path = None
     try:
         logger.info(f"📥 Downloading PDF from: {session.down_url}")
-        response = requests.get(
-            session.down_url, timeout=120,
-            stream=True)  # Increased timeout for large PDFs
+        response = requests.get(session.down_url, timeout=120, stream=True)
         response.raise_for_status()
 
-        temp_dir = Path(getattr(settings, "TEMP_FILE_DIR",
-                                "temp_files"))  # Use configurable temp dir
+        temp_dir = Path(getattr(settings, "TEMP_FILE_DIR", "temp_files"))
         temp_dir.mkdir(parents=True, exist_ok=True)
-        temp_pdf_path = temp_dir / f"session_{session_id}_{int(time.time())}.pdf"  # Add timestamp for uniqueness
+        temp_pdf_path = temp_dir / f"session_{session_id}_{int(time.time())}.pdf"
 
         with open(temp_pdf_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
@@ -3320,78 +3213,44 @@ def process_session_pdf(self,
             f"📥 PDF for session {session_id} downloaded to {temp_pdf_path}")
 
         full_text = ""
-        try:
-            with pdfplumber.open(temp_pdf_path) as pdf:
-                # PDF not being encrypted is ensured
-                '''if pdf.is_encrypted:
-                    logger.warning(
-                        f"PDF {temp_pdf_path} is encrypted. Trying to extract text..."
-                    )
-                    # pdfplumber might need password if it's owner-password encrypted against text extraction'''
-
-                pages = pdf.pages
-                logger.info(
-                    f"Extracting text from {len(pages)} pages in PDF for session {session_id}..."
-                )
-                for i, page in enumerate(pages):
-                    page_text = page.extract_text(
-                        x_tolerance=1, y_tolerance=3)  # Adjust tolerances
-                    if page_text:
-                        full_text += page_text + "\n"
-                    if (i + 1) % 20 == 0:
-                        logger.info(f"Processed {i+1}/{len(pages)} pages...")
-            logger.info(
-                f"📄 Extracted ~{len(full_text)} chars from PDF for session {session_id}."
-            )
-        except Exception as e_parse:  # Catch pdfplumber specific errors
-            logger.error(
-                f"❌ Error extracting text using pdfplumber for {session_id} from {temp_pdf_path}: {e_parse}"
-            )
-            if "Incorrect থানা opening times password" in str(
-                    e_parse):  # Specific error for some password types
-                logger.error(
-                    "PDF might be password protected against text extraction.")
-            return  # Stop if text extraction fails
+        with pdfplumber.open(temp_pdf_path) as pdf:
+            pages = pdf.pages
+            logger.info(f"Extracting text from {len(pages)} pages...")
+            for i, page in enumerate(pages):
+                page_text = page.extract_text(x_tolerance=1, y_tolerance=3)
+                if page_text:
+                    full_text += page_text + "\n"
+                if (i + 1) % 20 == 0:
+                    logger.info(f"Processed {i+1}/{len(pages)} pages...")
+        logger.info(f"📄 Extracted ~{len(full_text)} chars from PDF.")
 
         if not full_text.strip():
             logger.warning(
-                f"Extracted text is empty for session {session_id}. PDF might be image-based or have extraction issues."
-            )
+                f"Extracted text is empty for session {session_id}.")
             return
 
-        # Fetch bill context (names of bills discussed in this session) for LLM
-        bills_for_session = get_session_bill_names(
-            session_id)  # Uses DB Bill objects
-        bills_context_str = ", ".join(
-            bills_for_session) if bills_for_session else "여러 의안"
-        logger.info(
-            f"Bills context for session {session_id} LLM: {bills_context_str[:200]}..."
-        )
+        # --- KEY FIX: Fetch the list of bills from the database ---
+        bills_for_session = get_session_bill_names(session_id)
 
-        # Core logic: Process the extracted text to get statements
-        # This will use the multi-stage LLM approach (bill segmentation, then speaker/content)
-        process_pdf_text_for_statements(full_text, session_id, session,
-                                        bills_context_str, bills_for_session,
-                                        debug)
+        # This is where the main logic is called.
+        process_pdf_text_for_statements(
+            full_text,
+            session_id,
+            session,
+            None,  # bills_context_str is no longer needed
+            bills_for_session,  # Pass the list of bills from the DB
+            debug)
 
     except RequestException as re_exc:
         logger.error(
             f"Request error downloading PDF for session {session_id}: {re_exc}"
         )
-        try:
-            self.retry(exc=re_exc)
-        except MaxRetriesExceededError:
-            logger.error(f"Max retries for PDF download {session_id}.")
+        self.retry(exc=re_exc)
     except Exception as e:
         logger.error(
             f"❌ Unexpected error processing PDF for session {session_id}: {e}")
         logger.exception(f"Full traceback for PDF processing {session_id}:")
-        try:
-            self.retry(exc=e)  # Retry for other unexpected errors too
-        except MaxRetriesExceededError:
-            logger.error(
-                f"Max retries after unexpected PDF error {session_id}.")
-        # raise # Optionally
+        self.retry(exc=e)
     finally:
         if temp_pdf_path and temp_pdf_path.exists():
             try:
@@ -3400,962 +3259,6 @@ def process_session_pdf(self,
             except OSError as e_del:
                 logger.error(
                     f"Error deleting temporary PDF {temp_pdf_path}: {e_del}")
-
-
-@shared_task(bind=True, max_retries=1,
-             default_retry_delay=300)  # Less retries for costly LLM task
-def analyze_statement_categories(self,
-                                 statement_id=None):  # Celery provides 'self'
-    """Analyze categories and sentiment for an existing statement using LLM. (Usually part of initial processing)"""
-    if not statement_id:
-        logger.error(
-            "statement_id is required for analyze_statement_categories.")
-        return
-
-    global model
-
-    if not model:  # Global 'model'
-        logger.warning(
-            "❌ Main LLM ('model') not available. Cannot analyze statement categories."
-        )
-        return
-
-    try:
-        statement = Statement.objects.get(id=statement_id)
-        # Potentially skip if already analyzed to a satisfactory degree, unless forced
-        if statement.sentiment_score is not None and statement.category_analysis and not getattr(
-                self, 'force_reanalyze', False):
-            logger.info(
-                f"Statement {statement_id} already analyzed. Skipping re-analysis."
-            )
-            return
-
-    except Statement.DoesNotExist:
-        logger.error(
-            f"Statement with id {statement_id} not found for analysis.")
-        return
-
-    logger.info(
-        f"Analyzing categories for statement ID: {statement_id} by {statement.speaker.naas_nm}"
-    )
-    text_to_analyze = statement.text
-    text_for_prompt = text_to_analyze
-
-    # Generic analysis prompt (not bill-specific, as bill context might not be available here)
-    # This function is more for re-analysis or if initial processing missed it.
-    # The `analyze_single_statement_with_bill_context` is preferred during initial PDF processing.
-    prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-
-국회 발언 분석 요청:
-발언자: {statement.speaker.naas_nm}
-발언 내용:
----
-{text_for_prompt}
----
-
-위 발언 내용을 분석하여 다음 JSON 형식으로 결과를 제공해주세요.
-{{
-  "sentiment_score": -1.0 부터 1.0 사이의 감성 점수 (숫자),
-  "sentiment_reason": "감성 판단의 주요 근거 (간략히)",
-  "policy_categories": [
-    {{
-      "main_category": "주요 정책 분야 (경제, 복지, 교육, 외교안보, 환경, 법제, 과학기술, 문화, 농림, 국토교통, 행정, 기타 중 택1)",
-      "sub_category": "세부 정책 분야 (없으면 '일반')",
-      "confidence": 0.0 부터 1.0 사이의 분류 확신도 (숫자)
-    }}
-  ],
-  "key_policy_phrases": ["발언의 핵심 정책 관련 어구 (최대 5개 배열)"]
-}}
-(가이드라인은 analyze_single_statement_with_bill_context 와 유사하게 적용)
-응답은 반드시 유효한 JSON 형식이어야 합니다.
-"""
-    try:
-        response = model.generate_content(prompt)
-        if not response or not response.text:
-            logger.warning(
-                f"❌ No LLM response for category analysis of statement {statement_id}"
-            )
-            return
-
-        response_text_cleaned = response.text.strip().replace(
-            "```json", "").replace("```", "").strip()
-        analysis_json = json.loads(response_text_cleaned)
-
-        statement.sentiment_score = analysis_json.get(
-            'sentiment_score',
-            statement.sentiment_score)  # Keep old if new is missing
-        statement.sentiment_reason = analysis_json.get(
-            'sentiment_reason', statement.sentiment_reason)
-        statement.policy_keywords = ', '.join(
-            analysis_json.get('key_policy_phrases', []))
-
-        policy_categories_json = analysis_json.get('policy_categories', [])
-        statement.category_analysis = json.dumps(
-            policy_categories_json, ensure_ascii=False
-        ) if policy_categories_json else statement.category_analysis
-
-        statement.save()
-
-        # Update/Create category associations in StatementCategory model
-        if policy_categories_json:
-            create_statement_categories(statement, policy_categories_json)
-
-        logger.info(
-            f"✅ LLM Category analysis completed for statement {statement_id}.")
-
-    except json.JSONDecodeError as e:
-        logger.error(
-            f"❌ JSON parsing error for LLM category analysis (statement {statement_id}): {e}. Response: {response_text_cleaned if 'response_text_cleaned' in locals() else 'N/A'}"
-        )
-    except Exception as e:
-        logger.error(
-            f"❌ Error analyzing categories for statement {statement_id}: {e}")
-        logger.exception("Full traceback for category analysis error:")
-        try:
-            self.retry(exc=e)
-        except MaxRetriesExceededError:
-            logger.error(f"Max retries for category analysis {statement_id}.")
-        # raise # Optionally
-
-
-def split_text_into_chunks(text, max_chunk_size):
-    """Split text into chunks, trying to break at speaker markers (◯) when possible."""
-    if len(text) <= max_chunk_size:
-        return [text]
-
-    chunks = []
-    current_pos = 0
-
-    while current_pos < len(text):
-        # Define the end position for this chunk
-        chunk_end = min(current_pos + max_chunk_size, len(text))
-
-        # If we're not at the end of the text, try to find a good break point
-        if chunk_end < len(text):
-            # Look for speaker markers (◯) within the last 2000 characters of the chunk
-            search_start = max(current_pos, chunk_end - 2000)
-            last_speaker_pos = text.rfind('◯', search_start, chunk_end)
-
-            if last_speaker_pos != -1 and last_speaker_pos > current_pos:
-                # Found a speaker marker, break there
-                chunk_end = last_speaker_pos
-            else:
-                # No speaker marker found, try to break at a line break
-                last_newline = text.rfind('\n', search_start, chunk_end)
-                if last_newline != -1 and last_newline > current_pos:
-                    chunk_end = last_newline
-
-        chunk = text[current_pos:chunk_end]
-        if chunk.strip():  # Only add non-empty chunks
-            chunks.append(chunk)
-
-        current_pos = chunk_end
-
-        # Skip any whitespace at the beginning of the next chunk
-        while current_pos < len(text) and text[current_pos].isspace():
-            current_pos += 1
-
-    return chunks
-
-
-def clean_pdf_text(text):
-    """Clean PDF text while preserving agenda section for bill extraction."""
-    import re
-
-    if not text:
-        return text
-
-    # Find the start of actual discussion (marked by time like "(14시07분 개의)")
-    timing_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
-    timing_match = re.search(timing_pattern, text)
-    
-    if timing_match:
-        # Keep agenda section as-is, clean only the discussion part
-        agenda_section = text[:timing_match.end()]
-        discussion_section = text[timing_match.end():]
-        
-        logger.info(f"🔍 Preserving agenda section: {len(agenda_section)} chars")
-        logger.info(f"🧹 Cleaning discussion section: {len(discussion_section)} chars")
-        
-        # Clean the discussion section
-        cleaned_discussion = clean_discussion_text(discussion_section)
-        
-        # Combine preserved agenda with cleaned discussion
-        cleaned_text = agenda_section + '\n' + cleaned_discussion
-    else:
-        # No timing marker found, clean the entire text but more conservatively
-        logger.info("⚠️ No timing marker found, applying conservative cleaning")
-        cleaned_text = clean_discussion_text(text)
-    
-    logger.info(f"🧹 Text cleaning: {len(text)} -> {len(cleaned_text)} chars")
-    return cleaned_text
-
-
-def clean_discussion_text(text):
-    """Clean discussion text by normalizing line breaks and removing artifacts."""
-    import re
-    
-    if not text:
-        return text
-
-    # Remove session identifier patterns like "제424회-제6차(2025년4월24일)"
-    session_pattern = r'^제\d+회-제\d+차\(\d{4}년\d{1,2}월\d{1,2}일\)$'
-
-    lines = text.split('\n')
-    cleaned_lines = []
-
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-
-        # Skip session identifiers
-        if re.match(session_pattern, line):
-            continue
-
-        # Replace all \n with spaces within the line content
-        line = line.replace('\n', ' ')
-        # Normalize multiple spaces to single space
-        line = re.sub(r'\s+', ' ', line).strip()
-        if line:  # Only add non-empty lines
-            cleaned_lines.append(line)
-
-    return '\n'.join(cleaned_lines)
-
-
-def discover_bills_from_agenda_section(full_text, debug=False):
-    """Extract bills from the agenda section at the beginning of the PDF"""
-    import re
-    
-    try:
-        # Find the agenda section and extract text before the meeting starts
-        # Look for patterns like "(14시07분 개의)" or similar time markers
-        time_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
-        time_match = re.search(time_pattern, full_text)
-        
-        if time_match:
-            agenda_section = full_text[:time_match.start()]
-            logger.info(f"🔍 Found agenda section: {len(agenda_section)} chars before meeting start")
-        else:
-            # Fallback: use first 10k chars if no time marker found
-            agenda_section = full_text[:10000]
-            logger.info(f"⚠️ No time marker found, using first 10k chars as agenda section")
-        
-        discovered_bills = []
-        
-        # Look for bill patterns in the agenda section
-        # Pattern 1: "번호. 법안명(...)(의안번호 xxxxxx)"
-        bill_pattern_1 = r'\d+\.\s*([^(]+법률안)[^(]*\([^)]*\)\(의안번호\s*(\d+)\)'
-        matches_1 = re.findall(bill_pattern_1, agenda_section)
-        
-        for bill_name, bill_number in matches_1:
-            clean_bill_name = bill_name.strip()
-            if clean_bill_name and len(clean_bill_name) > 10:  # Filter out too short names
-                discovered_bills.append(clean_bill_name)
-                logger.info(f"📋 Found bill from agenda: {clean_bill_name[:60]}... (의안번호: {bill_number})")
-        
-        # Pattern 2: Look for bills in "상정된 안건" section specifically
-        # This is more reliable as it shows what was actually presented
-        presented_section_match = re.search(r'상정된\s*안건(.*?)(?=\(?\d{1,2}시\d{2}분|\Z)', agenda_section, re.DOTALL)
-        if presented_section_match:
-            presented_section = presented_section_match.group(1)
-            logger.info(f"📋 Found '상정된 안건' section: {len(presented_section)} chars")
-            
-            # Extract bills from presented section
-            presented_pattern = r'\d+\.\s*([^(]+법률안)[^(]*\([^)]*\)\(의안번호\s*(\d+)\)'
-            presented_matches = re.findall(presented_pattern, presented_section)
-            
-            presented_bills = []
-            for bill_name, bill_number in presented_matches:
-                clean_bill_name = bill_name.strip()
-                if clean_bill_name and len(clean_bill_name) > 10:
-                    presented_bills.append(clean_bill_name)
-                    logger.info(f"✅ Found presented bill: {clean_bill_name[:60]}... (의안번호: {bill_number})")
-            
-            # Prefer presented bills over planned bills
-            if presented_bills:
-                discovered_bills = presented_bills
-                logger.info(f"🎯 Using {len(presented_bills)} bills from '상정된 안건' section")
-        
-        # Remove duplicates while preserving order
-        unique_bills = []
-        seen = set()
-        for bill in discovered_bills:
-            if bill not in seen:
-                unique_bills.append(bill)
-                seen.add(bill)
-        
-        if debug:
-            logger.debug(f"🐛 DEBUG: Would extract {len(unique_bills)} bills from agenda")
-            for i, bill in enumerate(unique_bills[:5]):  # Show first 5
-                logger.debug(f"🐛 DEBUG: Bill {i+1}: {bill[:80]}...")
-        
-        logger.info(f"🔍 Agenda parsing discovered {len(unique_bills)} bills")
-        return unique_bills
-        
-    except Exception as e:
-        logger.error(f"❌ Error parsing agenda section: {e}")
-        return []
-
-
-def process_pdf_text_for_statements(full_text,
-                                    session_id,
-                                    session_obj,
-                                    bills_context_str,
-                                    bill_names_list,
-                                    debug=False):
-    """
-    Simplified orchestrator for processing full PDF text.
-    1. Get bill segments with start/end indices
-    2. Slice text by indices and assign statements to corresponding bills
-    3. Process statements for each bill segment
-    """
-    global model, genai
-
-    logger.info(
-        f"🔍 Checking LLM availability - model: {model is not None}, genai: {genai is not None}"
-    )
-
-    if not model or not genai:
-        logger.error("❌ LLM not available. Attempting to re-initialize...")
-
-        if not reinitialize_gemini():
-            logger.error(
-                "❌ Failed to re-initialize Gemini. Using fallback extraction.")
-            # Use fallback extraction method
-            statements_from_fallback = extract_statements_with_keyword_fallback(
-                full_text, session_id, debug)
-
-            for stmt_data in statements_from_fallback:
-                stmt_data['associated_bill_name'] = "General Discussion"
-
-            if not debug and statements_from_fallback:
-                process_extracted_statements_data(statements_from_fallback,
-                                                  session_obj, debug)
-
-            logger.info(
-                f"📊 Fallback extraction completed: {len(statements_from_fallback)} statements"
-            )
-            return
-
-    # Clean the full text before processing
-    logger.info(f"🧹 Cleaning PDF text for session {session_id}")
-    full_text = clean_pdf_text(full_text)
-    logger.info(f"📄 Cleaned text length: ~{len(full_text)} chars")
-
-    logger.info(
-        f"🤖 Starting simplified bill-based statement processing for session PDF {session_id}."
-    )
-
-    all_extracted_statements_data = []
-
-    # Stage 1: Get bill segments with indices
-    try:
-        segmentation_model_name = 'gemini-2.5-flash-preview-05-20'
-        segmentation_llm = genai.GenerativeModel(segmentation_model_name)
-    except Exception as e_model:
-        logger.error(
-            f"Failed to initialize segmentation model ({segmentation_model_name}): {e_model}"
-        )
-        segmentation_llm = None
-
-    # First, extract bills from the agenda section at the beginning
-    logger.info(
-        f"🔍 Step 1: Extracting bills from agenda section for session {session_id}"
-    )
-    discovered_bills = discover_bills_from_agenda_section(full_text, debug=debug)
-
-    bill_segments_from_llm = []
-    if segmentation_llm and discovered_bills:
-        logger.info(
-            f"🔍 Step 2: Getting bill segments for {len(discovered_bills)} discovered bills"
-        )
-        for bill in discovered_bills:
-            logger.info(f"   📋 Will segment: {bill[:80]}...")
-
-        try:
-            bill_segments_from_llm = _process_bill_segmentation_with_batching(
-                segmentation_llm, full_text, discovered_bills)
-        except Exception as e_seg:
-            logger.error(f"Error during LLM bill segmentation: {e_seg}")
-
-    elif segmentation_llm and bill_names_list and len(bill_names_list) > 0:
-        # Fallback to predetermined list if discovery fails
-        logger.info(
-            f"🔄 Fallback: Using predetermined bill list for session {session_id} ({len(bill_names_list)} bills)"
-        )
-
-        try:
-            bill_segments_from_llm = _process_bill_segmentation_with_batching(
-                segmentation_llm, full_text, bill_names_list)
-        except Exception as e_seg:
-            logger.error(f"Error during fallback bill segmentation: {e_seg}")
-
-    else:
-        logger.warning(
-            f"⚠️ No bills discovered or found for session {session_id}, will process entire text as general discussion"
-        )
-
-        # Debug information
-        try:
-            session = Session.objects.get(conf_id=session_id)
-            logger.info(f"🔍 Session info for {session_id}:")
-            logger.info(f"   - Title: {session.title}")
-            logger.info(f"   - Committee: {session.cmit_nm}")
-            logger.info(f"   - Date: {session.conf_dt}")
-
-            # Check if bills exist in database
-            bills_in_db = Bill.objects.filter(session=session)
-            logger.info(f"   - Bills in database: {bills_in_db.count()}")
-
-            if bills_in_db.exists():
-                logger.info(f"   - Sample bill names from DB:")
-                for bill in bills_in_db[:3]:  # Show first 3
-                    logger.info(f"     * {bill.bill_nm[:60]}...")
-                if bills_in_db.count() > 3:
-                    logger.info(f"     ... and {bills_in_db.count() - 3} more")
-            else:
-                logger.info(
-                    f"   - No bills found in database for this session")
-                logger.info(
-                    f"   - This may be an administrative/voting session without detailed debate"
-                )
-
-        except Session.DoesNotExist:
-            logger.error(f"   - Session {session_id} not found in database!")
-        except Exception as e:
-            logger.error(f"   - Error getting session info: {e}")
-
-
-def _process_bill_segmentation_with_batching(segmentation_llm,
-                                             segmentation_text,
-                                             bill_names_list):
-    """
-    Use the LLM to segment the transcript into bill-related sections without batching.
-    Returns a list of dicts with keys: 'a' (bill name), 'b' (start idx), 'e' (end idx), 'c' (confidence/score).
-    """
-    try:
-        if not bill_names_list:
-            logger.warning("No bill names provided for segmentation")
-            return []
-
-        # Clean and validate inputs
-        clean_text = segmentation_text.strip()
-        safe_bill_names = [
-            str(bill)[:200] for bill in bill_names_list
-            if bill and str(bill).strip()
-        ]
-
-        if not safe_bill_names:
-            logger.warning("No valid bill names after cleaning")
-            return []
-
-        logger.info(
-            f"Processing bill segmentation for entire text (length: {len(clean_text)} chars)"
-        )
-
-        # Process entire text at once without batching
-        return _process_single_segmentation_chunk(segmentation_llm, clean_text,
-                                                  safe_bill_names, 0)
-
-    except Exception as e:
-        logger.error(f"❌ Error in bill segmentation LLM: {e}")
-        logger.exception("Traceback for bill segmentation LLM error:")
-        return []
-
-
-def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
-                                       bill_names_list, offset):
-    """Process a single chunk for bill segmentation to find ENTIRE conversations, not just mentions."""
-    import json
-    try:
-        # Estimate tokens for rate limiting
-        estimated_tokens = len(text_chunk) // 3 + 1000
-
-        if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
-            logger.warning("Rate limit timeout for single segmentation chunk")
-            return []
-
-        # Create simplified bill list for better matching
-        bill_info = []
-        for bill in bill_names_list:  # Process all bills
-            core_name = bill.replace('법률안', '').replace('일부개정', '').strip()
-            if '(' in core_name:
-                core_name = core_name.split('(')[0].strip()
-            bill_info.append({'full': bill, 'core': core_name})
-
-        bill_list_str = '\n'.join([f"- {b['full']}" for b in bill_info])
-
-        # DEBUG: Log the input data
-        logger.info(f"🔍 Segmenting text chunk: {len(text_chunk)} chars")
-        logger.info(f"📋 Bills to find: {len(bill_names_list)} bills")
-
-        prompt = f"""
-당신은 대한민국 국회의 회의록을 분석하는 최고 수준의 입법 분석 전문가입니다. 당신의 유일한 임무는 주어진 회의록 텍스트에서 특정 법안에 대한 **실제 토론 전체**를, 하나의 연속된 구간으로 정확히 식별하는 것입니다.
-
-**대상 법안:**
-{bill_list_str}
-
-**회의록 텍스트:**
----
-{text_chunk}
----
-
-**매우 중요한 분석 절차 (이 순서를 반드시 따르십시오):**
-
-**1단계: '의사일정' 영역 식별 및 건너뛰기**
-*   먼저, 회의록 시작 부분에 있는 '의사일정' 및 '상정된 안건' 섹션을 찾으십시오.
-*   **이 영역은 실제 토론이 아니므로, 내용 추출 대상으로 삼지 않습니다.** 이 목록이 끝나는 지점을 확인하고, 그 이후부터 실제 분석을 시작합니다.
-
-**2단계: 실제 토론의 '시작 지점' 찾기**
-*   '의사일정' 영역이 끝난 후, 각 대상 법안에 대한 실제 토론이 시작되는 지점을 찾으십시오.
-*   **가장 중요한 신호:** 실제 토론은 일반적으로 의장이 `◯의장 ... 의사일정 제O항 ... 을 상정합니다.`라고 말하며 시작됩니다. 이 '상정' 발언이 가장 확실한 시작점입니다.
-
-**3단계: 토론의 '종료 지점' 찾기**
-*   안건이 상정된 이후, 관련된 모든 발언(질의, 답변, 찬반토론, 의사진행발언 등)이 이어집니다.
-*   토론의 끝은 의장이 토론 종결, 표결(`가결되었음을 선포합니다`), 또는 다음 안건을 상정하면서 명확해집니다. 이 지점이 종료점입니다.
-
-**4. 최종 검증 및 출력**
-*   위 단계에 따라 찾은 구간이 **실제 토론인지 다시 확인**하십시오.
-    *   구간 내에 `◯◯◯의원`과 같은 실제 발언자들의 대화가 포함되어 있습니까?
-    *   구간의 길이가 수천 자에 달하는 의미 있는 토론입니까?
-*   이 모든 조건을 만족하는 경우에만, 아래 JSON 형식으로 결과를 출력하십시오.
-*   **만약 특정 법안에 대한 의미 있는 토론 구간을 찾지 못했다면, 그 법안은 결과 JSON에서 완전히 제외하십시오.**
-
-**출력 형식 (JSON):**
-{{
-  "segments": [
-    {{
-      "bill_name": "대상 법안 목록에 있는 정확한 법안명",
-      "start_index": "해당 법안의 '실제 토론' 시작 인덱스 ('상정' 발언)",
-      "end_index": "해당 법안의 '실제 토론' 종료 인덱스"
-    }}
-    // 의미 있는 토론을 찾은 법안만 여기에 포함
-  ]
-}}
-"""
-
-        try:
-            response = segmentation_llm.generate_content(prompt)
-            gemini_rate_limiter.record_request(estimated_tokens, success=True)
-        except Exception as e:
-            error_type = "quota" if "quota" in str(e).lower(
-            ) else "timeout" if "timeout" in str(e).lower() else "api_error"
-            gemini_rate_limiter.record_error(error_type)
-            logger.error(f"Segmentation API call failed: {e}")
-            return []
-
-        if not response or not response.text:
-            logger.error("🐛 DEBUG: Empty response from LLM segmentation")
-            return []
-
-        response_text = response.text.strip().replace('```json',
-                                                      '').replace('```',
-                                                                  '').strip()
-
-        # DEBUG: Log the full LLM response
-        logger.error(f"🐛 DEBUG: Full LLM response for bill segmentation:")
-        logger.error(f"🐛 DEBUG: Raw response length: {len(response.text)}")
-        logger.error(f"🐛 DEBUG: Cleaned response: {response_text}")
-        logger.error(f"🐛 DEBUG: Bill names provided to LLM: {bill_names_list}")
-
-        try:
-            data = json.loads(response_text)
-
-            # Handle different response structures
-            segments = []
-            if isinstance(data, dict):
-                segments = data.get('segments', [])
-            elif isinstance(data, list):
-                # If LLM returned a list directly
-                segments = data
-            else:
-                logger.warning(f"Unexpected data type from LLM: {type(data)}")
-                return []
-
-            # Validate segments is a list
-            if not isinstance(segments, list):
-                logger.warning(f"Segments is not a list: {type(segments)}")
-                return []
-
-            # NOTE: start_idx and end_idx below are expected to be precise Python string indices (0-based, inclusive start, exclusive end)
-            valid_segments = []
-            seen_bills = set()
-
-            logger.error(
-                f"🐛 DEBUG: Processing {len(segments)} segments from LLM")
-            for i, seg in enumerate(segments):
-                logger.error(f"🐛 DEBUG: Segment {i+1}: {seg}")
-                # Ensure seg is a dictionary
-                if not isinstance(seg, dict):
-                    logger.warning(
-                        f"Segment is not a dict: {type(seg)} - {seg}")
-                    continue
-
-                bill_name = seg.get('bill_name')
-                if not bill_name or bill_name in seen_bills:
-                    continue  # Only allow one segment per bill
-
-                # Find exact match or use fuzzy matching to get original bill name
-                matched_bill_name = None
-                if bill_name in bill_names_list:
-                    matched_bill_name = bill_name
-                else:
-                    # Try fuzzy matching to find the original bill name
-                    for original_bill in bill_names_list:
-                        if bill_name in original_bill or original_bill in bill_name:
-                            matched_bill_name = original_bill
-                            break
-
-                    if not matched_bill_name:
-                        # Try partial word matching
-                        bill_words = set(bill_name.lower().split())
-                        for original_bill in bill_names_list:
-                            original_words = set(original_bill.lower().split())
-                            common_words = bill_words.intersection(
-                                original_words)
-                            if len(common_words) >= min(
-                                    2, len(bill_words)
-                            ):  # At least 2 common words or all words
-                                matched_bill_name = original_bill
-                                break
-
-                if matched_bill_name and matched_bill_name not in seen_bills:
-                    try:
-                        start_idx = int(seg.get('start_index', 0))
-                        end_idx = int(seg.get(
-                            'end_index', start_idx +
-                            1000))  # Default to reasonable segment size
-
-                        # Skip if LLM couldn't find substantial discussion (-1 indices)
-                        if start_idx == -1 or end_idx == -1:
-                            logger.info(
-                                f"LLM found no substantial discussion for bill '{bill_name}' (indices: {start_idx}, {end_idx})"
-                            )
-                            continue
-
-                        # Validate indices within chunk bounds
-                        if start_idx < 0 or start_idx >= len(text_chunk):
-                            logger.warning(
-                                f"Invalid start_index {start_idx} for bill '{bill_name}' (chunk length: {len(text_chunk)})"
-                            )
-                            continue
-
-                        # Ensure end_idx is valid and creates a substantial segment
-                        if end_idx <= start_idx or end_idx > len(text_chunk):
-                            logger.warning(
-                                f"Invalid end_index {end_idx} for bill '{bill_name}' (start: {start_idx}, chunk length: {len(text_chunk)})"
-                            )
-                            continue
-
-                        # Apply offset for global positioning
-                        global_start = start_idx + offset
-                        global_end = end_idx + offset
-
-                        # Validate segment is substantial (minimum 2000 chars for complete conversation)
-                        segment_length = global_end - global_start
-                        MIN_CONVERSATION_LENGTH = 2000  # Require at least 2000 chars for complete conversation
-
-                        if segment_length >= MIN_CONVERSATION_LENGTH:
-                            valid_segments.append({
-                                'a': matched_bill_name,
-                                'b': global_start,
-                                'e': global_end
-                            })
-                            seen_bills.add(matched_bill_name)
-
-                            logger.info(
-                                f"✅ Found substantial conversation for '{matched_bill_name}': {global_start}-{global_end} ({segment_length} chars)"
-                            )
-
-                            if bill_name != matched_bill_name:
-                                logger.info(
-                                    f"Mapped LLM response '{bill_name}' to original bill '{matched_bill_name}'"
-                                )
-                        else:
-                            logger.warning(
-                                f"Segment too short for complete conversation - bill '{bill_name}': {segment_length} chars (minimum: {MIN_CONVERSATION_LENGTH} required for full conversation)"
-                            )
-
-                    except (ValueError, TypeError) as e:
-                        logger.warning(
-                            f"Error processing indices for segment {bill_name}: {e}"
-                        )
-                        continue
-                elif not matched_bill_name:
-                    logger.debug(
-                        f"Could not match LLM response '{bill_name}' to any original bill name"
-                    )
-            # If no valid segments found, try intelligent fallback
-            if not valid_segments and bill_names_list:
-                logger.warning(
-                    f"LLM segmentation found no substantial conversations. Trying intelligent fallback."
-                )
-                return _fallback_bill_segmentation(text_chunk, bill_names_list,
-                                                   offset)
-
-            return valid_segments
-
-        except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.error(f"Error parsing segmentation response: {e}")
-            logger.debug(
-                f"Raw response that caused error: {response_text[:500]}...")
-            # Try fallback when JSON parsing fails
-            if bill_names_list:
-                logger.info(
-                    "Attempting fallback segmentation due to JSON parsing error"
-                )
-                return _fallback_bill_segmentation(text_chunk, bill_names_list,
-                                                   offset)
-            return []
-
-    except Exception as e:
-        logger.error(f"Error in single segmentation chunk: {e}")
-        # Try fallback when any error occurs
-        if bill_names_list:
-            logger.info(
-                "Attempting fallback segmentation due to processing error")
-            return _fallback_bill_segmentation(text_chunk, bill_names_list,
-                                               offset)
-        return []
-
-
-def _fallback_bill_segmentation(text_chunk, bill_names_list, offset):
-    """Intelligent fallback for bill segmentation when LLM fails"""
-    import re
-
-    logger.info(
-        f"🔄 Using intelligent fallback segmentation for {len(bill_names_list)} bills"
-    )
-
-    valid_segments = []
-
-    # Find all speaker markers (◯) to identify conversation boundaries
-    speaker_positions = []
-    for match in re.finditer(r'◯', text_chunk):
-        speaker_positions.append(match.start())
-
-    if len(speaker_positions) < 2:
-        logger.warning(
-            "Not enough speaker markers for meaningful segmentation")
-        return []
-
-    # Try to find each bill by searching for keywords
-    for bill_name in bill_names_list:
-        # Extract key terms from bill name
-        bill_keywords = []
-
-        # Remove common suffixes and extract core terms
-        clean_name = bill_name.replace('법률안', '').replace('일부개정', '').strip()
-        if '(' in clean_name:
-            clean_name = clean_name.split('(')[0].strip()
-
-        # Split into meaningful keywords (remove short words)
-        words = [w.strip() for w in clean_name.split() if len(w.strip()) > 2]
-        bill_keywords.extend(words)
-
-        if not bill_keywords:
-            continue
-
-        # Search for the bill in the text
-        best_match_pos = -1
-        best_match_score = 0
-
-        # Look for keyword combinations
-        for i, keyword in enumerate(bill_keywords):
-            for match in re.finditer(re.escape(keyword), text_chunk,
-                                     re.IGNORECASE):
-                pos = match.start()
-
-                # Calculate score based on surrounding context
-                context_start = max(0, pos - 100)
-                context_end = min(len(text_chunk), pos + 100)
-                context = text_chunk[context_start:context_end].lower()
-
-                # Score based on how many bill keywords appear in context
-                score = sum(1 for kw in bill_keywords if kw.lower() in context)
-
-                if score > best_match_score:
-                    best_match_score = score
-                    best_match_pos = pos
-
-        if best_match_pos == -1 or best_match_score < 2:  # Need at least 2 keyword matches
-            logger.info(
-                f"Could not find substantial content for bill: {bill_name[:50]}..."
-            )
-            continue
-
-        # Find the conversation segment around this position
-        # Find the nearest speaker marker before the match
-        start_speaker_pos = -1
-        for pos in reversed(speaker_positions):
-            if pos <= best_match_pos:
-                start_speaker_pos = pos
-                break
-
-        if start_speaker_pos == -1:
-            start_speaker_pos = 0
-
-        # Find a reasonable end point (next few speaker markers or reasonable distance)
-        end_pos = len(text_chunk)
-        speakers_after = [
-            pos for pos in speaker_positions if pos > best_match_pos
-        ]
-
-        if speakers_after:
-            # Take several speakers to ensure we get the full conversation
-            num_speakers_to_include = min(
-                10, len(speakers_after))  # Include up to 10 speakers
-            if num_speakers_to_include > 0:
-                end_pos = speakers_after[num_speakers_to_include - 1]
-
-                # Extend to find natural break
-                remaining_text = text_chunk[end_pos:end_pos + 1000]
-                for break_pattern in ['\n\n', '의사일정', '○']:
-                    break_match = remaining_text.find(break_pattern)
-                    if break_match != -1:
-                        end_pos += break_match
-                        break
-
-        # Ensure substantial length
-        segment_length = end_pos - start_speaker_pos
-        if segment_length >= 2000:  # Minimum 2000 chars for complete conversation
-            global_start = start_speaker_pos + offset
-            global_end = end_pos + offset
-
-            valid_segments.append({
-                'a': bill_name,
-                'b': global_start,
-                'e': global_end
-            })
-
-            logger.info(
-                f"✅ Fallback found conversation for '{bill_name[:50]}...': {global_start}-{global_end} ({segment_length} chars)"
-            )
-        else:
-            logger.info(
-                f"Fallback segment too short for '{bill_name[:30]}...': {segment_length} chars"
-            )
-
-    logger.info(
-        f"🔄 Fallback segmentation completed: {len(valid_segments)} substantial segments found"
-    )
-    return valid_segments
-
-    # Stage 2: Process bill segments by slicing text using indices
-    if bill_segments_from_llm:
-        # Sort segments by start index
-        valid_segments = []
-        for seg_info in bill_segments_from_llm:
-            start_idx = seg_info.get("b")
-            end_idx = seg_info.get("e")
-
-            # Validate indices
-            if (start_idx is not None and isinstance(start_idx, int)
-                    and start_idx >= 0 and start_idx < len(full_text)):
-
-                # If no end index, calculate it
-                if end_idx is None or not isinstance(end_idx, int):
-                    # Find next segment's start or use text end
-                    next_start = len(full_text)
-                    for other_seg in bill_segments_from_llm:
-                        other_start = other_seg.get("b")
-                        if (other_start is not None and other_start > start_idx
-                                and other_start < next_start):
-                            next_start = other_start
-                    end_idx = next_start
-
-                # Final validation
-                if end_idx > start_idx and end_idx <= len(full_text):
-                    valid_segments.append({
-                        "bill_name":
-                        seg_info.get("a", "Unknown Bill"),
-                        "start_idx":
-                        start_idx,
-                        "end_idx":
-                        end_idx,
-                        "confidence":
-                        seg_info.get("c", 0.5)
-                    })
-
-        # Sort by start index
-        valid_segments.sort(key=lambda x: x['start_idx'])
-
-        logger.info(
-            f"Processing {len(valid_segments)} bill segments using index-based slicing"
-        )
-
-        for seg_data in valid_segments:
-            bill_name = seg_data["bill_name"]
-            start_idx = seg_data["start_idx"]
-            end_idx = seg_data["end_idx"]
-
-            # Slice text using the indices
-            bill_text = full_text[start_idx:end_idx]
-
-            logger.info(
-                f"--- Processing Bill: {bill_name} (chars {start_idx}-{end_idx}, {len(bill_text)} chars) ---"
-            )
-
-            # Extract statements from this bill's text segment
-            statements_in_bill = extract_statements_for_bill_segment(
-                bill_text, session_id, bill_name, debug)
-
-            # Associate all statements with this bill
-            for stmt_data in statements_in_bill:
-                stmt_data['associated_bill_name'] = bill_name
-
-            all_extracted_statements_data.extend(statements_in_bill)
-            logger.info(
-                f"✅ Extracted {len(statements_in_bill)} statements for {bill_name}"
-            )
-
-            if not debug:
-                time.sleep(1)  # Brief pause between bills
-
-    else:
-        # Fallback: process entire text if no segments found
-        logger.info(
-            "No bill segments identified. Processing entire text as general discussion."
-        )
-
-        # Try LLM-based extraction first
-        if genai and model:
-            logger.info("🔍 Using LLM-based statement extraction for full text")
-            statements_from_full_text = extract_statements_for_bill_segment(
-                full_text, session_id, "General Discussion", debug)
-        else:
-            logger.info("🔍 Using keyword-based fallback extraction")
-            statements_from_full_text = extract_statements_with_keyword_fallback(
-                full_text, session_id, debug)
-
-        for stmt_data in statements_from_full_text:
-            stmt_data['associated_bill_name'] = "General Discussion"
-
-        all_extracted_statements_data.extend(statements_from_full_text)
-
-    # Final step: Save all statements to DB
-    logger.info(
-        f"📊 Collected {len(all_extracted_statements_data)} statements for session {session_id}"
-    )
-
-    if not debug and all_extracted_statements_data:
-        process_extracted_statements_data(all_extracted_statements_data,
-                                          session_obj, debug)
-        logger.info(
-            f"✅ Successfully saved {len(all_extracted_statements_data)} statements to database"
-        )
-    elif debug and all_extracted_statements_data:
-        logger.debug(
-            f"🐛 DEBUG: Would save {len(all_extracted_statements_data)} statements"
-        )
-    elif not all_extracted_statements_data:
-        logger.warning(f"⚠️ No statements extracted for session {session_id}")
-    else:
-        logger.info(
-            f"ℹ️ Debug mode: skipped saving {len(all_extracted_statements_data)} statements"
-        )
 
 
 def process_extracted_statements_data(statements_data_list,
@@ -5493,3 +4396,94 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
             logger.error(
                 f"Max retries after unexpected error for voting data {bill_id}."
             )
+
+
+def process_pdf_text_for_statements(full_text, session_id, session_obj, bills_context_str, bill_names_list, debug=False):
+    """
+    Main function to process PDF text and extract statements.
+    Uses bill-based chunking with LLM for optimal performance.
+    """
+    if not full_text:
+        logger.warning(f"No text provided for session {session_id}")
+        return
+
+    logger.info(f"🔄 Processing PDF text for session {session_id} ({len(full_text)} chars)")
+    
+    # Clean the PDF text first
+    cleaned_text = clean_pdf_text(full_text)
+    
+    if not cleaned_text:
+        logger.warning(f"No text remaining after cleaning for session {session_id}")
+        return
+
+    # Extract statements using bill-based chunking
+    try:
+        if bill_names_list and len(bill_names_list) > 0:
+            logger.info(f"🎯 Using bill-based processing for {len(bill_names_list)} bills")
+            statements_data = extract_statements_with_bill_based_chunking(
+                cleaned_text, session_id, bill_names_list, debug
+            )
+        else:
+            logger.info("📄 No bills found, using keyword fallback extraction")
+            statements_data = extract_statements_with_keyword_fallback(
+                cleaned_text, session_id, debug
+            )
+            
+        if not statements_data:
+            logger.warning(f"No statements extracted for session {session_id}")
+            return
+            
+        logger.info(f"✅ Extracted {len(statements_data)} statements for session {session_id}")
+        
+        # Save to database
+        process_extracted_statements_data(statements_data, session_obj, debug)
+        
+    except Exception as e:
+        logger.error(f"❌ Error processing PDF text for session {session_id}: {e}")
+        logger.exception("Full traceback for PDF text processing error:")
+
+
+def clean_pdf_text(text: str) -> str:
+    """
+    Cleans the entire raw PDF text by removing session headers, OCR markers,
+    and normalizing whitespace. This is the single source of truth for text cleaning.
+    """
+    import re
+    if not text:
+        return ""
+
+    # This pattern matches full-line headers like "제423회-제4차(2025년4월3일) 1"
+    session_header_pattern = re.compile(r'^제\d+회-제\d+차\s*\(.+?\)\s*\d+\s*$')
+    # This pattern matches the OCR markers
+    ocr_marker_pattern = re.compile(
+        r'^==\s*(Start|End) of OCR for page \d+\s*==$')
+    # Remove meeting start/end time markers from the flow of text, as they are not part of speech.
+    timing_marker_pattern = re.compile(r'\(\d{1,2}시\s*\d{1,2}분\s+개의?\)')
+
+    lines = text.split('\n')
+    cleaned_lines = []
+
+    for line in lines:
+        stripped_line = line.strip()
+
+        # Skip common header/footer/artifact lines completely
+        if session_header_pattern.match(stripped_line):
+            continue
+        if ocr_marker_pattern.match(stripped_line):
+            continue
+
+        # Remove timing markers from the content of the line
+        stripped_line = timing_marker_pattern.sub('', stripped_line)
+
+        # Normalize all whitespace to a single space
+        cleaned_line = re.sub(r'\s+', ' ', stripped_line).strip()
+
+        if cleaned_line:  # Only add non-empty lines
+            cleaned_lines.append(cleaned_line)
+
+    cleaned_text = '\n'.join(cleaned_lines)
+    logger.info(
+        f"🧹 Text cleaning: Original length {len(text)} -> Cleaned length {len(cleaned_text)}"
+    )
+    return cleaned_text
+
