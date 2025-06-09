@@ -2715,29 +2715,92 @@ def create_placeholder_bill_from_llm(session_obj, bill_title):
 
 @with_db_retry
 def update_bill_policy_data(bill_obj, segment_data):
-    """Update bill with policy analysis data from segmentation."""
+    """Update bill with policy analysis data from segmentation and create database mappings."""
     try:
-        policy_categories = segment_data.get('policy_categories', [])
+        from .models import Category, Subcategory, BillCategoryMapping, BillSubcategoryMapping
+        
+        # Extract data from segment
+        main_policy_category = segment_data.get('main_policy_category', '')
+        policy_subcategories = segment_data.get('policy_subcategories', [])
         key_policy_phrases = segment_data.get('key_policy_phrases', [])
         bill_specific_keywords = segment_data.get('bill_specific_keywords', [])
+        policy_stance = segment_data.get('policy_stance', 'moderate')
+        bill_analysis = segment_data.get('bill_analysis', '')
         
         # Update bill fields
-        bill_obj.policy_categories = policy_categories
+        bill_obj.policy_categories = [main_policy_category] if main_policy_category else []
         bill_obj.key_policy_phrases = key_policy_phrases
         bill_obj.bill_specific_keywords = bill_specific_keywords
         
         # Create category analysis text
-        if policy_categories:
-            category_analysis = f"정책 분야: {', '.join(policy_categories)}"
-            if key_policy_phrases:
-                category_analysis += f"\n핵심 정책: {', '.join(key_policy_phrases)}"
+        if main_policy_category:
+            category_analysis = f"주요 정책 분야: {main_policy_category}"
+            if policy_subcategories:
+                category_analysis += f"\n세부 분야: {', '.join(policy_subcategories)}"
+            if bill_analysis:
+                category_analysis += f"\n분석: {bill_analysis}"
             bill_obj.category_analysis = category_analysis
         
         # Create policy keywords string
         if key_policy_phrases:
             bill_obj.policy_keywords = ', '.join(key_policy_phrases)
+        
+        # Set LLM analysis metadata
+        bill_obj.llm_analysis_version = "v1.0"
+        bill_obj.llm_confidence_score = 0.8  # Default confidence
+        
+        # Calculate policy impact score based on keywords and content
+        impact_score = len(key_policy_phrases) * 2 + len(bill_specific_keywords)
+        bill_obj.policy_impact_score = min(10.0, impact_score)
             
         bill_obj.save()
+        
+        # Create category mappings in database
+        if main_policy_category:
+            try:
+                # Find or create main category
+                category_obj = Category.objects.filter(name=main_policy_category).first()
+                if category_obj:
+                    # Create or update bill-category mapping
+                    mapping, created = BillCategoryMapping.objects.update_or_create(
+                        bill=bill_obj,
+                        category=category_obj,
+                        defaults={
+                            'confidence_score': 0.8,
+                            'is_primary': True,
+                            'analysis_method': 'llm_discovery'
+                        }
+                    )
+                    
+                    # Create subcategory mappings
+                    for subcat_name in policy_subcategories:
+                        subcategory_obj = Subcategory.objects.filter(
+                            category=category_obj,
+                            name=subcat_name
+                        ).first()
+                        
+                        if subcategory_obj:
+                            subcat_mapping, sub_created = BillSubcategoryMapping.objects.update_or_create(
+                                bill=bill_obj,
+                                subcategory=subcategory_obj,
+                                defaults={
+                                    'relevance_score': 0.7,
+                                    'supporting_evidence': bill_analysis,
+                                    'extracted_keywords': bill_specific_keywords,
+                                    'policy_position': 'support' if policy_stance == 'progressive' else 'neutral'
+                                }
+                            )
+                            if sub_created:
+                                logger.info(f"✅ Created subcategory mapping: {bill_obj.bill_nm[:30]}... -> {subcat_name}")
+                    
+                    if created:
+                        logger.info(f"✅ Created category mapping: {bill_obj.bill_nm[:30]}... -> {main_policy_category}")
+                else:
+                    logger.warning(f"⚠️ Category '{main_policy_category}' not found in database")
+                    
+            except Exception as mapping_error:
+                logger.error(f"❌ Error creating category mappings: {mapping_error}")
+        
         logger.info(f"✅ Updated policy data for bill: {bill_obj.bill_nm[:50]}...")
         
     except Exception as e:
@@ -2759,6 +2822,7 @@ def extract_statements_with_llm_discovery(full_text,
     1. Find discussion segments for a list of known bills.
     2. Discover and segment any additional bills/topics discussed in the text.
     3. Creates placeholder bills for newly discovered items.
+    4. Analyzes policy content and maps to database categories.
     """
     logger = logging.getLogger(__name__)
     logger.info(
@@ -2768,11 +2832,45 @@ def extract_statements_with_llm_discovery(full_text,
         logger.error("❌ Gemini not available. Cannot perform LLM discovery.")
         return []
 
+    # Load policy categories from database for enhanced analysis
+    from .models import Category, Subcategory
+    
+    policy_categories_from_db = {}
+    try:
+        for category in Category.objects.prefetch_related('subcategories').all():
+            subcats = [sub.name for sub in category.subcategories.all()]
+            policy_categories_from_db[category.name] = {
+                'description': category.description,
+                'subcategories': subcats
+            }
+    except Exception as e:
+        logger.warning(f"Could not load policy categories from database: {e}")
+        policy_categories_from_db = {}
+
     # Prepare the list of known bills for the prompt
     if known_bill_names:
         known_bills_str = "\n".join(f"- {name}" for name in known_bill_names)
     else:
         known_bills_str = "No known bills were provided."
+
+    # Enhanced policy categories section with database data
+    if policy_categories_from_db:
+        policy_categories_section = "**POLICY CATEGORIES (from database):**\n"
+        for cat_name, cat_data in policy_categories_from_db.items():
+            policy_categories_section += f"- {cat_name}: {cat_data['description']}\n"
+            if cat_data['subcategories']:
+                policy_categories_section += f"  Subcategories: {', '.join(cat_data['subcategories'][:5])}{'...' if len(cat_data['subcategories']) > 5 else ''}\n"
+    else:
+        policy_categories_section = """**POLICY CATEGORIES:**
+- 경제정책: 국가의 재정, 산업, 무역, 조세 등을 통한 경제 운용 및 성장 전략
+- 사회정책: 복지, 보건, 교육, 노동 등 사회 전반의 정책
+- 외교안보정책: 외교관계, 국방, 통일, 안보 관련 정책
+- 법행정제도: 행정개혁, 사법제도, 인권, 법률 제도
+- 과학기술정책: 과학기술진흥, IT, 디지털전환, 연구개발
+- 문화체육정책: 문화예술, 체육, 관광, 미디어 정책
+- 인권소수자정책: 인권보호, 소수자 권익, 차별 방지
+- 지역균형정책: 지역개발, 균형발전, 지방자치
+- 정치정책: 선거제도, 정당, 정치개혁 관련 정책"""
 
     prompt = f"""You are a world-class legislative analyst AI. Your task is to read a parliamentary transcript
 and perfectly segment the entire discussion for all topics, while also analyzing policy content.
@@ -2786,20 +2884,17 @@ I already know about the following bills. You MUST find the discussion for these
 1. Read the entire transcript below.
 2. Identify the exact start and end character index for the complete discussion of each **KNOWN BILL**.
 3. Discover any additional bills/topics not in the known list, and identify their discussion spans.
-4. For each bill/topic, analyze the policy content and categorize it.
-5. Return a JSON object with segmentation AND policy analysis.
+4. For each bill/topic, analyze the policy content and categorize it using the categories below.
+5. Return a JSON object with segmentation AND detailed policy analysis.
 
-**POLICY CATEGORIES:**
-- 경제/산업: 경제정책, 산업진흥, 금융, 무역, 중소기업, 벤처
-- 사회복지: 복지정책, 사회보장, 의료보험, 연금, 돌봄서비스
-- 교육/문화: 교육정책, 대학, 문화예술, 체육, 관광
-- 환경/에너지: 환경보호, 기후변화, 신재생에너지, 원자력
-- 국방/외교: 국방정책, 외교관계, 통일, 안보
-- 행정/법무: 행정개혁, 사법제도, 인권, 개인정보보호
-- 과학기술: 과학기술진흥, IT, 디지털전환, 인공지능
-- 농림/해양: 농업, 임업, 수산업, 농촌개발
-- 국토/교통: 국토개발, 교통정책, 주택, 도시계획
-- 보건/의료: 보건정책, 의료서비스, 질병관리, 건강증진
+{policy_categories_section}
+
+**ANALYSIS REQUIREMENTS:**
+- For each bill/topic, identify the main policy category and up to 3 subcategories
+- Extract 3-7 key policy phrases that represent the core policy elements
+- Extract 3-5 bill-specific keywords (technical terms, specific provisions)
+- Provide a concise policy analysis (max 80 Korean characters)
+- Assess policy stance: progressive/conservative/moderate
 
 **RULES:**
 - Ignore any mentions that occur in the table-of-contents or front-matter portion of the document
@@ -2808,10 +2903,8 @@ I already know about the following bills. You MUST find the discussion for these
   Do not segment short procedural announcements.
 - `bill_name` for known bills MUST EXACTLY MATCH the provided list.
 - For new items, create a concise, accurate `bill_name`.
-- Analyze policy content for each segment and assign appropriate categories.
-- Extract key policy phrases and specific keywords related to the bill.
+- Use exact category names from the policy categories list above.
 - Return **ONLY** the final JSON object.
-- bill_analysis shall be a short(80 char at max) summary of the bill's policy content in Korean.
 
 **TRANSCRIPT:**
 ---
@@ -2825,22 +2918,26 @@ I already know about the following bills. You MUST find the discussion for these
       "bill_name": "Exact name of a KNOWN bill",
       "start_index": 1234,
       "end_index": 5678,
-      "policy_categories": ["경제/산업", "사회복지"],
+      "main_policy_category": "경제정책",
+      "policy_subcategories": ["확장재정", "중소기업 지원"],
       "key_policy_phrases": ["중소기업 지원", "일자리 창출", "사회안전망"],
-      "bill_analysis": "dddd하는 의안입니다."
+      "bill_specific_keywords": ["법인세", "세율", "과세"],
+      "policy_stance": "progressive",
+      "bill_analysis": "중소기업 지원을 위한 세제 혜택 확대 법안"
     }}
-    // …more known bills
   ],
   "newly_discovered": [
     {{
       "bill_name": "Name of a newly discovered topic",
       "start_index": 2345,
       "end_index": 6789,
-      "policy_categories": ["환경/에너지"],
-      "key_policy_phrases": ["탄소중립", "재생에너지"],
-      "bill_analysis": "dddd하는 의안입니다."
+      "main_policy_category": "환경/에너지",
+      "policy_subcategories": ["탄소세 도입"],
+      "key_policy_phrases": ["탄소중립", "재생에너지", "온실가스"],
+      "bill_specific_keywords": ["탄소세", "배출권", "그린뉴딜"],
+      "policy_stance": "progressive",
+      "bill_analysis": "탄소중립 실현을 위한 환경세 도입 법안"
     }}
-    // …more new topics
   ]
 }}
 """
