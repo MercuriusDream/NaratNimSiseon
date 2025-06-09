@@ -40,24 +40,81 @@ class SpeakerSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def to_representation(self, instance):
-        """Ensure list/integer fields are serialized correctly."""
+        """
+        Ensure all list/integer fields are serialized with correct types for frontend.
+        Lists are always [], never null. Integers are always int or null.
+        """
         rep = super().to_representation(instance)
-        # Ensure JSONFields are always serialized as lists
+        # Always output lists for JSONField-backed fields
         for field in [
                 'elecd_nm', 'elecd_div_nm', 'cmit_nm', 'blng_cmit_nm',
                 'gtelt_eraco'
         ]:
             value = getattr(instance, field, None)
-            if value is None:
-                rep[field] = []
+            if not isinstance(value, list):
+                rep[field] = [] if value is None else [value]
             else:
-                rep[field] = value if isinstance(value, list) else [value]
-        # Integer fields
-        rep['era_int'] = instance.era_int
-        rep['nth_term'] = instance.nth_term
-        # naas_pic as URL
-        rep['naas_pic'] = instance.naas_pic
+                rep[field] = value
+        # Integer fields: output as int or None
+        rep['era_int'] = instance.era_int if instance.era_int is not None else None
+        rep['nth_term'] = instance.nth_term if instance.nth_term is not None else None
+        # naas_pic as URL or empty string
+        rep['naas_pic'] = instance.naas_pic or ""
         return rep
+
+    def to_internal_value(self, data):
+        """
+        Accept string or list for JSONFields. Accept string or int for integer fields.
+        Defensive: always coerce to correct type.
+        """
+        import re
+        for field in ['elecd_nm', 'elecd_div_nm', 'cmit_nm', 'blng_cmit_nm']:
+            value = data.get(field)
+            if value is None:
+                data[field] = []
+            elif isinstance(value, str):
+                sep = ',' if field in ['cmit_nm', 'blng_cmit_nm'] else '/'
+                data[field] = [
+                    v.strip() for v in value.split(sep) if v.strip()
+                ]
+            elif not isinstance(value, list):
+                data[field] = [str(value)]
+        # gtelt_eraco: accept string like '제21대, 제22대' or list of ints
+        gtelt = data.get('gtelt_eraco')
+        if gtelt is None:
+            data['gtelt_eraco'] = []
+        elif isinstance(gtelt, str):
+            data['gtelt_eraco'] = [
+                int(num) for num in re.findall(r'제(\d+)대', gtelt)
+            ]
+        elif isinstance(gtelt, list):
+            # Coerce all to int
+            data['gtelt_eraco'] = [int(x) for x in gtelt if str(x).isdigit()]
+        else:
+            data['gtelt_eraco'] = []
+        # Defensive for integer fields
+        for int_field in ['era_int', 'nth_term']:
+            value = data.get(int_field)
+            if value in (None, "", []):
+                data[int_field] = None
+            elif isinstance(value, str) and value.isdigit():
+                data[int_field] = int(value)
+            elif isinstance(value, int):
+                data[int_field] = value
+            else:
+                data[int_field] = None
+        # naas_pic: always string or ""
+        pic = data.get('naas_pic')
+        data['naas_pic'] = str(pic) if pic else ""
+        return super().to_internal_value(data)
+
+
+# PATCH: PartySerializer doesn't need extra logic as all fields are scalar, but can ensure consistency if needed.
+class PartySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Party
+        fields = '__all__'
 
     def to_internal_value(self, data):
         """Allow input as string or list for JSONFields."""
