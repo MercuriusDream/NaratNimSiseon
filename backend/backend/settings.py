@@ -202,10 +202,12 @@ try:
     # If we get here, Redis is available
     CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-except (redis.ConnectionError, redis.TimeoutError, ImportError):
+    print("✅ Redis connection successful - using Redis for Celery")
+except (redis.ConnectionError, redis.TimeoutError, ImportError) as e:
     # Redis not available, use database backend
-    CELERY_BROKER_URL = 'django-db'
+    CELERY_BROKER_URL = 'db+sqlite:///celery_broker.db'
     CELERY_RESULT_BACKEND = 'django-db'
+    print(f"⚠️ Redis not available ({e}) - using database backend for Celery")
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
