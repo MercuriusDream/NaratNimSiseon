@@ -4530,4 +4530,3 @@ def clean_pdf_text(text: str) -> str:
         f"🧹 Text cleaning: Original length {len(text)} -> Cleaned length {len(cleaned_text)}"
     )
     return cleaned_text
-
