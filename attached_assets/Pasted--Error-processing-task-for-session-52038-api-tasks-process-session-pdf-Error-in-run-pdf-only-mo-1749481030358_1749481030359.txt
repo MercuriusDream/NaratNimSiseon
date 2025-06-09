@@ -1,0 +1,32 @@
+❌ Error processing task for session 52038: 'api.tasks.process_session_pdf'
+Error in run_pdf_only_mode for session 52038
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/management/commands/force_collection.py", line 166, in run_pdf_only_mode
+    process_session_pdf(session_id=session.conf_id,
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 182, in __call__
+    return self._get_current_object()(*a, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 105, in _get_current_object
+    return loc(*self.__args, **self.__kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/__init__.py", line 69, in task_by_cons
+    name or app.gen_task_name(fun.__name__, fun.__module__)
+                              ^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 33, in __get__
+    return self.__getter(obj) if obj is not None else self
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 70, in __name__
+    return self.__custom_name__
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 143, in __getattr__
+    return getattr(self._get_current_object(), name)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 105, in _get_current_object
+    return loc(*self.__args, **self.__kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/__init__.py", line 68, in task_by_cons
+    return app.tasks[
+           ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/registry.py", line 18, in __missing__
+    raise self.NotRegistered(key)
+celery.exceptions.NotRegistered: 'api.tasks.process_session_pdf'
