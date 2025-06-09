@@ -855,7 +855,6 @@ def bill_list(request):
 
         return paginator.get_paginated_response(serializer.data)
 
-```python
     except Exception as e:
         logger.error(f"Error in bill_list: {e}")
         return Response({'error': 'Failed to fetch bills'},
