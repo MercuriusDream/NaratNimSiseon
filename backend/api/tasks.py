@@ -982,6 +982,7 @@ def extract_sessions_from_response(data, debug=False):
 
 # In tasks.py, replace the existing process_sessions_data function
 
+
 def process_sessions_data(sessions_data, force=False, debug=False):
     """Process the sessions data and create/update session objects.
     This function now directly orchestrates the fetching of bills and processing of PDFs for each session."""
@@ -993,7 +994,8 @@ def process_sessions_data(sessions_data, force=False, debug=False):
 
     @with_db_retry
     def _process_session_item(session_defaults, confer_num):
-        return Session.objects.update_or_create(conf_id=confer_num, defaults=session_defaults)
+        return Session.objects.update_or_create(conf_id=confer_num,
+                                                defaults=session_defaults)
 
     sessions_by_confer_num = {}
     for item_data in sessions_data:
@@ -1004,7 +1006,9 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             sessions_by_confer_num[confer_num] = []
         sessions_by_confer_num[confer_num].append(item_data)
 
-    logger.info(f"Processing {len(sessions_by_confer_num)} unique sessions from {len(sessions_data)} API items.")
+    logger.info(
+        f"Processing {len(sessions_by_confer_num)} unique sessions from {len(sessions_data)} API items."
+    )
     created_count = 0
     updated_count = 0
 
@@ -1019,12 +1023,15 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             conf_date_str = main_item.get('CONF_DATE')
             if conf_date_str:
                 try:
-                    conf_date_val = datetime.strptime(conf_date_str, '%Y년 %m월 %d일').date()
+                    conf_date_val = datetime.strptime(conf_date_str,
+                                                      '%Y년 %m월 %d일').date()
                 except ValueError:
                     try:
-                        conf_date_val = datetime.strptime(conf_date_str, '%Y-%m-%d').date()
+                        conf_date_val = datetime.strptime(
+                            conf_date_str, '%Y-%m-%d').date()
                     except ValueError:
-                        logger.warning(f"Could not parse date: {conf_date_str}")
+                        logger.warning(
+                            f"Could not parse date: {conf_date_str}")
 
             era_co_val = f"제{main_item.get('DAE_NUM', 'N/A')}대"
             sess_val = ''
@@ -1037,18 +1044,34 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                 dgr_val = title_parts[2].replace('차', '')
 
             session_defaults = {
-                'era_co': era_co_val, 'sess': sess_val, 'dgr': dgr_val,
-                'conf_dt': conf_date_val, 'conf_knd': main_item.get('CLASS_NAME', '국회본회의'),
-                'cmit_nm': main_item.get('CMIT_NAME', main_item.get('CLASS_NAME', '국회본회의')),
-                'down_url': main_item.get('PDF_LINK_URL', ''), 'title': session_title,
-                'bg_ptm': dt_time(9, 0)
+                'era_co':
+                era_co_val,
+                'sess':
+                sess_val,
+                'dgr':
+                dgr_val,
+                'conf_dt':
+                conf_date_val,
+                'conf_knd':
+                main_item.get('CLASS_NAME', '국회본회의'),
+                'cmit_nm':
+                main_item.get('CMIT_NAME',
+                              main_item.get('CLASS_NAME', '국회본회의')),
+                'down_url':
+                main_item.get('PDF_LINK_URL', ''),
+                'title':
+                session_title,
+                'bg_ptm':
+                dt_time(9, 0)
             }
 
             if debug:
-                logger.debug(f"🐛 DEBUG PREVIEW: Would process session ID {confer_num}")
+                logger.debug(
+                    f"🐛 DEBUG PREVIEW: Would process session ID {confer_num}")
                 continue
 
-            session_obj, created = _process_session_item(session_defaults, confer_num)
+            session_obj, created = _process_session_item(
+                session_defaults, confer_num)
 
             status_log = "✨ Created new session" if created else "🔄 Updated existing session" if force else "♻️ Session already exists"
             logger.info(f"{status_log}: {confer_num} - {session_title}")
@@ -1058,25 +1081,40 @@ def process_sessions_data(sessions_data, force=False, debug=False):
 
             # 1. Fetch bills for this session.
             if is_celery_available():
-                fetch_session_bills.delay(session_id=confer_num, force=force, debug=debug)
+                fetch_session_bills.delay(session_id=confer_num,
+                                          force=force,
+                                          debug=debug)
             else:
-                fetch_session_bills(session_id=confer_num, force=force, debug=debug)
+                fetch_session_bills(session_id=confer_num,
+                                    force=force,
+                                    debug=debug)
 
             # 2. Process the PDF if a URL exists.
             if session_obj.down_url:
                 if is_celery_available():
-                    process_session_pdf.delay(session_id=confer_num, force=force, debug=debug)
+                    process_session_pdf.delay(session_id=confer_num,
+                                              force=force,
+                                              debug=debug)
                 else:
-                    process_session_pdf(session_id=confer_num, force=force, debug=debug)
+                    process_session_pdf(session_id=confer_num,
+                                        force=force,
+                                        debug=debug)
             else:
-                logger.info(f"No PDF URL for session {confer_num}, skipping PDF processing.")
+                logger.info(
+                    f"No PDF URL for session {confer_num}, skipping PDF processing."
+                )
 
         except Exception as e:
-            logger.error(f"❌ Error processing session data for CONFER_NUM {confer_num}: {e}")
+            logger.error(
+                f"❌ Error processing session data for CONFER_NUM {confer_num}: {e}"
+            )
             logger.exception("Full traceback for session processing error:")
             continue
 
-    logger.info(f"🎉 Sessions processing complete: {created_count} created, {updated_count} updated.")
+    logger.info(
+        f"🎉 Sessions processing complete: {created_count} created, {updated_count} updated."
+    )
+
 
 def fetch_committee_members(committee_name, debug=False):
     """Fetch committee members from nktulghcadyhmiqxi API."""
@@ -2081,7 +2119,11 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
     return deduplicated_indices
 
 
-def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_list, offset, max_retries=2):
+def _process_single_segmentation_chunk(segmentation_llm,
+                                       text_chunk,
+                                       bill_names_list,
+                                       offset,
+                                       max_retries=2):
     """
     Process a single chunk for bill segmentation with RETRY logic to handle transient API errors.
     """
@@ -2092,12 +2134,16 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
             # (The existing logic of the function goes here...)
             estimated_tokens = len(text_chunk) // 3 + 1000
             if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
-                logger.warning("Rate limit timeout for segmentation chunk. Aborting.")
+                logger.warning(
+                    "Rate limit timeout for segmentation chunk. Aborting.")
                 return []
 
-            bill_list_str = '\n'.join([f"- {bill}" for bill in bill_names_list])
+            bill_list_str = '\n'.join(
+                [f"- {bill}" for bill in bill_names_list])
 
-            logger.info(f"🔍 Segmenting text chunk: {len(text_chunk)} chars, Attempt: {attempt + 1}/{max_retries + 1}")
+            logger.info(
+                f"🔍 Segmenting text chunk: {len(text_chunk)} chars, Attempt: {attempt + 1}/{max_retries + 1}"
+            )
             logger.info(f"📋 Bills to find: {len(bill_names_list)} bills")
 
             prompt = f"""
@@ -2132,7 +2178,8 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
             if not response or not response.text:
                 raise ValueError("LLM returned an empty response.")
 
-            response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+            response_text = response.text.strip().replace(
+                '```json', '').replace('```', '').strip()
             data = json.loads(response_text)
 
             # --- Start of existing validation logic ---
@@ -2164,36 +2211,54 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
 
                 segment_length = end_idx - start_idx
                 if segment_length >= MIN_CONVERSATION_LENGTH:
-                    valid_segments.append({'a': bill_name, 'b': start_idx + offset, 'e': end_idx + offset})
+                    valid_segments.append({
+                        'a': bill_name,
+                        'b': start_idx + offset,
+                        'e': end_idx + offset
+                    })
                     seen_bills.add(bill_name)
-                    logger.info(f"✅ Found substantial conversation for '{bill_name}': {start_idx + offset}-{end_idx + offset} ({segment_length} chars)")
+                    logger.info(
+                        f"✅ Found substantial conversation for '{bill_name}': {start_idx + offset}-{end_idx + offset} ({segment_length} chars)"
+                    )
                 else:
-                    logger.warning(f"Segment for '{bill_name}' too short: {segment_length} chars (min: {MIN_CONVERSATION_LENGTH})")
+                    logger.warning(
+                        f"Segment for '{bill_name}' too short: {segment_length} chars (min: {MIN_CONVERSATION_LENGTH})"
+                    )
 
             # --- End of validation logic ---
 
             if not valid_segments:
-                logger.warning("LLM segmentation found no substantial conversations. Trying fallback.")
-                return _fallback_bill_segmentation(text_chunk, bill_names_list, offset)
+                logger.warning(
+                    "LLM segmentation found no substantial conversations. Trying fallback."
+                )
+                return _fallback_bill_segmentation(text_chunk, bill_names_list,
+                                                   offset)
 
-            return valid_segments # Success! Exit the retry loop.
+            return valid_segments  # Success! Exit the retry loop.
 
         except Exception as e:
             error_message = str(e)
-            logger.error(f"Error on attempt {attempt + 1} for segmentation: {error_message}")
+            logger.error(
+                f"Error on attempt {attempt + 1} for segmentation: {error_message}"
+            )
             gemini_rate_limiter.record_error(f"api_error_{attempt}")
 
             if attempt < max_retries:
-                wait_time = 2 ** attempt  # Exponential backoff (1s, 2s, 4s)
+                wait_time = 2**attempt  # Exponential backoff (1s, 2s, 4s)
                 logger.info(f"Waiting {wait_time}s before retrying...")
                 time.sleep(wait_time)
             else:
-                logger.error("Max retries exceeded for segmentation. Failing this step.")
+                logger.error(
+                    "Max retries exceeded for segmentation. Failing this step."
+                )
                 # After max retries, explicitly call the fallback
-                logger.info("Attempting fallback segmentation after final API failure.")
-                return _fallback_bill_segmentation(text_chunk, bill_names_list, offset)
+                logger.info(
+                    "Attempting fallback segmentation after final API failure."
+                )
+                return _fallback_bill_segmentation(text_chunk, bill_names_list,
+                                                   offset)
 
-    return [] # Should not be reached, but good for safety
+    return []  # Should not be reached, but good for safety
 
 
 def _process_single_bill_segmentation_batch(segmentation_llm, text_batch,
@@ -3103,20 +3168,28 @@ def process_session_pdf(self, session_id=None, force=False, debug=False):
         logger.error("session_id is required for process_session_pdf.")
         return
 
-    logger.info(f"📄 Processing PDF for session: {session_id} (force={force}, debug={debug})")
+    logger.info(
+        f"📄 Processing PDF for session: {session_id} (force={force}, debug={debug})"
+    )
 
     try:
         session = Session.objects.get(conf_id=session_id)
     except Session.DoesNotExist:
-        logger.error(f"❌ Session {session_id} not found in DB. Cannot process PDF.")
+        logger.error(
+            f"❌ Session {session_id} not found in DB. Cannot process PDF.")
         return
 
     if not session.down_url:
-        logger.info(f"ℹ️ No PDF URL for session {session_id}. Skipping PDF processing.")
+        logger.info(
+            f"ℹ️ No PDF URL for session {session_id}. Skipping PDF processing."
+        )
         return
 
-    if Statement.objects.filter(session=session).exists() and not force and not debug:
-        logger.info(f"Statements already exist for session {session_id} and not in force/debug mode. Skipping.")
+    if Statement.objects.filter(
+            session=session).exists() and not force and not debug:
+        logger.info(
+            f"Statements already exist for session {session_id} and not in force/debug mode. Skipping."
+        )
         return
 
     if debug:
@@ -3136,7 +3209,8 @@ def process_session_pdf(self, session_id=None, force=False, debug=False):
         with open(temp_pdf_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
-        logger.info(f"📥 PDF for session {session_id} downloaded to {temp_pdf_path}")
+        logger.info(
+            f"📥 PDF for session {session_id} downloaded to {temp_pdf_path}")
 
         full_text = ""
         with pdfplumber.open(temp_pdf_path) as pdf:
@@ -3151,7 +3225,8 @@ def process_session_pdf(self, session_id=None, force=False, debug=False):
         logger.info(f"📄 Extracted ~{len(full_text)} chars from PDF.")
 
         if not full_text.strip():
-            logger.warning(f"Extracted text is empty for session {session_id}.")
+            logger.warning(
+                f"Extracted text is empty for session {session_id}.")
             return
 
         # --- KEY FIX: Fetch the list of bills from the database ---
@@ -3163,15 +3238,17 @@ def process_session_pdf(self, session_id=None, force=False, debug=False):
             session_id,
             session,
             None,  # bills_context_str is no longer needed
-            bills_for_session, # Pass the list of bills from the DB
-            debug
-        )
+            bills_for_session,  # Pass the list of bills from the DB
+            debug)
 
     except RequestException as re_exc:
-        logger.error(f"Request error downloading PDF for session {session_id}: {re_exc}")
+        logger.error(
+            f"Request error downloading PDF for session {session_id}: {re_exc}"
+        )
         self.retry(exc=re_exc)
     except Exception as e:
-        logger.error(f"❌ Unexpected error processing PDF for session {session_id}: {e}")
+        logger.error(
+            f"❌ Unexpected error processing PDF for session {session_id}: {e}")
         logger.exception(f"Full traceback for PDF processing {session_id}:")
         self.retry(exc=e)
     finally:
@@ -3180,7 +3257,9 @@ def process_session_pdf(self, session_id=None, force=False, debug=False):
                 temp_pdf_path.unlink()
                 logger.info(f"🗑️ Deleted temporary PDF: {temp_pdf_path}")
             except OSError as e_del:
-                logger.error(f"Error deleting temporary PDF {temp_pdf_path}: {e_del}")
+                logger.error(
+                    f"Error deleting temporary PDF {temp_pdf_path}: {e_del}")
+
 
 def process_extracted_statements_data(statements_data_list,
                                       session_obj,
@@ -4317,7 +4396,8 @@ def fetch_voting_data_for_bill(self, bill_id, force=False, debug=False):
             logger.error(
                 f"Max retries after unexpected error for voting data {bill_id}."
             )
-            
+
+
 def clean_pdf_text(text: str) -> str:
     """
     Cleans the entire raw PDF text by removing session headers, OCR markers,
@@ -4330,7 +4410,8 @@ def clean_pdf_text(text: str) -> str:
     # This pattern matches full-line headers like "제423회-제4차(2025년4월3일) 1"
     session_header_pattern = re.compile(r'^제\d+회-제\d+차\s*\(.+?\)\s*\d+\s*$')
     # This pattern matches the OCR markers
-    ocr_marker_pattern = re.compile(r'^==\s*(Start|End) of OCR for page \d+\s*==$')
+    ocr_marker_pattern = re.compile(
+        r'^==\s*(Start|End) of OCR for page \d+\s*==$')
     # Remove meeting start/end time markers from the flow of text, as they are not part of speech.
     timing_marker_pattern = re.compile(r'\(\d{1,2}시\s*\d{1,2}분\s+개의?\)')
 
@@ -4356,5 +4437,8 @@ def clean_pdf_text(text: str) -> str:
             cleaned_lines.append(cleaned_line)
 
     cleaned_text = '\n'.join(cleaned_lines)
-    logger.info(f"🧹 Text cleaning: Original length {len(text)} -> Cleaned length {len(cleaned_text)}")
+    logger.info(
+        f"🧹 Text cleaning: Original length {len(text)} -> Cleaned length {len(cleaned_text)}"
+    )
     return cleaned_text
+
