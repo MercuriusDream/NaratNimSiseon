@@ -240,6 +240,14 @@ class Speaker(models.Model):
     gtelt_eraco = models.CharField(max_length=100,
                                    help_text=_("당선대수"),
                                    verbose_name=_("당선대수"))
+    era_int = models.IntegerField(null=True,
+                                  blank=True,
+                                  help_text=_("대수 (숫자)"),
+                                  verbose_name=_("대수"))
+    nth_term = models.IntegerField(null=True,
+                                   blank=True,
+                                   help_text=_("선수 (숫자)"),
+                                   verbose_name=_("선수"))
     ntr_div = models.CharField(max_length=10,
                                help_text=_("성별"),
                                verbose_name=_("성별"))
