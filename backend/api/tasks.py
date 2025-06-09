@@ -191,29 +191,40 @@ if not logger.handlers or not any(
 ENABLE_VOTING_DATA_COLLECTION = getattr(settings, 'ENABLE_VOTING_DATA_COLLECTION', False)
 
 # Configure Gemini API with error handling
-try:
-    import google.generativeai as genai
-    if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')  # Main model for detailed analysis
-        logger.info("✅ Gemini API configured successfully with gemini-2.0-flash-lite model")
-    else:
+def initialize_gemini():
+    """Initialize Gemini API with proper error handling"""
+    try:
+        import google.generativeai as genai_module
+        if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
+            genai_module.configure(api_key=settings.GEMINI_API_KEY)
+            model_instance = genai_module.GenerativeModel('gemini-2.0-flash-lite')
+            logger.info("✅ Gemini API configured successfully with gemini-2.0-flash-lite model")
+            return genai_module, model_instance
+        else:
+            logger.error(
+                "❌ GEMINI_API_KEY not found or empty in settings. LLM features will be disabled."
+            )
+            return None, None
+    except ImportError as e:
         logger.error(
-            "❌ GEMINI_API_KEY not found or empty in settings. LLM features will be disabled."
+            f"❌ google.generativeai library not available: {e}. LLM features will be disabled."
         )
-        genai = None
-        model = None
-except ImportError as e:
-    logger.error(
-        f"❌ google.generativeai library not available: {e}. LLM features will be disabled."
-    )
-    genai = None
-    model = None
-except Exception as e:
-    logger.error(
-        f"❌ Error configuring Gemini API: {e}. LLM features will be disabled.")
-    genai = None
-    model = None
+        return None, None
+    except Exception as e:
+        logger.error(
+            f"❌ Error configuring Gemini API: {e}. LLM features will be disabled.")
+        return None, None
+
+# Initialize Gemini
+genai, model = initialize_gemini()
+
+def reinitialize_gemini():
+    """Reinitialize Gemini if it failed initially"""
+    global genai, model
+    if not genai or not model:
+        logger.info("🔄 Attempting to reinitialize Gemini API...")
+        genai, model = initialize_gemini()
+    return genai is not None and model is not None
 
 
 # Check if Celery/Redis is available
@@ -3327,33 +3338,8 @@ def process_pdf_text_for_statements(full_text,
     if not model or not genai:
         logger.error("❌ LLM not available. Attempting to re-initialize...")
         
-        # Try to re-initialize Gemini
-        try:
-            import google.generativeai as genai_reinit
-            if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-                genai_reinit.configure(api_key=settings.GEMINI_API_KEY)
-                temp_model = genai_reinit.GenerativeModel('gemini-2.0-flash-lite')
-                logger.info("✅ Successfully re-initialized Gemini API")
-                
-                # Update global variables
-                model = temp_model
-                genai = genai_reinit
-            else:
-                logger.error("❌ GEMINI_API_KEY still not available. Using fallback extraction.")
-                # Use fallback extraction method
-                statements_from_fallback = extract_statements_with_keyword_fallback(
-                    full_text, session_id, debug)
-                
-                for stmt_data in statements_from_fallback:
-                    stmt_data['associated_bill_name'] = "General Discussion"
-                
-                if not debug and statements_from_fallback:
-                    process_extracted_statements_data(statements_from_fallback, session_obj, debug)
-                
-                logger.info(f"📊 Fallback extraction completed: {len(statements_from_fallback)} statements")
-                return
-        except Exception as e:
-            logger.error(f"❌ Failed to re-initialize Gemini: {e}. Using fallback extraction.")
+        if not reinitialize_gemini():
+            logger.error("❌ Failed to re-initialize Gemini. Using fallback extraction.")
             # Use fallback extraction method
             statements_from_fallback = extract_statements_with_keyword_fallback(
                 full_text, session_id, debug)
