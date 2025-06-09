@@ -201,25 +201,34 @@ class Command(BaseCommand):
                     # Call the function directly without Celery
                     try:
                         # Import the actual task function
-                        from api.tasks import process_session_pdf as pdf_task
+                        from api.tasks import process_session_pdf
                         
-                        # Call the task function directly, bypassing Celery
-                        # For @shared_task(bind=True), we need to pass self=None as first argument
-                        pdf_task(self=None, session_id=session.conf_id, force=True, debug=debug)
+                        # For bound tasks, call the underlying function directly
+                        if hasattr(process_session_pdf, '__wrapped__'):
+                            # Call the wrapped function with self=None for bound tasks
+                            process_session_pdf.__wrapped__(None, session_id=session.conf_id, force=True, debug=debug)
+                        else:
+                            # Try calling with keyword arguments only
+                            process_session_pdf(session_id=session.conf_id, force=True, debug=debug)
                         
                         logger.info(f"✅ Successfully processed PDF for session {session.conf_id} synchronously")
                         
                     except Exception as e_fallback:
                         logger.error(f"Failed to call process_session_pdf directly: {e_fallback}")
                         
-                        # Final fallback - try calling with keyword arguments only
+                        # Final fallback - try importing as module and calling function
                         try:
-                            from api.tasks import process_session_pdf
+                            import importlib
+                            tasks_module = importlib.import_module('api.tasks')
+                            func = getattr(tasks_module, 'process_session_pdf')
                             
-                            # Try calling with just keyword arguments
-                            process_session_pdf(session_id=session.conf_id, force=True, debug=debug)
+                            # Try calling the function directly
+                            if hasattr(func, '__wrapped__'):
+                                func.__wrapped__(None, session_id=session.conf_id, force=True, debug=debug)
+                            else:
+                                func(session_id=session.conf_id, force=True, debug=debug)
                             
-                            logger.info(f"✅ Successfully processed PDF for session {session.conf_id} using keyword-only fallback")
+                            logger.info(f"✅ Successfully processed PDF for session {session.conf_id} using module import fallback")
                             
                         except Exception as e_final:
                             logger.error(f"Final fallback failed for session {session.conf_id}: {e_final}")

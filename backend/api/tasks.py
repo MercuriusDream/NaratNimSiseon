@@ -2119,6 +2119,42 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
     return deduplicated_indices
 
 
+def _process_single_segmentation_batch(text_segment, bill_name, offset):
+    """Process a single text segment for speech segmentation indices."""
+    try:
+        segmentation_llm = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        
+        # Create basic indices by splitting at ◯ markers as fallback
+        speech_indices = []
+        current_pos = 0
+        
+        while True:
+            marker_pos = text_segment.find('◯', current_pos)
+            if marker_pos == -1:
+                break
+                
+            # Look for next marker to determine end
+            next_marker_pos = text_segment.find('◯', marker_pos + 1)
+            end_pos = next_marker_pos if next_marker_pos != -1 else len(text_segment)
+            
+            # Only include segments with meaningful content
+            segment_length = end_pos - marker_pos
+            if segment_length > 100:  # Minimum segment size
+                speech_indices.append({
+                    'start': marker_pos + offset,
+                    'end': end_pos + offset
+                })
+            
+            current_pos = marker_pos + 1
+        
+        logger.info(f"Found {len(speech_indices)} speech segments using ◯ marker fallback")
+        return speech_indices
+        
+    except Exception as e:
+        logger.error(f"Error in single segmentation batch: {e}")
+        return []
+
+
 def _process_single_segmentation_chunk(segmentation_llm,
                                        text_chunk,
                                        bill_names_list,
