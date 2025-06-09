@@ -10,7 +10,8 @@ from .utils import api_action_wrapper
 from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory, VotingRecord
 from .serializers import (SessionSerializer, BillSerializer, SpeakerSerializer,
                           StatementSerializer, StatementCreateSerializer,
-                          PartySerializer, CategorySerializer, VotingRecordSerializer)
+                          PartySerializer, CategorySerializer,
+                          VotingRecordSerializer)
 from .llm_analyzer import LLMPolicyAnalyzer
 import logging
 from django.utils import timezone
@@ -63,32 +64,34 @@ class SessionViewSet(viewsets.ModelViewSet):
             # Ultra-optimized queryset for listing
             if self.action == 'list':
                 base_queryset = Session.objects.only(
-                    'conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 
-                    'conf_knd', 'cmit_nm', 'title'
-                ).filter(era_co__in=['22', '제22대'])  # Always filter to 22nd Assembly first
+                    'conf_id', 'era_co', 'sess', 'dgr', 'conf_dt',
+                    'conf_knd', 'cmit_nm', 'title').filter(
+                        era_co__in=['22', '제22대'
+                                    ])  # Always filter to 22nd Assembly first
             else:
                 base_queryset = Session.objects.all()
-                
+
             # Apply filters only if provided
             era_co = self.request.query_params.get('era_co')
             if era_co and era_co not in ['all', '22', '제22대']:
                 base_queryset = base_queryset.filter(era_co=era_co)
-                
+
             sess = self.request.query_params.get('sess')
             if sess:
                 base_queryset = base_queryset.filter(sess=sess)
-                
+
             dgr = self.request.query_params.get('dgr')
             if dgr:
                 base_queryset = base_queryset.filter(dgr=dgr)
-                
+
             date_from = self.request.query_params.get('date_from')
             if date_from:
                 try:
-                    base_queryset = base_queryset.filter(conf_dt__gte=date_from)
+                    base_queryset = base_queryset.filter(
+                        conf_dt__gte=date_from)
                 except ValueError:
                     pass
-                    
+
             date_to = self.request.query_params.get('date_to')
             if date_to:
                 try:
@@ -105,37 +108,37 @@ class SessionViewSet(viewsets.ModelViewSet):
         try:
             # Use raw query for better performance
             from django.db import connection
-            
+
             era_filter = "era_co IN ('22', '제22대')"
-            
+
             # Build additional filters
             additional_filters = []
             params = []
-            
+
             sess = request.query_params.get('sess')
             if sess:
                 additional_filters.append("sess = %s")
                 params.append(sess)
-                
+
             dgr = request.query_params.get('dgr')
             if dgr:
                 additional_filters.append("dgr = %s")
                 params.append(dgr)
-                
+
             date_from = request.query_params.get('date_from')
             if date_from:
                 additional_filters.append("conf_dt >= %s")
                 params.append(date_from)
-                
+
             date_to = request.query_params.get('date_to')
             if date_to:
                 additional_filters.append("conf_dt <= %s")
                 params.append(date_to)
-            
+
             where_clause = era_filter
             if additional_filters:
                 where_clause += " AND " + " AND ".join(additional_filters)
-            
+
             # Execute optimized query
             with connection.cursor() as cursor:
                 query = f"""
@@ -147,7 +150,7 @@ class SessionViewSet(viewsets.ModelViewSet):
                 """
                 cursor.execute(query, params)
                 rows = cursor.fetchall()
-                
+
                 # Convert to list of dicts
                 results = []
                 for row in rows:
@@ -163,22 +166,24 @@ class SessionViewSet(viewsets.ModelViewSet):
                         'bills': [],  # Empty for performance
                         'statements': []  # Empty for performance
                     })
-                
+
                 return Response({
                     'count': len(results),
                     'next': None,
                     'previous': None,
                     'results': results
                 })
-                
+
         except Exception as e:
             logger.error(f"Error in SessionViewSet list: {e}")
-            return Response({
-                'count': 0,
-                'next': None,
-                'previous': None,
-                'results': []
-            }, status=200)
+            return Response(
+                {
+                    'count': 0,
+                    'next': None,
+                    'previous': None,
+                    'results': []
+                },
+                status=200)
 
     @action(detail=True, methods=['get'])
     @api_action_wrapper(log_prefix="Fetching bills for session",
@@ -219,26 +224,26 @@ class BillViewSet(viewsets.ModelViewSet):
 
             # Add voting records count if available
             try:
-                voting_count = VotingRecord.objects.filter(bill=instance).count()
+                voting_count = VotingRecord.objects.filter(
+                    bill=instance).count()
                 response_data['voting_count'] = voting_count
             except:
                 response_data['voting_count'] = 0
 
             return Response(response_data)
         except Http404:
-            return Response({
-                'detail': 'Bill not found.'
-            }, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'Bill not found.'},
+                            status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"Error retrieving bill {kwargs.get('pk')}: {e}")
-            return Response({
-                'detail': 'Failed to retrieve bill'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'detail': 'Failed to retrieve bill'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get_queryset(self):
         # Optimize with select_related and prefetch_related
-        queryset = super().get_queryset().select_related('session').prefetch_related('statements')
-        
+        queryset = super().get_queryset().select_related(
+            'session').prefetch_related('statements')
+
         bill_name = self.request.query_params.get('bill_name')
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
@@ -296,7 +301,8 @@ class BillViewSet(viewsets.ModelViewSet):
             statements = Statement.objects.filter(bill=bill)
 
             # Get voting records for this bill - make this optional
-            voting_records = VotingRecord.objects.filter(bill=bill) if hasattr(VotingRecord, 'objects') else VotingRecord.objects.none()
+            voting_records = VotingRecord.objects.filter(bill=bill) if hasattr(
+                VotingRecord, 'objects') else VotingRecord.objects.none()
 
             # Combine sentiment from statements and voting
             combined_sentiment = {}
@@ -317,7 +323,8 @@ class BillViewSet(viewsets.ModelViewSet):
                         'combined_sentiment': 0
                     }
 
-                if speaker_name not in combined_sentiment[party_name]['members']:
+                if speaker_name not in combined_sentiment[party_name][
+                        'members']:
                     combined_sentiment[party_name]['members'][speaker_name] = {
                         'speaker_name': speaker_name,
                         'statements': [],
@@ -327,11 +334,16 @@ class BillViewSet(viewsets.ModelViewSet):
                         'combined_sentiment': 0
                     }
 
-                combined_sentiment[party_name]['members'][speaker_name]['statements'].append({
-                    'text': statement.text[:200] + '...' if len(statement.text) > 200 else statement.text,
-                    'sentiment_score': statement.sentiment_score or 0,
-                    'created_at': statement.created_at
-                })
+                combined_sentiment[party_name]['members'][speaker_name][
+                    'statements'].append({
+                        'text':
+                        statement.text[:200] +
+                        '...' if len(statement.text) > 200 else statement.text,
+                        'sentiment_score':
+                        statement.sentiment_score or 0,
+                        'created_at':
+                        statement.created_at
+                    })
 
                 combined_sentiment[party_name]['statement_count'] += 1
 
@@ -351,7 +363,8 @@ class BillViewSet(viewsets.ModelViewSet):
                         'combined_sentiment': 0
                     }
 
-                if speaker_name not in combined_sentiment[party_name]['members']:
+                if speaker_name not in combined_sentiment[party_name][
+                        'members']:
                     combined_sentiment[party_name]['members'][speaker_name] = {
                         'speaker_name': speaker_name,
                         'statements': [],
@@ -361,8 +374,10 @@ class BillViewSet(viewsets.ModelViewSet):
                         'combined_sentiment': 0
                     }
 
-                combined_sentiment[party_name]['members'][speaker_name]['vote_result'] = vote.vote_result
-                combined_sentiment[party_name]['members'][speaker_name]['vote_sentiment'] = vote.sentiment_score
+                combined_sentiment[party_name]['members'][speaker_name][
+                    'vote_result'] = vote.vote_result
+                combined_sentiment[party_name]['members'][speaker_name][
+                    'vote_sentiment'] = vote.sentiment_score
                 combined_sentiment[party_name]['voting_count'] += 1
 
             # Calculate averages and combined sentiment
@@ -373,8 +388,12 @@ class BillViewSet(viewsets.ModelViewSet):
                 for member_data in party_data['members'].values():
                     # Calculate average statement sentiment for member
                     if member_data['statements']:
-                        member_statement_avg = sum(s['sentiment_score'] for s in member_data['statements']) / len(member_data['statements'])
-                        member_data['avg_statement_sentiment'] = round(member_statement_avg, 3)
+                        member_statement_avg = sum(
+                            s['sentiment_score']
+                            for s in member_data['statements']) / len(
+                                member_data['statements'])
+                        member_data['avg_statement_sentiment'] = round(
+                            member_statement_avg, 3)
                         statement_sentiments.append(member_statement_avg)
 
                     # Add voting sentiment
@@ -387,37 +406,52 @@ class BillViewSet(viewsets.ModelViewSet):
 
                     if statement_weight > 0 and voting_weight > 0:
                         member_data['combined_sentiment'] = round(
-                            (member_data['avg_statement_sentiment'] * statement_weight + 
+                            (member_data['avg_statement_sentiment'] *
+                             statement_weight +
                              member_data['vote_sentiment'] * voting_weight), 3)
                     elif statement_weight > 0:
-                        member_data['combined_sentiment'] = member_data['avg_statement_sentiment']
+                        member_data['combined_sentiment'] = member_data[
+                            'avg_statement_sentiment']
                     elif voting_weight > 0:
-                        member_data['combined_sentiment'] = member_data['vote_sentiment']
+                        member_data['combined_sentiment'] = member_data[
+                            'vote_sentiment']
 
                 # Calculate party averages
                 if statement_sentiments:
-                    party_data['avg_statement_sentiment'] = round(sum(statement_sentiments) / len(statement_sentiments), 3)
+                    party_data['avg_statement_sentiment'] = round(
+                        sum(statement_sentiments) / len(statement_sentiments),
+                        3)
                 if voting_sentiments:
-                    party_data['avg_voting_sentiment'] = round(sum(voting_sentiments) / len(voting_sentiments), 3)
+                    party_data['avg_voting_sentiment'] = round(
+                        sum(voting_sentiments) / len(voting_sentiments), 3)
 
                 # Calculate combined party sentiment
-                all_member_sentiments = [m['combined_sentiment'] for m in party_data['members'].values() if m['combined_sentiment'] != 0]
+                all_member_sentiments = [
+                    m['combined_sentiment']
+                    for m in party_data['members'].values()
+                    if m['combined_sentiment'] != 0
+                ]
                 if all_member_sentiments:
-                    party_data['combined_sentiment'] = round(sum(all_member_sentiments) / len(all_member_sentiments), 3)
+                    party_data['combined_sentiment'] = round(
+                        sum(all_member_sentiments) /
+                        len(all_member_sentiments), 3)
 
             # Convert to list and sort by combined sentiment
             party_list = list(combined_sentiment.values())
-            party_list.sort(key=lambda x: x['combined_sentiment'], reverse=True)
+            party_list.sort(key=lambda x: x['combined_sentiment'],
+                            reverse=True)
 
             # Calculate overall statistics
             total_voting_records = voting_records.count()
-            vote_distribution = voting_records.values('vote_result').annotate(count=Count('id')) if voting_records.exists() else []
+            vote_distribution = voting_records.values('vote_result').annotate(
+                count=Count('id')) if voting_records.exists() else []
 
             return Response({
                 'bill': {
                     'id': bill.bill_id,
                     'name': bill.bill_nm,
-                    'session_date': bill.session.conf_dt if bill.session else None
+                    'session_date':
+                    bill.session.conf_dt if bill.session else None
                 },
                 'summary': {
                     'total_statements': statements.count(),
@@ -429,8 +463,9 @@ class BillViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error in bill voting sentiment analysis: {e}")
-            return Response({'error': 'Failed to fetch bill voting sentiment analysis'},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {'error': 'Failed to fetch bill voting sentiment analysis'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['get'])
     def sentiment(self, request, pk=None):
@@ -467,7 +502,8 @@ class BillViewSet(viewsets.ModelViewSet):
             average_sentiment = statements.aggregate(
                 avg=Avg('sentiment_score'))['avg'] or 0
             positive_count = statements.filter(sentiment_score__gt=0.3).count()
-            negative_count = statements.filter(sentiment_score__lt=-0.3).count()
+            negative_count = statements.filter(
+                sentiment_score__lt=-0.3).count()
             neutral_count = total_statements - positive_count - negative_count
 
             # Party breakdown
@@ -475,9 +511,8 @@ class BillViewSet(viewsets.ModelViewSet):
                 count=Count('id'),
                 avg_sentiment=Avg('sentiment_score'),
                 positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-                negative_count=Count(
-                    'id',
-                    filter=Q(sentiment_score__lt=-0.3))).order_by('-avg_sentiment')
+                negative_count=Count('id', filter=Q(
+                    sentiment_score__lt=-0.3))).order_by('-avg_sentiment')
 
             # Top speakers by sentiment (most positive and most negative)
             speaker_breakdown = statements.values(
@@ -540,9 +575,8 @@ class SpeakerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Filter to only show 22nd Assembly speakers
         queryset = super().get_queryset().filter(
-            models.Q(gtelt_eraco__icontains='22') | 
-            models.Q(gtelt_eraco__icontains='제22대')
-        )
+            models.Q(gtelt_eraco__icontains='22')
+            | models.Q(gtelt_eraco__icontains='제22대'))
         name = self.request.query_params.get('name')
         party = self.request.query_params.get('party')
         elecd_nm_param = self.request.query_params.get('elecd_nm')
@@ -633,7 +667,9 @@ class StatementViewSet(viewsets.ModelViewSet):
 class PartyViewSet(viewsets.ModelViewSet):
     queryset = Party.objects.all()
     serializer_class = PartySerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [
+        DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter
+    ]
     filterset_fields = ['name']
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'id']
@@ -652,7 +688,8 @@ class PartyViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         try:
-            fetch_additional = request.query_params.get('fetch_additional', 'false').lower() == 'true'
+            fetch_additional = request.query_params.get(
+                'fetch_additional', 'false').lower() == 'true'
 
             if fetch_additional:
                 try:
@@ -662,46 +699,60 @@ class PartyViewSet(viewsets.ModelViewSet):
                     else:
                         fetch_additional_data_nepjpxkkabqiqpbvk()
                 except Exception as e:
-                    logger.error(f"Error triggering additional data fetch: {e}")
+                    logger.error(
+                        f"Error triggering additional data fetch: {e}")
 
             # Single optimized query to get all party statistics
             from django.db.models import Case, When, IntegerField, Value
-            
+
             party_stats = Party.objects.filter(assembly_era=22).annotate(
                 member_count=Count(
                     'current_members',
                     filter=Q(current_members__gtelt_eraco__icontains='22'),
-                    distinct=True
-                ),
+                    distinct=True),
                 total_statements=Count(
                     'current_members__statements',
-                    filter=Q(current_members__statements__session__era_co__in=['22', '제22대']),
-                    distinct=True
-                ),
+                    filter=Q(current_members__statements__session__era_co__in=[
+                        '22', '제22대'
+                    ]),
+                    distinct=True),
                 avg_sentiment=Avg(
                     'current_members__statements__sentiment_score',
-                    filter=Q(current_members__statements__session__era_co__in=['22', '제22대'])
-                )
-            ).order_by('-member_count')
+                    filter=Q(current_members__statements__session__era_co__in=[
+                        '22', '제22대'
+                    ]))).order_by('-member_count')
 
             party_data = []
             for party in party_stats:
                 party_info = {
-                    'id': party.id,
-                    'name': party.name,
-                    'description': party.description,
-                    'slogan': party.slogan,
-                    'logo_url': party.logo_url,
-                    'assembly_era': party.assembly_era,
-                    'member_count': party.member_count,
-                    'total_statements': party.total_statements,
-                    'avg_sentiment': round(party.avg_sentiment or 0, 3),
-                    'approved_bills': 0,
-                    'rejected_bills': 0,
+                    'id':
+                    party.id,
+                    'name':
+                    party.name,
+                    'description':
+                    party.description,
+                    'slogan':
+                    party.slogan,
+                    'logo_url':
+                    party.logo_url,
+                    'assembly_era':
+                    party.assembly_era,
+                    'member_count':
+                    party.member_count,
+                    'total_statements':
+                    party.total_statements,
+                    'avg_sentiment':
+                    round(party.avg_sentiment or 0, 3),
+                    'approved_bills':
+                    0,
+                    'rejected_bills':
+                    0,
                     'recent_statements': [],
                     'top_members': [],
-                    'created_at': party.created_at.isoformat() if party.created_at else None,
-                    'updated_at': party.updated_at.isoformat() if party.updated_at else None
+                    'created_at':
+                    party.created_at.isoformat() if party.created_at else None,
+                    'updated_at':
+                    party.updated_at.isoformat() if party.updated_at else None
                 }
 
                 if party.member_count > 0 or party.total_statements > 0:
@@ -735,8 +786,9 @@ class StatementListView(generics.ListAPIView):
 def statement_list(request):
     """List all statements with pagination and filtering"""
     try:
-        statements_qs = Statement.objects.filter(session__era_co='22').select_related(
-            'speaker', 'session', 'bill').all()
+        statements_qs = Statement.objects.filter(
+            session__era_co='22').select_related('speaker', 'session',
+                                                 'bill').all()
 
         # Apply filters
         speaker_id = request.query_params.get('speaker_id')
@@ -776,7 +828,8 @@ def statement_list(request):
 def bill_list(request):
     """List all bills with pagination and filtering"""
     try:
-        bills_qs = Bill.objects.filter(session__era_co='22').select_related('session').all()
+        bills_qs = Bill.objects.filter(
+            session__era_co='22').select_related('session').all()
 
         # Apply filters
         session_id = request.query_params.get('session_id')
@@ -795,8 +848,8 @@ def bill_list(request):
 
         # Pagination - order by session date first, then creation time
         paginator = StandardResultsSetPagination()
-        page = paginator.paginate_queryset(bills_qs.order_by('-session__conf_dt', '-created_at'),
-                                           request)
+        page = paginator.paginate_queryset(
+            bills_qs.order_by('-session__conf_dt', '-created_at'), request)
         serializer = BillSerializer(page, many=True)
 
         return paginator.get_paginated_response(serializer.data)
@@ -842,7 +895,7 @@ def refresh_all_data(request):
 def data_status(request):
     """Real-time data collection status monitoring endpoint"""
 
-        # Basic counts
+    # Basic counts
     session_count = Session.objects.count()
     bill_count = Bill.objects.count()
     speaker_count = Speaker.objects.count()
@@ -920,8 +973,8 @@ def data_status(request):
                 'speaker':
                 latest_statement.speaker.naas_nm if latest_statement else None,
                 'sentiment':
-                round(latest_statement.sentiment_score, 2)
-                if latest_statement and latest_statement.sentiment_score else None
+                round(latest_statement.sentiment_score, 2) if latest_statement
+                and latest_statement.sentiment_score else None
             }
         },
         'last_updated': datetime.now()
@@ -1021,13 +1074,15 @@ def category_trend_analysis(request, category_id):
                 monthly_data[month_key] = {'count': 0, 'sentiment_scores': []}
             monthly_data[month_key]['count'] += 1
             if statement.sentiment_score is not None:
-                monthly_data[month_key]['sentiment_scores'].append(statement.sentiment_score)
+                monthly_data[month_key]['sentiment_scores'].append(
+                    statement.sentiment_score)
 
         # Calculate monthly averages
         trend_data = []
         for month, data in sorted(monthly_data.items()):
             if data['sentiment_scores']:
-                avg_sentiment = sum(data['sentiment_scores']) / len(data['sentiment_scores'])
+                avg_sentiment = sum(data['sentiment_scores']) / len(
+                    data['sentiment_scores'])
             else:
                 avg_sentiment = 0
             trend_data.append({
@@ -1056,7 +1111,8 @@ def overall_sentiment_stats(request):
     try:
         time_range = request.query_params.get('time_range', 'all')
 
-        statements_qs = Statement.objects.filter(session__era_co__in=['22', '제22대'])
+        statements_qs = Statement.objects.filter(
+            session__era_co__in=['22', '제22대'])
 
         # Apply time filter
         now = timezone.now()
@@ -1075,7 +1131,8 @@ def overall_sentiment_stats(request):
 
         if total_statements == 0:
             return Response({
-                'time_range': time_range,
+                'time_range':
+                time_range,
                 'overall_stats': {
                     'total_statements': 0,
                     'average_sentiment': 0,
@@ -1087,7 +1144,8 @@ def overall_sentiment_stats(request):
                 },
                 'party_rankings': [],
                 'active_speakers': [],
-                'message': 'No statements found for the specified time range'
+                'message':
+                'No statements found for the specified time range'
             })
 
         # Overall statistics
@@ -1106,29 +1164,38 @@ def overall_sentiment_stats(request):
             avg_sentiment=Avg('sentiment_score'),
             statement_count=Count('id'),
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-        ).filter(statement_count__gte=1).order_by('-avg_sentiment')[:10]
+            negative_count=Count(
+                'id', filter=Q(sentiment_score__lt=-0.3))).filter(
+                    statement_count__gte=1).order_by('-avg_sentiment')[:10]
 
         # Most active speakers
         speaker_stats = statements_qs.exclude(
-            speaker__naas_nm__in=['', ' ', '정보없음']
-        ).values(
-            'speaker__naas_nm', 'speaker__plpt_nm'
-        ).annotate(
-            avg_sentiment=Avg('sentiment_score'),
-            statement_count=Count('id')
-        ).filter(statement_count__gte=1).order_by('-statement_count')[:20]
+            speaker__naas_nm__in=['', ' ', '정보없음']).values(
+                'speaker__naas_nm', 'speaker__plpt_nm').annotate(
+                    avg_sentiment=Avg('sentiment_score'),
+                    statement_count=Count('id')).filter(
+                        statement_count__gte=1).order_by(
+                            '-statement_count')[:20]
 
         return Response({
             'time_range': time_range,
             'overall_stats': {
-                'total_statements': total_statements,
-                'average_sentiment': round(avg_sentiment, 3),
-                'positive_count': positive_count,
-                'neutral_count': neutral_count,
-                'negative_count': negative_count,
-                'positive_percentage': round((positive_count / total_statements) * 100, 1) if total_statements > 0 else 0,
-                'negative_percentage': round((negative_count / total_statements) * 100, 1) if total_statements > 0 else 0
+                'total_statements':
+                total_statements,
+                'average_sentiment':
+                round(avg_sentiment, 3),
+                'positive_count':
+                positive_count,
+                'neutral_count':
+                neutral_count,
+                'negative_count':
+                negative_count,
+                'positive_percentage':
+                round((positive_count / total_statements) *
+                      100, 1) if total_statements > 0 else 0,
+                'negative_percentage':
+                round((negative_count / total_statements) *
+                      100, 1) if total_statements > 0 else 0
             },
             'party_rankings': list(party_stats),
             'active_speakers': list(speaker_stats)
@@ -1136,32 +1203,36 @@ def overall_sentiment_stats(request):
 
     except Exception as e:
         logger.error(f"Error in overall sentiment stats: {e}")
-        return Response({
-            'time_range': time_range,
-            'overall_stats': {
-                'total_statements': 0,
-                'average_sentiment': 0,
-                'positive_count': 0,
-                'neutral_count': 0,
-                'negative_count': 0,
-                'positive_percentage': 0,
-                'negative_percentage': 0
+        return Response(
+            {
+                'time_range': time_range,
+                'overall_stats': {
+                    'total_statements': 0,
+                    'average_sentiment': 0,
+                    'positive_count': 0,
+                    'neutral_count': 0,
+                    'negative_count': 0,
+                    'positive_percentage': 0,
+                    'negative_percentage': 0
+                },
+                'party_rankings': [],
+                'active_speakers': [],
+                'error': 'Failed to fetch sentiment statistics'
             },
-            'party_rankings': [],
-            'active_speakers': [],
-            'error': 'Failed to fetch sentiment statistics'
-        }, status=status.HTTP_200_OK)
+            status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
 def sentiment_by_party_and_topic(request):
     """Get sentiment analysis grouped by party and topic/bill"""
     try:
-        group_by = request.query_params.get('group_by', 'bill')  # 'bill' or 'topic'
+        group_by = request.query_params.get('group_by',
+                                            'bill')  # 'bill' or 'topic'
         time_range = request.query_params.get('time_range', 'all')
 
         # Base queryset for statements
-        statements_qs = Statement.objects.select_related('speaker', 'bill', 'session').all()
+        statements_qs = Statement.objects.select_related(
+            'speaker', 'bill', 'session').all()
 
         # Apply time filter
         now = timezone.now()
@@ -1178,7 +1249,8 @@ def sentiment_by_party_and_topic(request):
             # Group by party and bill
             party_bill_data = {}
 
-            for statement in statements_qs.filter(sentiment_score__isnull=False, bill__isnull=False):
+            for statement in statements_qs.filter(
+                    sentiment_score__isnull=False, bill__isnull=False):
                 party_name = statement.speaker.get_current_party_name()
                 bill_name = statement.bill.bill_nm
 
@@ -1192,150 +1264,187 @@ def sentiment_by_party_and_topic(request):
                         'statement_count': 0
                     }
 
-                party_bill_data[key]['sentiment_scores'].append(statement.sentiment_score)
+                party_bill_data[key]['sentiment_scores'].append(
+                    statement.sentiment_score)
                 party_bill_data[key]['statement_count'] += 1
 
             # Calculate averages
             for data in party_bill_data.values():
                 if data['sentiment_scores']:
-                    data['avg_sentiment'] = round(sum(data['sentiment_scores']) / len(data['sentiment_scores']), 3)
-                    data['positive_count'] = len([s for s in data['sentiment_scores'] if s > 0.3])
-                    data['negative_count'] = len([s for s in data['sentiment_scores'] if s < -0.3])
-                    data['neutral_count'] = data['statement_count'] - data['positive_count'] - data['negative_count']
+                    data['avg_sentiment'] = round(
+                        sum(data['sentiment_scores']) /
+                        len(data['sentiment_scores']), 3)
+                    data['positive_count'] = len(
+                        [s for s in data['sentiment_scores'] if s > 0.3])
+                    data['negative_count'] = len(
+                        [s for s in data['sentiment_scores'] if s < -0.3])
+                    data['neutral_count'] = data['statement_count'] - data[
+                        'positive_count'] - data['negative_count']
                     # Remove raw sentiment scores to reduce response size
                     del data['sentiment_scores']
                     results.append(data)
+    except Exception as e:
+        logger.error(f"Error in policy_sentiment_by_category: {e}")
+    return Response({'error': 'Failed to analyze policy sentiment'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET'])
 def policy_sentiment_by_category(request):
     """Get sentiment analysis by policy category with stance analysis"""
     try:
         from .models import Category, Subcategory, BillCategoryMapping, BillSubcategoryMapping
-        
+
         category_filter = request.query_params.get('category')
         party_filter = request.query_params.get('party')
         time_range = request.query_params.get('time_range', 'all')
-        stance_filter = request.query_params.get('stance')  # progressive, conservative, moderate
-        
+        stance_filter = request.query_params.get(
+            'stance')  # progressive, conservative, moderate
+
         # Base queryset for statements with policy analysis
         statements_qs = Statement.objects.filter(
             sentiment_score__isnull=False,
-            bill__isnull=False
-        ).select_related('speaker', 'bill', 'session')
-        
+            bill__isnull=False).select_related('speaker', 'bill', 'session')
+
         # Apply time filter
         if time_range == 'year':
             statements_qs = statements_qs.filter(
-                session__conf_dt__gte=timezone.now().date() - timedelta(days=365)
-            )
+                session__conf_dt__gte=timezone.now().date() -
+                timedelta(days=365))
         elif time_range == 'month':
             statements_qs = statements_qs.filter(
-                session__conf_dt__gte=timezone.now().date() - timedelta(days=30)
-            )
-        
+                session__conf_dt__gte=timezone.now().date() -
+                timedelta(days=30))
+
         # Apply party filter
         if party_filter:
             statements_qs = statements_qs.filter(
-                speaker__current_party__name__icontains=party_filter
-            )
-        
+                speaker__current_party__name__icontains=party_filter)
+
         results = []
-        
+
         # Get all categories with their policy stance data
         for category in Category.objects.all():
             if category_filter and category.name != category_filter:
                 continue
-                
+
             # Get bills in this category
             category_bills = Bill.objects.filter(
                 category_mappings__category=category,
-                category_mappings__is_primary=True
-            )
-            
+                category_mappings__is_primary=True)
+
             # Get statements for these bills
             category_statements = statements_qs.filter(bill__in=category_bills)
-            
+
             if not category_statements.exists():
                 continue
-            
+
             # Analyze by subcategory and stance
             subcategory_analysis = []
             for subcat in category.subcategories.all():
                 subcat_bills = Bill.objects.filter(
                     subcategory_mappings__subcategory=subcat,
-                    subcategory_mappings__relevance_score__gte=0.5
-                )
-                
-                subcat_statements = category_statements.filter(bill__in=subcat_bills)
-                
+                    subcategory_mappings__relevance_score__gte=0.5)
+
+                subcat_statements = category_statements.filter(
+                    bill__in=subcat_bills)
+
                 if subcat_statements.exists():
                     # Get policy stance from subcategory mappings
                     stance_data = BillSubcategoryMapping.objects.filter(
-                        subcategory=subcat,
-                        bill__in=subcat_bills
+                        subcategory=subcat, bill__in=subcat_bills
                     ).values('policy_position').annotate(
                         count=Count('id'),
-                        avg_sentiment=Avg('bill__statements__sentiment_score')
-                    )
-                    
+                        avg_sentiment=Avg('bill__statements__sentiment_score'))
+
                     # Calculate sentiment by stance
                     stance_sentiment = {}
                     for stance_item in stance_data:
                         position = stance_item['policy_position']
                         if position and stance_item['avg_sentiment']:
                             stance_sentiment[position] = {
-                                'count': stance_item['count'],
-                                'avg_sentiment': round(stance_item['avg_sentiment'], 3)
+                                'count':
+                                stance_item['count'],
+                                'avg_sentiment':
+                                round(stance_item['avg_sentiment'], 3)
                             }
-                    
+
                     subcategory_analysis.append({
-                        'subcategory_name': subcat.name,
-                        'subcategory_description': subcat.description,
-                        'statement_count': subcat_statements.count(),
-                        'avg_sentiment': round(subcat_statements.aggregate(
-                            avg=Avg('sentiment_score'))['avg'] or 0, 3),
-                        'stance_breakdown': stance_sentiment,
-                        'policy_stance': subcat.policy_stance if hasattr(subcat, 'policy_stance') else 'moderate'
+                        'subcategory_name':
+                        subcat.name,
+                        'subcategory_description':
+                        subcat.description,
+                        'statement_count':
+                        subcat_statements.count(),
+                        'avg_sentiment':
+                        round(
+                            subcat_statements.aggregate(
+                                avg=Avg('sentiment_score'))['avg'] or 0, 3),
+                        'stance_breakdown':
+                        stance_sentiment,
+                        'policy_stance':
+                        subcat.policy_stance if hasattr(
+                            subcat, 'policy_stance') else 'moderate'
                     })
-            
+
             # Party breakdown for this category
             party_breakdown = []
             party_data = category_statements.values(
-                'speaker__current_party__name'
-            ).annotate(
-                party_name=F('speaker__current_party__name'),
-                statement_count=Count('id'),
-                avg_sentiment=Avg('sentiment_score'),
-                positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-                negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-            ).filter(statement_count__gte=3)
-            
+                'speaker__current_party__name').annotate(
+                    party_name=F('speaker__current_party__name'),
+                    statement_count=Count('id'),
+                    avg_sentiment=Avg('sentiment_score'),
+                    positive_count=Count('id',
+                                         filter=Q(sentiment_score__gt=0.3)),
+                    negative_count=Count(
+                        'id', filter=Q(sentiment_score__lt=-0.3))).filter(
+                            statement_count__gte=3)
+
             for party in party_data:
                 if party['party_name']:
                     party_breakdown.append({
-                        'party_name': party['party_name'],
-                        'statement_count': party['statement_count'],
-                        'avg_sentiment': round(party['avg_sentiment'] or 0, 3),
-                        'positive_count': party['positive_count'],
-                        'negative_count': party['negative_count'],
-                        'sentiment_trend': 'positive' if party['avg_sentiment'] > 0.1 else 'negative' if party['avg_sentiment'] < -0.1 else 'neutral'
+                        'party_name':
+                        party['party_name'],
+                        'statement_count':
+                        party['statement_count'],
+                        'avg_sentiment':
+                        round(party['avg_sentiment'] or 0, 3),
+                        'positive_count':
+                        party['positive_count'],
+                        'negative_count':
+                        party['negative_count'],
+                        'sentiment_trend':
+                        'positive'
+                        if party['avg_sentiment'] > 0.1 else 'negative'
+                        if party['avg_sentiment'] < -0.1 else 'neutral'
                     })
-            
+
             results.append({
-                'category_id': category.id,
-                'category_name': category.name,
-                'category_description': category.description,
-                'total_statements': category_statements.count(),
-                'avg_sentiment': round(category_statements.aggregate(
-                    avg=Avg('sentiment_score'))['avg'] or 0, 3),
-                'subcategory_analysis': subcategory_analysis,
-                'party_breakdown': sorted(party_breakdown, key=lambda x: x['avg_sentiment'], reverse=True),
-                'policy_areas': len(subcategory_analysis)
+                'category_id':
+                category.id,
+                'category_name':
+                category.name,
+                'category_description':
+                category.description,
+                'total_statements':
+                category_statements.count(),
+                'avg_sentiment':
+                round(
+                    category_statements.aggregate(
+                        avg=Avg('sentiment_score'))['avg'] or 0, 3),
+                'subcategory_analysis':
+                subcategory_analysis,
+                'party_breakdown':
+                sorted(party_breakdown,
+                       key=lambda x: x['avg_sentiment'],
+                       reverse=True),
+                'policy_areas':
+                len(subcategory_analysis)
             })
-        
+
         # Sort by average sentiment
         results.sort(key=lambda x: x['avg_sentiment'], reverse=True)
-        
+
         return Response({
             'time_range': time_range,
             'category_filter': category_filter,
@@ -1344,11 +1453,11 @@ def policy_sentiment_by_category(request):
             'results': results,
             'total_categories_analyzed': len(results)
         })
-        
+
     except Exception as e:
         logger.error(f"Error in policy_sentiment_by_category: {e}")
-        return Response({'error': 'Failed to analyze policy sentiment'}, 
-                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Failed to analyze policy sentiment'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -1356,14 +1465,12 @@ def speaker_policy_stance_analysis(request, speaker_id):
     """Analyze individual speaker's policy stances across categories"""
     try:
         speaker = get_object_or_404(Speaker, naas_cd=speaker_id)
-        
+
         # Get all statements by this speaker with policy analysis
         statements = Statement.objects.filter(
-            speaker=speaker,
-            sentiment_score__isnull=False,
-            bill__isnull=False
-        ).select_related('bill', 'session')
-        
+            speaker=speaker, sentiment_score__isnull=False,
+            bill__isnull=False).select_related('bill', 'session')
+
         if not statements.exists():
             return Response({
                 'speaker': {
@@ -1374,78 +1481,96 @@ def speaker_policy_stance_analysis(request, speaker_id):
                 'policy_analysis': [],
                 'overall_stance': 'insufficient_data'
             })
-        
+
         # Analyze by policy category
         policy_analysis = []
-        
+
         for category in Category.objects.all():
             # Get bills in this category that the speaker spoke about
             category_bills = Bill.objects.filter(
                 category_mappings__category=category,
-                statements__speaker=speaker
-            ).distinct()
-            
+                statements__speaker=speaker).distinct()
+
             if not category_bills.exists():
                 continue
-            
+
             category_statements = statements.filter(bill__in=category_bills)
-            
+
             # Analyze subcategory stances
             subcategory_stances = []
             for subcat in category.subcategories.all():
                 subcat_bills = category_bills.filter(
-                    subcategory_mappings__subcategory=subcat
-                )
-                
+                    subcategory_mappings__subcategory=subcat)
+
                 if subcat_bills.exists():
-                    subcat_statements = category_statements.filter(bill__in=subcat_bills)
-                    
+                    subcat_statements = category_statements.filter(
+                        bill__in=subcat_bills)
+
                     if subcat_statements.exists():
                         avg_sentiment = subcat_statements.aggregate(
                             avg=Avg('sentiment_score'))['avg']
-                        
+
                         # Determine stance based on sentiment and policy position
                         bill_positions = BillSubcategoryMapping.objects.filter(
                             subcategory=subcat,
-                            bill__in=subcat_bills
-                        ).values_list('policy_position', flat=True)
-                        
+                            bill__in=subcat_bills).values_list(
+                                'policy_position', flat=True)
+
                         dominant_position = None
                         if bill_positions:
                             position_counts = {}
                             for pos in bill_positions:
                                 if pos:
-                                    position_counts[pos] = position_counts.get(pos, 0) + 1
+                                    position_counts[pos] = position_counts.get(
+                                        pos, 0) + 1
                             if position_counts:
-                                dominant_position = max(position_counts.items(), key=lambda x: x[1])[0]
-                        
+                                dominant_position = max(
+                                    position_counts.items(),
+                                    key=lambda x: x[1])[0]
+
                         subcategory_stances.append({
-                            'subcategory': subcat.name,
-                            'statement_count': subcat_statements.count(),
-                            'avg_sentiment': round(avg_sentiment, 3),
-                            'policy_position': dominant_position,
-                            'stance_interpretation': 'supportive' if avg_sentiment > 0.2 else 'opposing' if avg_sentiment < -0.2 else 'neutral'
+                            'subcategory':
+                            subcat.name,
+                            'statement_count':
+                            subcat_statements.count(),
+                            'avg_sentiment':
+                            round(avg_sentiment, 3),
+                            'policy_position':
+                            dominant_position,
+                            'stance_interpretation':
+                            'supportive' if avg_sentiment > 0.2 else
+                            'opposing' if avg_sentiment < -0.2 else 'neutral'
                         })
-            
+
             if subcategory_stances:
-                category_avg = category_statements.aggregate(avg=Avg('sentiment_score'))['avg']
-                
+                category_avg = category_statements.aggregate(
+                    avg=Avg('sentiment_score'))['avg']
+
                 policy_analysis.append({
-                    'category': category.name,
-                    'category_description': category.description,
-                    'statement_count': category_statements.count(),
-                    'avg_sentiment': round(category_avg, 3),
-                    'subcategory_breakdown': subcategory_stances,
-                    'overall_stance': 'progressive' if category_avg > 0.3 else 'conservative' if category_avg < -0.3 else 'moderate'
+                    'category':
+                    category.name,
+                    'category_description':
+                    category.description,
+                    'statement_count':
+                    category_statements.count(),
+                    'avg_sentiment':
+                    round(category_avg, 3),
+                    'subcategory_breakdown':
+                    subcategory_stances,
+                    'overall_stance':
+                    'progressive' if category_avg > 0.3 else
+                    'conservative' if category_avg < -0.3 else 'moderate'
                 })
-        
+
         # Calculate overall political stance
         if policy_analysis:
-            overall_sentiment = sum(p['avg_sentiment'] for p in policy_analysis) / len(policy_analysis)
+            overall_sentiment = sum(
+                p['avg_sentiment']
+                for p in policy_analysis) / len(policy_analysis)
             overall_stance = 'progressive' if overall_sentiment > 0.2 else 'conservative' if overall_sentiment < -0.2 else 'moderate'
         else:
             overall_stance = 'insufficient_data'
-        
+
         return Response({
             'speaker': {
                 'id': speaker.naas_cd,
@@ -1453,16 +1578,22 @@ def speaker_policy_stance_analysis(request, speaker_id):
                 'party': speaker.get_current_party_name(),
                 'electoral_district': speaker.elecd_nm
             },
-            'policy_analysis': sorted(policy_analysis, key=lambda x: x['avg_sentiment'], reverse=True),
-            'overall_stance': overall_stance,
-            'total_statements_analyzed': statements.count(),
-            'active_policy_areas': len(policy_analysis)
+            'policy_analysis':
+            sorted(policy_analysis,
+                   key=lambda x: x['avg_sentiment'],
+                   reverse=True),
+            'overall_stance':
+            overall_stance,
+            'total_statements_analyzed':
+            statements.count(),
+            'active_policy_areas':
+            len(policy_analysis)
         })
-        
+
     except Exception as e:
         logger.error(f"Error in speaker_policy_stance_analysis: {e}")
-        return Response({'error': 'Failed to analyze speaker policy stance'}, 
-                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Failed to analyze speaker policy stance'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -1470,150 +1601,115 @@ def party_policy_comparison(request):
     """Compare parties' stances across policy categories"""
     try:
         from .models import Party
-        
+
         category_filter = request.query_params.get('category')
-        include_subcategories = request.query_params.get('subcategories', 'true').lower() == 'true'
-        
-        parties = Party.objects.filter(current_members__isnull=False).distinct()
-        
+        include_subcategories = request.query_params.get(
+            'subcategories', 'true').lower() == 'true'
+
+        parties = Party.objects.filter(
+            current_members__isnull=False).distinct()
+
         comparison_data = []
-        
+
         for party in parties:
             party_statements = Statement.objects.filter(
                 speaker__current_party=party,
                 sentiment_score__isnull=False,
-                bill__isnull=False
-            ).select_related('bill')
-            
+                bill__isnull=False).select_related('bill')
+
             if not party_statements.exists():
                 continue
-            
+
             party_analysis = {
                 'party_id': party.id,
                 'party_name': party.name,
                 'total_statements': party_statements.count(),
                 'categories': []
             }
-            
+
             for category in Category.objects.all():
                 if category_filter and category.name != category_filter:
                     continue
-                
+
                 # Get party statements in this category
                 category_bills = Bill.objects.filter(
                     category_mappings__category=category,
-                    category_mappings__is_primary=True
-                )
-                
-                category_statements = party_statements.filter(bill__in=category_bills)
-                
+                    category_mappings__is_primary=True)
+
+                category_statements = party_statements.filter(
+                    bill__in=category_bills)
+
                 if category_statements.exists():
                     category_data = {
-                        'category_name': category.name,
-                        'statement_count': category_statements.count(),
-                        'avg_sentiment': round(category_statements.aggregate(
-                            avg=Avg('sentiment_score'))['avg'], 3),
-                        'stance': 'progressive' if category_statements.aggregate(
-                            avg=Avg('sentiment_score'))['avg'] > 0.2 else 
-                                'conservative' if category_statements.aggregate(
-                            avg=Avg('sentiment_score'))['avg'] < -0.2 else 'moderate'
+                        'category_name':
+                        category.name,
+                        'statement_count':
+                        category_statements.count(),
+                        'avg_sentiment':
+                        round(
+                            category_statements.aggregate(
+                                avg=Avg('sentiment_score'))['avg'], 3),
+                        'stance':
+                        'progressive' if category_statements.aggregate(
+                            avg=Avg('sentiment_score'))['avg'] > 0.2 else
+                        'conservative' if category_statements.aggregate(
+                            avg=Avg('sentiment_score'))['avg'] < -0.2 else
+                        'moderate'
                     }
-                    
+
                     if include_subcategories:
                         subcategories = []
                         for subcat in category.subcategories.all():
                             subcat_bills = category_bills.filter(
-                                subcategory_mappings__subcategory=subcat
-                            )
-                            subcat_statements = category_statements.filter(bill__in=subcat_bills)
-                            
+                                subcategory_mappings__subcategory=subcat)
+                            subcat_statements = category_statements.filter(
+                                bill__in=subcat_bills)
+
                             if subcat_statements.exists():
                                 subcategories.append({
-                                    'name': subcat.name,
-                                    'statement_count': subcat_statements.count(),
-                                    'avg_sentiment': round(subcat_statements.aggregate(
-                                        avg=Avg('sentiment_score'))['avg'], 3)
+                                    'name':
+                                    subcat.name,
+                                    'statement_count':
+                                    subcat_statements.count(),
+                                    'avg_sentiment':
+                                    round(
+                                        subcat_statements.aggregate(
+                                            avg=Avg('sentiment_score'))['avg'],
+                                        3)
                                 })
-                        
+
                         category_data['subcategories'] = subcategories
-                    
+
                     party_analysis['categories'].append(category_data)
-            
+
             if party_analysis['categories']:
                 # Calculate overall party stance
-                overall_sentiment = sum(c['avg_sentiment'] for c in party_analysis['categories']) / len(party_analysis['categories'])
-                party_analysis['overall_stance'] = 'progressive' if overall_sentiment > 0.2 else 'conservative' if overall_sentiment < -0.2 else 'moderate'
-                party_analysis['overall_sentiment'] = round(overall_sentiment, 3)
-                
+                overall_sentiment = sum(
+                    c['avg_sentiment']
+                    for c in party_analysis['categories']) / len(
+                        party_analysis['categories'])
+                party_analysis[
+                    'overall_stance'] = 'progressive' if overall_sentiment > 0.2 else 'conservative' if overall_sentiment < -0.2 else 'moderate'
+                party_analysis['overall_sentiment'] = round(
+                    overall_sentiment, 3)
+
                 comparison_data.append(party_analysis)
-        
+
         # Sort by overall sentiment
-        comparison_data.sort(key=lambda x: x.get('overall_sentiment', 0), reverse=True)
-        
+        comparison_data.sort(key=lambda x: x.get('overall_sentiment', 0),
+                             reverse=True)
+
         return Response({
             'category_filter': category_filter,
             'include_subcategories': include_subcategories,
             'party_comparison': comparison_data,
             'total_parties_analyzed': len(comparison_data)
         })
-        
+
     except Exception as e:
         logger.error(f"Error in party_policy_comparison: {e}")
-        return Response({'error': 'Failed to compare party policies'}, 
-                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-                if data['sentiment_scores']:
-                    data['avg_sentiment'] = round(sum(data['sentiment_scores']) / len(data['sentiment_scores']), 3)
-                    data['positive_count'] = len([s for s in data['sentiment_scores'] if s > 0.3])
-                    data['negative_count'] = len([s for s in data['sentiment_scores'] if s < -0.3])
-                    data['neutral_count'] = data['statement_count'] - data['positive_count'] - data['negative_count']
-                    results.append(data)
-
-        else:  # group_by == 'topic'
-            # Group by party and topic (category)
-            party_topic_data = {}
-
-            for statement in statements_qs.filter(sentiment_score__isnull=False, categories__isnull=False).distinct():
-                party_name = statement.speaker.get_current_party_name()
-
-                for category_relation in statement.categories.all():
-                    topic_name = category_relation.category.name
-
-                    key = f"{party_name}|{topic_name}"
-                    if key not in party_topic_data:
-                        party_topic_data[key] = {
-                            'party_name': party_name,
-                            'topic_name': topic_name,
-                            'sentiment_scores': [],
-                            'statement_count': 0
-                        }
-
-                    party_topic_data[key]['sentiment_scores'].append(statement.sentiment_score)
-                    party_topic_data[key]['statement_count'] += 1
-
-            # Calculate averages
-            for data in party_topic_data.values():
-                if data['sentiment_scores']:
-                    data['avg_sentiment'] = round(sum(data['sentiment_scores']) / len(data['sentiment_scores']), 3)
-                    data['positive_count'] = len([s for s in data['sentiment_scores'] if s > 0.3])
-                    data['negative_count'] = len([s for s in data['sentiment_scores'] if s < -0.3])
-                    data['neutral_count'] = data['statement_count'] - data['positive_count'] - data['negative_count']
-                    results.append(data)
-
-        # Sort by average sentiment (descending)
-        results.sort(key=lambda x: x.get('avg_sentiment', 0), reverse=True)
-
-        return Response({
-            'group_by': group_by,
-            'time_range': time_range,
-            'results': results,
-            'total_entries': len(results)
-        })
-
-    except Exception as e:
-        logger.error(f"Error in sentiment_by_party_and_topic: {e}")
-        return Response({'error': 'Failed to fetch sentiment analysis'}, 
-                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Failed to compare party policies'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -1625,7 +1721,8 @@ def category_sentiment_analysis(request):
         category_filter = request.query_params.get('category')
 
         # Base queryset for statements with categories
-        statements_qs = Statement.objects.filter(categories__isnull=False).distinct()
+        statements_qs = Statement.objects.filter(
+            categories__isnull=False).distinct()
 
         # Apply time filter
         now = timezone.now()
@@ -1638,16 +1735,19 @@ def category_sentiment_analysis(request):
 
         # Apply party filter
         if party_filter:
-            statements_qs = statements_qs.filter(speaker__plpt_nm__icontains=party_filter)
+            statements_qs = statements_qs.filter(
+                speaker__plpt_nm__icontains=party_filter)
 
         # Apply category filter
         if category_filter:
-            statements_qs = statements_qs.filter(categories__category__name=category_filter)
+            statements_qs = statements_qs.filter(
+                categories__category__name=category_filter)
 
         # Get category-wise sentiment analysis
         category_data = []
         for category in Category.objects.all():
-            category_statements = statements_qs.filter(categories__category=category)
+            category_statements = statements_qs.filter(
+                categories__category=category)
 
             if not category_statements.exists():
                 continue
@@ -1656,41 +1756,60 @@ def category_sentiment_analysis(request):
                 avg_sentiment=Avg('sentiment_score'))['avg_sentiment'] or 0
 
             statement_count = category_statements.count()
-            positive_count = category_statements.filter(sentiment_score__gt=0.3).count()
-            negative_count = category_statements.filter(sentiment_score__lt=-0.3).count()
+            positive_count = category_statements.filter(
+                sentiment_score__gt=0.3).count()
+            negative_count = category_statements.filter(
+                sentiment_score__lt=-0.3).count()
             neutral_count = statement_count - positive_count - negative_count
 
             # Get party breakdown for this category
-            party_breakdown = category_statements.values('speaker__plpt_nm').annotate(
-                count=Count('id'),
-                avg_sentiment=Avg('sentiment_score')
-            ).order_by('-avg_sentiment')[:10]
+            party_breakdown = category_statements.values(
+                'speaker__plpt_nm').annotate(
+                    count=Count('id'), avg_sentiment=Avg(
+                        'sentiment_score')).order_by('-avg_sentiment')[:10]
 
             # Get subcategory breakdown
             subcategory_breakdown = []
             for subcategory in category.subcategories.all():
-                subcat_statements = category_statements.filter(categories__subcategory=subcategory)
+                subcat_statements = category_statements.filter(
+                    categories__subcategory=subcategory)
                 if subcat_statements.exists():
                     subcategory_breakdown.append({
-                        'subcategory_id': subcategory.id,
-                        'subcategory_name': subcategory.name,
-                        'statement_count': subcat_statements.count(),
-                        'avg_sentiment': round(subcat_statements.aggregate(
-                            avg=Avg('sentiment_score'))['avg'] or 0, 3)
+                        'subcategory_id':
+                        subcategory.id,
+                        'subcategory_name':
+                        subcategory.name,
+                        'statement_count':
+                        subcat_statements.count(),
+                        'avg_sentiment':
+                        round(
+                            subcat_statements.aggregate(
+                                avg=Avg('sentiment_score'))['avg'] or 0, 3)
                     })
 
             category_data.append({
-                'category_id': category.id,
-                'category_name': category.name,
-                'statement_count': statement_count,
-                'avg_sentiment': round(avg_sentiment, 3),
-                'positive_count': positive_count,
-                'negative_count': negative_count,
-                'neutral_count': neutral_count,
-                'positive_percentage': round((positive_count / statement_count) * 100, 1),
-                'negative_percentage': round((negative_count / statement_count) * 100, 1),
-                'party_breakdown': list(party_breakdown),
-                'subcategory_breakdown': subcategory_breakdown
+                'category_id':
+                category.id,
+                'category_name':
+                category.name,
+                'statement_count':
+                statement_count,
+                'avg_sentiment':
+                round(avg_sentiment, 3),
+                'positive_count':
+                positive_count,
+                'negative_count':
+                negative_count,
+                'neutral_count':
+                neutral_count,
+                'positive_percentage':
+                round((positive_count / statement_count) * 100, 1),
+                'negative_percentage':
+                round((negative_count / statement_count) * 100, 1),
+                'party_breakdown':
+                list(party_breakdown),
+                'subcategory_breakdown':
+                subcategory_breakdown
             })
 
         # Sort by average sentiment (descending)
@@ -1706,8 +1825,9 @@ def category_sentiment_analysis(request):
 
     except Exception as e:
         logger.error(f"Error in category sentiment analysis: {e}")
-        return Response({'error': 'Failed to fetch category sentiment analysis'},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': 'Failed to fetch category sentiment analysis'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -1783,7 +1903,8 @@ def parties_list(request):
 
         for party in parties:
             # Get speakers for this party
-            all_speakers = Speaker.objects.filter(plpt_nm__icontains=party.name)
+            all_speakers = Speaker.objects.filter(
+                plpt_nm__icontains=party.name)
             member_count = all_speakers.count()
 
             # Skip if no members found
@@ -1791,7 +1912,8 @@ def parties_list(request):
                 continue
 
             # Get statements and sentiment analysis
-            statements = Statement.objects.filter(speaker__plpt_nm__icontains=party.name)
+            statements = Statement.objects.filter(
+                speaker__plpt_nm__icontains=party.name)
             avg_sentiment = statements.aggregate(
                 Avg('sentiment_score'))['sentiment_score__avg']
             total_statements = statements.count()
@@ -1953,6 +2075,7 @@ def party_detail(request, party_id):
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(['GET'])
 def sentiment_analysis_list(request):
     """Get list of sentiment analysis data"""
@@ -1960,7 +2083,8 @@ def sentiment_analysis_list(request):
         time_range = request.query_params.get('time_range', 'all')
 
         # Base queryset for statements
-        statements_qs = Statement.objects.select_related('speaker', 'session', 'bill').all()
+        statements_qs = Statement.objects.select_related(
+            'speaker', 'session', 'bill').all()
 
         # Apply time filter
         now = timezone.now()
@@ -1979,23 +2103,30 @@ def sentiment_analysis_list(request):
 
         # By speaker sentiment
         speaker_sentiment = statements_qs.values(
-            'speaker__naas_nm', 'speaker__plpt_nm'
-        ).annotate(
-            avg_sentiment=Avg('sentiment_score'),
-            statement_count=Count('id'),
-            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-        ).filter(statement_count__gte=3).order_by('-avg_sentiment')[:20]
+            'speaker__naas_nm', 'speaker__plpt_nm').annotate(
+                avg_sentiment=Avg('sentiment_score'),
+                statement_count=Count('id'),
+                positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+                negative_count=Count(
+                    'id', filter=Q(sentiment_score__lt=-0.3))).filter(
+                        statement_count__gte=3).order_by('-avg_sentiment')[:20]
 
         for speaker in speaker_sentiment:
             results.append({
-                'type': 'speaker',
-                'name': speaker['speaker__naas_nm'],
-                'party': speaker['speaker__plpt_nm'],
-                'avg_sentiment': round(speaker['avg_sentiment'] or 0, 3),
-                'statement_count': speaker['statement_count'],
-                'positive_count': speaker['positive_count'],
-                'negative_count': speaker['negative_count']
+                'type':
+                'speaker',
+                'name':
+                speaker['speaker__naas_nm'],
+                'party':
+                speaker['speaker__plpt_nm'],
+                'avg_sentiment':
+                round(speaker['avg_sentiment'] or 0, 3),
+                'statement_count':
+                speaker['statement_count'],
+                'positive_count':
+                speaker['positive_count'],
+                'negative_count':
+                speaker['negative_count']
             })
 
         return Response(results)
@@ -2010,12 +2141,11 @@ def session_sentiment_by_party(request, pk):
     """Get sentiment analysis by party for a specific session"""
     try:
         session = get_object_or_404(Session, conf_id=pk)
-        
+
         # Get statements for this session
         statements = Statement.objects.filter(
             session=session,
-            sentiment_score__isnull=False
-        ).select_related('speaker')
+            sentiment_score__isnull=False).select_related('speaker')
 
         if not statements.exists():
             return Response({
@@ -2030,14 +2160,14 @@ def session_sentiment_by_party(request, pk):
 
         # Group by party and calculate sentiment
         party_sentiment = {}
-        
+
         for statement in statements:
             party_name = statement.speaker.get_current_party_name()
-            
+
             # Skip invalid parties
             if not party_name or party_name in ['정보없음', '', ' ', '무소속']:
                 continue
-                
+
             if party_name not in party_sentiment:
                 party_sentiment[party_name] = {
                     'party_name': party_name,
@@ -2048,10 +2178,11 @@ def session_sentiment_by_party(request, pk):
                     'negative_count': 0,
                     'neutral_count': 0
                 }
-            
-            party_sentiment[party_name]['statements'].append(statement.sentiment_score)
+
+            party_sentiment[party_name]['statements'].append(
+                statement.sentiment_score)
             party_sentiment[party_name]['statement_count'] += 1
-            
+
             if statement.sentiment_score > 0.3:
                 party_sentiment[party_name]['positive_count'] += 1
             elif statement.sentiment_score < -0.3:
@@ -2064,8 +2195,8 @@ def session_sentiment_by_party(request, pk):
         for party_data in party_sentiment.values():
             if party_data['statements']:
                 party_data['avg_sentiment'] = round(
-                    sum(party_data['statements']) / len(party_data['statements']), 3
-                )
+                    sum(party_data['statements']) /
+                    len(party_data['statements']), 3)
                 del party_data['statements']  # Remove raw data
                 results.append(party_data)
 
@@ -2084,15 +2215,17 @@ def session_sentiment_by_party(request, pk):
 
     except Exception as e:
         logger.error(f"Error in session_sentiment_by_party: {e}")
-        return Response({
-            'session': {
-                'id': pk,
-                'title': None,
-                'date': None
+        return Response(
+            {
+                'session': {
+                    'id': pk,
+                    'title': None,
+                    'date': None
+                },
+                'party_sentiment': [],
+                'total_statements': 0
             },
-            'party_sentiment': [],
-            'total_statements': 0
-        }, status=200)
+            status=200)
 
 
 @api_view(['GET'])
@@ -2103,7 +2236,9 @@ def party_analytics(request):
         categories = request.query_params.get('categories')
 
         # Base queryset for statements
-        statements_qs = Statement.objects.filter(session__era_co__in=['제22대', '22']).select_related('speaker', 'session', 'bill')
+        statements_qs = Statement.objects.filter(
+            session__era_co__in=['제22대', '22']).select_related(
+                'speaker', 'session', 'bill')
 
         # Apply time filter
         now = timezone.now()
@@ -2116,8 +2251,11 @@ def party_analytics(request):
 
         # Apply category filter if provided
         if categories:
-            category_ids = [int(id.strip()) for id in categories.split(',') if id.strip()]
-            statements_qs = statements_qs.filter(categories__category_id__in=category_ids)
+            category_ids = [
+                int(id.strip()) for id in categories.split(',') if id.strip()
+            ]
+            statements_qs = statements_qs.filter(
+                categories__category_id__in=category_ids)
 
         # Get party analytics
         party_stats = statements_qs.values('speaker__plpt_nm').annotate(
@@ -2125,32 +2263,46 @@ def party_analytics(request):
             statement_count=Count('id'),
             avg_sentiment=Avg('sentiment_score'),
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-        ).filter(statement_count__gt=0).order_by('-statement_count')
+            negative_count=Count(
+                'id', filter=Q(sentiment_score__lt=-0.3))).filter(
+                    statement_count__gt=0).order_by('-statement_count')
 
         # Clean up party names and add member counts
         results = []
         for party in party_stats:
-            if not party['party_name'] or party['party_name'] in ['', ' ', '무소속', '정보없음']:
+            if not party['party_name'] or party['party_name'] in [
+                    '', ' ', '무소속', '정보없음'
+            ]:
                 continue
-                
+
             member_count = Speaker.objects.filter(
                 plpt_nm__icontains=party['party_name'],
-                gtelt_eraco__icontains='22'
-            ).count()
-            
-            neutral_count = party['statement_count'] - party['positive_count'] - party['negative_count']
-            
+                gtelt_eraco__icontains='22').count()
+
+            neutral_count = party['statement_count'] - party[
+                'positive_count'] - party['negative_count']
+
             results.append({
-                'party_name': party['party_name'],
-                'member_count': member_count,
-                'statement_count': party['statement_count'],
-                'avg_sentiment': round(party['avg_sentiment'] or 0, 3),
-                'positive_count': party['positive_count'],
-                'negative_count': party['negative_count'],
-                'neutral_count': neutral_count,
-                'positive_percentage': round((party['positive_count'] / party['statement_count']) * 100, 1) if party['statement_count'] > 0 else 0,
-                'negative_percentage': round((party['negative_count'] / party['statement_count']) * 100, 1) if party['statement_count'] > 0 else 0
+                'party_name':
+                party['party_name'],
+                'member_count':
+                member_count,
+                'statement_count':
+                party['statement_count'],
+                'avg_sentiment':
+                round(party['avg_sentiment'] or 0, 3),
+                'positive_count':
+                party['positive_count'],
+                'negative_count':
+                party['negative_count'],
+                'neutral_count':
+                neutral_count,
+                'positive_percentage':
+                round((party['positive_count'] / party['statement_count']) *
+                      100, 1) if party['statement_count'] > 0 else 0,
+                'negative_percentage':
+                round((party['negative_count'] / party['statement_count']) *
+                      100, 1) if party['statement_count'] > 0 else 0
             })
 
         return Response({
@@ -2161,7 +2313,8 @@ def party_analytics(request):
 
     except Exception as e:
         logger.error(f"Error in party analytics: {e}")
-        return Response({'error': 'Failed to fetch party analytics'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Failed to fetch party analytics'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -2174,18 +2327,25 @@ def overall_analytics(request):
         sessions_qs = Session.objects.filter(era_co__in=['제22대', '22'])
         bills_qs = Bill.objects.filter(session__era_co__in=['제22대', '22'])
         speakers_qs = Speaker.objects.filter(gtelt_eraco__icontains='22')
-        statements_qs = Statement.objects.filter(session__era_co__in=['제22대', '22'])
+        statements_qs = Statement.objects.filter(
+            session__era_co__in=['제22대', '22'])
 
         # Apply time filter
         now = timezone.now()
         if time_range == 'year':
-            statements_qs = statements_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=365))
-            sessions_qs = sessions_qs.filter(conf_dt__gte=now.date() - timedelta(days=365))
-            bills_qs = bills_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=365))
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=365))
+            sessions_qs = sessions_qs.filter(conf_dt__gte=now.date() -
+                                             timedelta(days=365))
+            bills_qs = bills_qs.filter(session__conf_dt__gte=now.date() -
+                                       timedelta(days=365))
         elif time_range == 'month':
-            statements_qs = statements_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=30))
-            sessions_qs = sessions_qs.filter(conf_dt__gte=now.date() - timedelta(days=30))
-            bills_qs = bills_qs.filter(session__conf_dt__gte=now.date() - timedelta(days=30))
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=30))
+            sessions_qs = sessions_qs.filter(conf_dt__gte=now.date() -
+                                             timedelta(days=30))
+            bills_qs = bills_qs.filter(session__conf_dt__gte=now.date() -
+                                       timedelta(days=30))
 
         # Basic counts
         total_sessions = sessions_qs.count()
@@ -2197,8 +2357,7 @@ def overall_analytics(request):
         sentiment_stats = statements_qs.aggregate(
             avg_sentiment=Avg('sentiment_score'),
             positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-        )
+            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3)))
 
         avg_sentiment = sentiment_stats['avg_sentiment'] or 0
         positive_count = sentiment_stats['positive_count'] or 0
@@ -2207,19 +2366,24 @@ def overall_analytics(request):
 
         # Recent activity
         recent_activity = {
-            'recent_sessions': sessions_qs.order_by('-conf_dt')[:5].values('conf_id', 'title', 'conf_dt'),
-            'recent_bills': bills_qs.order_by('-created_at')[:5].values('bill_id', 'bill_nm', 'proposer'),
-            'recent_statements': statements_qs.order_by('-created_at')[:10].select_related('speaker').values(
-                'id', 'speaker__naas_nm', 'text', 'sentiment_score', 'created_at'
-            )
+            'recent_sessions':
+            sessions_qs.order_by('-conf_dt')[:5].values(
+                'conf_id', 'title', 'conf_dt'),
+            'recent_bills':
+            bills_qs.order_by('-created_at')[:5].values(
+                'bill_id', 'bill_nm', 'proposer'),
+            'recent_statements':
+            statements_qs.order_by('-created_at')[:10].select_related(
+                'speaker').values('id', 'speaker__naas_nm', 'text',
+                                  'sentiment_score', 'created_at')
         }
 
         # Top parties by activity
         top_parties = statements_qs.values('speaker__plpt_nm').annotate(
             party_name=F('speaker__plpt_nm'),
             statement_count=Count('id'),
-            avg_sentiment=Avg('sentiment_score')
-        ).filter(statement_count__gt=5).order_by('-statement_count')[:10]
+            avg_sentiment=Avg('sentiment_score')).filter(
+                statement_count__gt=5).order_by('-statement_count')[:10]
 
         return Response({
             'time_range': time_range,
@@ -2230,12 +2394,20 @@ def overall_analytics(request):
                 'total_statements': total_statements
             },
             'sentiment_analysis': {
-                'average_sentiment': round(avg_sentiment, 3),
-                'positive_count': positive_count,
-                'negative_count': negative_count,
-                'neutral_count': neutral_count,
-                'positive_percentage': round((positive_count / total_statements) * 100, 1) if total_statements > 0 else 0,
-                'negative_percentage': round((negative_count / total_statements) * 100, 1) if total_statements > 0 else 0
+                'average_sentiment':
+                round(avg_sentiment, 3),
+                'positive_count':
+                positive_count,
+                'negative_count':
+                negative_count,
+                'neutral_count':
+                neutral_count,
+                'positive_percentage':
+                round((positive_count / total_statements) *
+                      100, 1) if total_statements > 0 else 0,
+                'negative_percentage':
+                round((negative_count / total_statements) *
+                      100, 1) if total_statements > 0 else 0
             },
             'recent_activity': {
                 'recent_sessions': list(recent_activity['recent_sessions']),
@@ -2247,7 +2419,8 @@ def overall_analytics(request):
 
     except Exception as e:
         logger.error(f"Error in overall analytics: {e}")
-        return Response({'error': 'Failed to fetch overall analytics'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Failed to fetch overall analytics'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -2256,9 +2429,12 @@ def stats_overview(request):
     try:
         # Get basic counts for 22nd Assembly
         sessions_22 = Session.objects.filter(era_co__in=['제22대', '22']).count()
-        bills_22 = Bill.objects.filter(session__era_co__in=['제22대', '22']).count()
-        speakers_22 = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
-        statements_22 = Statement.objects.filter(session__era_co__in=['제22대', '22']).count()
+        bills_22 = Bill.objects.filter(
+            session__era_co__in=['제22대', '22']).count()
+        speakers_22 = Speaker.objects.filter(
+            gtelt_eraco__icontains='22').count()
+        statements_22 = Statement.objects.filter(
+            session__era_co__in=['제22대', '22']).count()
         parties_22 = Party.objects.filter(assembly_era=22).count()
 
         # If no 22nd Assembly data, get from any assembly
@@ -2283,13 +2459,15 @@ def stats_overview(request):
 
     except Exception as e:
         logger.error(f"Error in stats_overview: {e}")
-        return Response({
-            'total_sessions': 0,
-            'total_bills': 0,
-            'total_speakers': 0,
-            'total_statements': 0,
-            'total_parties': 0
-        }, status=200)
+        return Response(
+            {
+                'total_sessions': 0,
+                'total_bills': 0,
+                'total_speakers': 0,
+                'total_statements': 0,
+                'total_parties': 0
+            },
+            status=200)
 
 
 @api_view(['GET'])
@@ -2298,15 +2476,14 @@ def home_data(request):
     try:
         # Get recent sessions - keep it simple and fast
         recent_sessions = Session.objects.filter(
-            era_co__in=['22', '제22대']
-        ).order_by('-conf_dt')[:5]
-        
+            era_co__in=['22', '제22대']).order_by('-conf_dt')[:5]
+
         sessions_data = []
         for session in recent_sessions:
             # Count statements for this session
             statement_count = Statement.objects.filter(session=session).count()
             bill_count = Bill.objects.filter(session=session).count()
-            
+
             # Handle missing session data gracefully
             title = session.title
             if not title:
@@ -2314,82 +2491,109 @@ def home_data(request):
                 sess = session.sess or '1'
                 dgr = session.dgr or '1'
                 title = f'제{era}대 제{sess}회 제{dgr}차'
-            
+
             sessions_data.append({
-                'id': session.conf_id,
-                'title': title,
-                'date': session.conf_dt.isoformat() if session.conf_dt else None,
-                'committee': session.cmit_nm or '',
-                'statement_count': statement_count,
-                'bill_count': bill_count
+                'id':
+                session.conf_id,
+                'title':
+                title,
+                'date':
+                session.conf_dt.isoformat() if session.conf_dt else None,
+                'committee':
+                session.cmit_nm or '',
+                'statement_count':
+                statement_count,
+                'bill_count':
+                bill_count
             })
 
         # Get recent bills - simple query, ordered by session date
         recent_bills = Bill.objects.filter(
-            session__era_co__in=['22', '제22대']
-        ).select_related('session').order_by('-session__conf_dt', '-created_at')[:5]
-        
+            session__era_co__in=['22', '제22대']).select_related(
+                'session').order_by('-session__conf_dt', '-created_at')[:5]
+
         bills_data = []
         for bill in recent_bills:
             # Count statements for this bill
             statement_count = Statement.objects.filter(bill=bill).count()
-            
+
             # Clean bill title - remove leading numbers like "10. "
             clean_title = bill.bill_nm
             if clean_title and '. ' in clean_title:
                 parts = clean_title.split('. ', 1)
                 if parts[0].isdigit():
                     clean_title = parts[1]
-            
+
             bills_data.append({
-                'id': bill.bill_id,
-                'title': clean_title,
-                'proposer': bill.proposer or '정보없음',
-                'session_id': bill.session.conf_id if bill.session else None,
-                'session_title': bill.session.title if bill.session and bill.session.title else (
-                    f"제{bill.session.era_co}대 제{bill.session.sess}회 제{bill.session.dgr}차" if bill.session else None
-                ),
-                'statement_count': statement_count
+                'id':
+                bill.bill_id,
+                'title':
+                clean_title,
+                'proposer':
+                bill.proposer or '정보없음',
+                'session_id':
+                bill.session.conf_id if bill.session else None,
+                'session_title':
+                bill.session.title if bill.session and bill.session.title else
+                (f"제{bill.session.era_co}대 제{bill.session.sess}회 제{bill.session.dgr}차"
+                 if bill.session else None),
+                'statement_count':
+                statement_count
             })
 
         # Get recent statements - simple query
         recent_statements = Statement.objects.filter(
-            session__era_co__in=['제22대', '22']
-        ).select_related('speaker', 'session', 'bill').order_by('-created_at')[:10]
+            session__era_co__in=['제22대', '22']).select_related(
+                'speaker', 'session', 'bill').order_by('-created_at')[:10]
 
         statements_data = []
         for statement in recent_statements:
             statements_data.append({
-                'id': statement.id,
-                'speaker_name': statement.speaker.naas_nm if statement.speaker else '알 수 없음',
-                'speaker_party': statement.speaker.get_current_party_name() if statement.speaker else '정당정보없음',
-                'text': statement.text[:200] + '...' if len(statement.text) > 200 else statement.text,
-                'sentiment_score': statement.sentiment_score or 0,
-                'session_title': statement.session.title if statement.session and statement.session.title else None,
-                'bill_title': statement.bill.bill_nm if statement.bill else None,
-                'created_at': statement.created_at.isoformat() if statement.created_at else None
+                'id':
+                statement.id,
+                'speaker_name':
+                statement.speaker.naas_nm if statement.speaker else '알 수 없음',
+                'speaker_party':
+                statement.speaker.get_current_party_name()
+                if statement.speaker else '정당정보없음',
+                'text':
+                statement.text[:200] +
+                '...' if len(statement.text) > 200 else statement.text,
+                'sentiment_score':
+                statement.sentiment_score or 0,
+                'session_title':
+                statement.session.title
+                if statement.session and statement.session.title else None,
+                'bill_title':
+                statement.bill.bill_nm if statement.bill else None,
+                'created_at':
+                statement.created_at.isoformat()
+                if statement.created_at else None
             })
 
         # Basic counts - simple queries
-        total_sessions = Session.objects.filter(era_co__in=['22', '제22대']).count()
-        total_bills = Bill.objects.filter(session__era_co__in=['22', '제22대']).count()
-        total_speakers = Speaker.objects.filter(gtelt_eraco__icontains='22').count()
-        total_statements = Statement.objects.filter(session__era_co__in=['22', '제22대']).count()
+        total_sessions = Session.objects.filter(
+            era_co__in=['22', '제22대']).count()
+        total_bills = Bill.objects.filter(
+            session__era_co__in=['22', '제22대']).count()
+        total_speakers = Speaker.objects.filter(
+            gtelt_eraco__icontains='22').count()
+        total_statements = Statement.objects.filter(
+            session__era_co__in=['22', '제22대']).count()
 
         # Calculate sentiment stats
         sentiment_stats = Statement.objects.filter(
             session__era_co__in=['22', '제22대'],
-            sentiment_score__isnull=False
-        ).aggregate(
-            avg_sentiment=Avg('sentiment_score'),
-            positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
-            negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
-        )
+            sentiment_score__isnull=False).aggregate(
+                avg_sentiment=Avg('sentiment_score'),
+                positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+                negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3)))
 
         avg_sentiment = sentiment_stats['avg_sentiment'] or 0
         positive_count = sentiment_stats['positive_count'] or 0
         negative_count = sentiment_stats['negative_count'] or 0
-        neutral_count = max(0, total_statements - positive_count - negative_count)
+        neutral_count = max(0,
+                            total_statements - positive_count - negative_count)
 
         return Response({
             'recent_sessions': sessions_data,
@@ -2410,19 +2614,21 @@ def home_data(request):
 
     except Exception as e:
         logger.error(f"Error in home_data view: {e}")
-        return Response({
-            'recent_sessions': [],
-            'recent_bills': [],
-            'recent_statements': [],
-            'overall_stats': {
-                'total_statements': 0,
-                'average_sentiment': 0,
-                'positive_count': 0,
-                'neutral_count': 0,
-                'negative_count': 0
+        return Response(
+            {
+                'recent_sessions': [],
+                'recent_bills': [],
+                'recent_statements': [],
+                'overall_stats': {
+                    'total_statements': 0,
+                    'average_sentiment': 0,
+                    'positive_count': 0,
+                    'neutral_count': 0,
+                    'negative_count': 0
+                },
+                'party_stats': [],
+                'total_sessions': 0,
+                'total_bills': 0,
+                'total_speakers': 0
             },
-            'party_stats': [],
-            'total_sessions': 0,
-            'total_bills': 0,
-            'total_speakers': 0
-        }, status=200)
+            status=200)

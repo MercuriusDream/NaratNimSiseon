@@ -31,11 +31,15 @@ args = "cd frontend && npm install && npm run build"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
+args = "cd backend && python manage.py makemigrations"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
 args = "cd backend && python manage.py migrate"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd backend && python manage.py collectstatic --noinput"
+args = "cd backend && python manage.py runserver 0.0.0.0:3000"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
