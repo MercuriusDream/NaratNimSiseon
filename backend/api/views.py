@@ -1197,6 +1197,11 @@ def sentiment_by_party_and_topic(request):
 
             # Calculate averages
             for data in party_bill_data.values():
+                if data['sentiment_scores']:
+                    data['avg_sentiment'] = round(sum(data['sentiment_scores']) / len(data['sentiment_scores']), 3)
+                    data['positive_count'] = len([s for s in data['sentiment_scores'] if s > 0.3])
+                    data['negative_count'] = len([s for s in data['sentiment_scores'] if s < -0.3])
+                    data['neutral_count'] = data['statement_count'] - data['positive_count'] - data['negative_count']
 
 @api_view(['GET'])
 def policy_sentiment_by_category(request):
