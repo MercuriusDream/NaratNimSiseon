@@ -2429,33 +2429,32 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
     safe_bill_name = str(bill_name)[:100] if bill_name else "알 수 없는 의안"
 
     # Create batch prompt for multiple segments
-    segments_text = ""
+    b = ""
     for i, segment in enumerate(cleaned_segments):
-        segments_text += f"\n--- 구간 {i+1} ---\n{segment}\n"
+        b += f"\n--- {i+1} ---\n{segment}\n"
 
     # Split prompt if too large
     max_prompt_length = 15000  # Conservative limit
-    if len(segments_text) > max_prompt_length:
+    if len(b) > max_prompt_length:
         # Process in smaller sub-batches
         return _process_large_batch_in_chunks(batch_model, cleaned_segments,
                                               bill_name, assembly_members,
                                               estimated_tokens,
                                               batch_start_index)
 
-    prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-국회 발언 분석 요청:
+    prompt = f"""역사 기록가. 정확도 중요. 미래 의존.
+국회 발언 분석:
 
 의안: {safe_bill_name}
 
-발언 구간들:
-{segments_text}
+구간들:
+{b}
 
-다음 JSON 배열로 응답하세요:
+JSON 배열 응답:
 [
   {{
     "segment_index": 1,
-    "speaker_name": "발언자명",
+    "speaker_name": "a",
     "start_idx": 0,
     "end_idx": 100,
     "is_valid_member": true,
@@ -2466,10 +2465,10 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
 ]
 
 규칙:
-- ◯로 시작하는 실제 의원 발언만 포함
-- 의사진행 발언자 제외
-- 발언자명에서 직책 제거
-- JSON 배열만 응답"""
+- ◯ 시작 의원 발언만
+- 의사진행자 제외
+- 직책 제거
+- JSON만"""
 
     return _execute_batch_analysis(batch_model, prompt, cleaned_segments,
                                    processed_segments, assembly_members,
@@ -2770,26 +2769,25 @@ def extract_statements_with_llm_discovery(full_text,
 
     # Prepare the list of known bills for the prompt
     if known_bill_names:
-        known_bills_str = "\n".join(f"- {name}" for name in known_bill_names)
+        a = "\n".join(f"- {name}" for name in known_bill_names)
     else:
-        known_bills_str = "No known bills were provided."
+        a = "No known bills were provided."
 
-    prompt = f"""You are a world-class legislative analyst AI. Your task is to read a parliamentary transcript
-and perfectly segment the entire discussion for all topics, while also analyzing policy content.
+    prompt = f"""Legislative analyst AI. Segment parliamentary transcript and analyze policy content.
 
 **CONTEXT:**
-I already know about the following bills. You MUST find the discussion for these if they exist.
+Known bills (find these if they exist):
 --- KNOWN BILLS ---
-{known_bills_str}
+{a}
 
-**YOUR CRITICAL MISSION:**
-1. Read the entire transcript below.
-2. Identify the exact start and end character index for the complete discussion of each **KNOWN BILL**.
-3. Discover any additional bills/topics not in the known list, and identify their discussion spans.
-4. For each bill/topic, analyze the policy content and categorize it.
-5. Return a JSON object with segmentation AND policy analysis.
+**TASK:**
+1. Read transcript below.
+2. Find exact start/end char index for each KNOWN BILL discussion.
+3. Discover additional bills/topics and their spans.
+4. Analyze policy content and categorize.
+5. Return JSON with segmentation AND policy analysis.
 
-**POLICY CATEGORIES:**
+**CATEGORIES:**
 - 경제/산업: 경제정책, 산업진흥, 금융, 무역, 중소기업, 벤처
 - 사회복지: 복지정책, 사회보장, 의료보험, 연금, 돌봄서비스
 - 교육/문화: 교육정책, 대학, 문화예술, 체육, 관광
@@ -2802,44 +2800,37 @@ I already know about the following bills. You MUST find the discussion for these
 - 보건/의료: 보건정책, 의료서비스, 질병관리, 건강증진
 
 **RULES:**
-- Ignore any mentions that occur in the table-of-contents or front-matter portion of the document
-  (before the Chair officially opens the debate).
-- A discussion segment **must** be substantive, containing actual debate or remarks from multiple speakers.
-  Do not segment short procedural announcements.
-- `bill_name` for known bills MUST EXACTLY MATCH the provided list.
-- For new items, create a concise, accurate `bill_name`.
-- Analyze policy content for each segment and assign appropriate categories.
-- Extract key policy phrases and specific keywords related to the bill.
-- Return **ONLY** the final JSON object.
+- Skip table-of-contents/front-matter
+- Substantive discussion only (multiple speakers)
+- Known bill names must EXACTLY match list
+- Return ONLY JSON
 
 **TRANSCRIPT:**
 ---
 {full_text}
 ---
 
-**REQUIRED JSON OUTPUT FORMAT:**
+**JSON FORMAT:**
 {{
   "bills_found": [
     {{
-      "bill_name": "Exact name of a KNOWN bill",
+      "bill_name": "a",
       "start_index": 1234,
       "end_index": 5678,
-      "policy_categories": ["경제/산업", "사회복지"],
-      "key_policy_phrases": ["중소기업 지원", "일자리 창출", "사회안전망"],
-      "bill_specific_keywords": ["세제혜택", "금융지원", "고용보험"]
+      "policy_categories": ["b", "c"],
+      "key_policy_phrases": ["d", "e", "f"],
+      "bill_specific_keywords": ["g", "h", "i"]
     }}
-    // …more known bills
   ],
   "newly_discovered": [
     {{
-      "bill_name": "Name of a newly discovered topic",
+      "bill_name": "j",
       "start_index": 2345,
       "end_index": 6789,
-      "policy_categories": ["환경/에너지"],
-      "key_policy_phrases": ["탄소중립", "재생에너지"],
-      "bill_specific_keywords": ["태양광", "풍력", "배터리"]
+      "policy_categories": ["k"],
+      "key_policy_phrases": ["l", "m"],
+      "bill_specific_keywords": ["n", "o", "p"]
     }}
-    // …more new topics
   ]
 }}
 """
@@ -3395,33 +3386,29 @@ def analyze_single_statement(statement_data_dict, session_id, debug=False):
         })
         return statement_data_dict
 
-    speaker_name = statement_data_dict.get('speaker_name', 'Unknown')
-    text_to_analyze = statement_data_dict.get('text', '')
+    a = statement_data_dict.get('speaker_name', 'Unknown')
+    b = statement_data_dict.get('text', '')
 
-    if not text_to_analyze:
+    if not b:
         logger.warning(
-            f"No text to analyze for speaker '{speaker_name}' (generic analysis)."
+            f"No text to analyze for speaker '{a}' (generic analysis)."
         )
         return statement_data_dict
 
-    text_for_prompt = text_to_analyze
-    prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+    prompt = f"""역사 기록가. 정확도 중요.
 
-국회 발언 분석 요청:
-발언자: {speaker_name}
-발언 내용:
+국회 발언 분석:
+발언자: {a}
+내용:
 ---
-{text_for_prompt}
+{b}
 ---
 
-위 발언 내용을 분석하여 다음 JSON 형식으로 결과를 제공해주세요.
+JSON 응답:
 {{
-  "sentiment_score": -1.0 부터 1.0 사이의 감성 점수 (숫자),
-  "sentiment_reason": "감성 판단의 주요 근거 (간략히)"
+  "sentiment_score": -1.0~1.0,
+  "sentiment_reason": "근거"
 }}
-(가이드라인은 이전 분석 함수들과 유사하게 적용)
-응답은 반드시 유효한 JSON 형식이어야 합니다.
 """
     try:
         response = model.generate_content(prompt)
