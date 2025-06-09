@@ -1872,6 +1872,7 @@ def get_all_assembly_members():
     try:
         # Ensure fresh database connection
         from django.db import connection
+        from .models import Speaker
         connection.ensure_connection()
 
         # Get all speaker names from our local database
