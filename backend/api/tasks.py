@@ -3708,9 +3708,37 @@ def process_pdf_text_for_statements(full_text,
                         f"Created {len(bill_segments_from_llm)} equal fallback segments"
                     )
         else:
-            logger.info(
+            logger.warning(
                 f"⚠️ No bill names found for session {session_id}, will process entire text as general discussion"
             )
+            
+            # Debug information
+            try:
+                session = Session.objects.get(conf_id=session_id)
+                logger.error(f"🔍 DEBUG INFO for session {session_id}:")
+                logger.error(f"   - Session title: {session.title}")
+                logger.error(f"   - Session committee: {session.cmit_nm}")
+                logger.error(f"   - Session date: {session.conf_dt}")
+                logger.error(f"   - PDF URL exists: {bool(session.down_url)}")
+                
+                # Check if bills exist in database
+                bills_in_db = Bill.objects.filter(session=session)
+                logger.error(f"   - Bills in database: {bills_in_db.count()}")
+                
+                if bills_in_db.exists():
+                    logger.error(f"   - Bill names from DB:")
+                    for bill in bills_in_db[:5]:  # Show first 5
+                        logger.error(f"     * {bill.bill_nm}")
+                    if bills_in_db.count() > 5:
+                        logger.error(f"     ... and {bills_in_db.count() - 5} more")
+                else:
+                    logger.error(f"   - No bills found in database for this session")
+                    logger.error(f"   - This may be an administrative session or bills haven't been fetched yet")
+                    
+            except Session.DoesNotExist:
+                logger.error(f"   - Session {session_id} not found in database!")
+            except Exception as e:
+                logger.error(f"   - Error getting debug info: {e}")
     else:
         logger.error(
             f"❌ Segmentation LLM not available for session {session_id}")
