@@ -3622,13 +3622,14 @@ def discover_bills_from_content_llm(full_text, max_bills=10, debug=False):
     """Let LLM discover what bills are actually discussed in the PDF content"""
     if not genai or debug:
         return []
-    
+
     try:
         discovery_model = genai.GenerativeModel('gemini-2.0-flash-lite')
-        
+
         # Use first 50k chars for discovery to avoid token limits
-        discovery_text = full_text[:50000] if len(full_text) > 50000 else full_text
-        
+        discovery_text = full_text[:50000] if len(
+            full_text) > 50000 else full_text
+
         prompt = f"""
 당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
 
@@ -3659,33 +3660,37 @@ def discover_bills_from_content_llm(full_text, max_bills=10, debug=False):
 """
 
         response = discovery_model.generate_content(prompt)
-        
+
         if not response or not response.text:
             logger.warning("No response from LLM for bill discovery")
             return []
-            
-        response_text = response.text.strip().replace('```json', '').replace('```', '').strip()
-        
+
+        response_text = response.text.strip().replace('```json',
+                                                      '').replace('```',
+                                                                  '').strip()
+
         try:
             data = json.loads(response_text)
             discussed_bills = data.get('discussed_bills', [])
-            
+
             valid_bills = []
             for bill_info in discussed_bills:
-                if (bill_info.get('confidence', 0) >= 0.7 and 
-                    bill_info.get('bill_name', '').strip()):
+                if (bill_info.get('confidence', 0) >= 0.7
+                        and bill_info.get('bill_name', '').strip()):
                     valid_bills.append(bill_info['bill_name'].strip())
-                    
-            logger.info(f"🔍 LLM discovered {len(valid_bills)} actually discussed bills")
+
+            logger.info(
+                f"🔍 LLM discovered {len(valid_bills)} actually discussed bills"
+            )
             for bill in valid_bills:
                 logger.info(f"   📋 {bill[:80]}...")
-                
+
             return valid_bills
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error in bill discovery: {e}")
             return []
-            
+
     except Exception as e:
         logger.error(f"Error in bill discovery: {e}")
         return []
@@ -3753,9 +3758,13 @@ def process_pdf_text_for_statements(full_text,
         segmentation_llm = None
 
     # First, let the LLM discover what bills are actually discussed
-    logger.info(f"🔍 Step 1: Discovering bills actually discussed in session {session_id}")
-    discovered_bills = discover_bills_from_content_llm(full_text, max_bills=15, debug=debug)
-    
+    logger.info(
+        f"🔍 Step 1: Discovering bills actually discussed in session {session_id}"
+    )
+    discovered_bills = discover_bills_from_content_llm(full_text,
+                                                       max_bills=15,
+                                                       debug=debug)
+
     bill_segments_from_llm = []
     if segmentation_llm and discovered_bills:
         logger.info(
@@ -3769,7 +3778,7 @@ def process_pdf_text_for_statements(full_text,
                 segmentation_llm, full_text, discovered_bills)
         except Exception as e_seg:
             logger.error(f"Error during LLM bill segmentation: {e_seg}")
-            
+
     elif segmentation_llm and bill_names_list and len(bill_names_list) > 0:
         # Fallback to predetermined list if discovery fails
         logger.info(
@@ -3781,12 +3790,12 @@ def process_pdf_text_for_statements(full_text,
                 segmentation_llm, full_text, bill_names_list)
         except Exception as e_seg:
             logger.error(f"Error during fallback bill segmentation: {e_seg}")
-            
+
     else:
         logger.warning(
             f"⚠️ No bills discovered or found for session {session_id}, will process entire text as general discussion"
         )
-        
+
         # Debug information
         try:
             session = Session.objects.get(conf_id=session_id)
@@ -3794,11 +3803,11 @@ def process_pdf_text_for_statements(full_text,
             logger.info(f"   - Title: {session.title}")
             logger.info(f"   - Committee: {session.cmit_nm}")
             logger.info(f"   - Date: {session.conf_dt}")
-            
+
             # Check if bills exist in database
             bills_in_db = Bill.objects.filter(session=session)
             logger.info(f"   - Bills in database: {bills_in_db.count()}")
-            
+
             if bills_in_db.exists():
                 logger.info(f"   - Sample bill names from DB:")
                 for bill in bills_in_db[:3]:  # Show first 3
@@ -3806,9 +3815,12 @@ def process_pdf_text_for_statements(full_text,
                 if bills_in_db.count() > 3:
                     logger.info(f"     ... and {bills_in_db.count() - 3} more")
             else:
-                logger.info(f"   - No bills found in database for this session")
-                logger.info(f"   - This may be an administrative/voting session without detailed debate")
-                
+                logger.info(
+                    f"   - No bills found in database for this session")
+                logger.info(
+                    f"   - This may be an administrative/voting session without detailed debate"
+                )
+
         except Session.DoesNotExist:
             logger.error(f"   - Session {session_id} not found in database!")
         except Exception as e:
@@ -3843,8 +3855,7 @@ def _process_bill_segmentation_with_batching(segmentation_llm,
         )
 
         # Process entire text at once without batching
-        return _process_single_segmentation_chunk(segmentation_llm,
-                                                  clean_text,
+        return _process_single_segmentation_chunk(segmentation_llm, clean_text,
                                                   safe_bill_names, 0)
 
     except Exception as e:
@@ -3880,61 +3891,49 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
         logger.info(f"📋 Bills to find: {len(bill_names_list)} bills")
 
         prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
+당신은 대한민국 국회의 회의록을 분석하는 최고 수준의 입법 분석 전문가입니다. 당신의 유일한 임무는 주어진 회의록 텍스트에서 특정 법안에 대한 **실제 토론 전체**를, 하나의 연속된 구간으로 정확히 식별하는 것입니다.
 
-국회 회의록에서 각 법안에 대한 **완전한 대화 전체**를 찾아주세요. 법안이 처음 언급되는 순간부터 그 법안에 대한 논의가 완전히 끝나는 순간까지의 모든 내용을 포함해야 합니다.
-
-대상 법안들:
+**대상 법안:**
 {bill_list_str}
 
-회의록 텍스트:
+**회의록 텍스트:**
 ---
 {text_chunk}
 ---
 
-**중요한 작업 단계:**
+**매우 중요한 분석 절차 (이 순서를 반드시 따르십시오):**
 
-1. **각 법안의 첫 언급 찾기**: 법안명이나 관련 키워드가 처음 나타나는 지점
-2. **대화의 완전한 끝 찾기**: 해당 법안에 대한 모든 논의, 질의응답, 표결까지 포함하여 완전히 끝나는 지점
-3. **연속된 대화 블록 확인**: ◯ 발언들이 해당 법안에 대해 연속적으로 이어지는 전체 구간
+**1단계: '의사일정' 영역 식별 및 건너뛰기**
+*   먼저, 회의록 시작 부분에 있는 '의사일정' 및 '상정된 안건' 섹션을 찾으십시오.
+*   **이 영역은 실제 토론이 아니므로, 내용 추출 대상으로 삼지 않습니다.** 이 목록이 끝나는 지점을 확인하고, 그 이후부터 실제 분석을 시작합니다.
 
-각 법안에 대한 **완전한 대화 구간**을 찾아 JSON으로 응답:
+**2단계: 실제 토론의 '시작 지점' 찾기**
+*   '의사일정' 영역이 끝난 후, 각 대상 법안에 대한 실제 토론이 시작되는 지점을 찾으십시오.
+*   **가장 중요한 신호:** 실제 토론은 일반적으로 의장이 `◯의장 ... 의사일정 제O항 ... 을 상정합니다.`라고 말하며 시작됩니다. 이 '상정' 발언이 가장 확실한 시작점입니다.
+
+**3단계: 토론의 '종료 지점' 찾기**
+*   안건이 상정된 이후, 관련된 모든 발언(질의, 답변, 찬반토론, 의사진행발언 등)이 이어집니다.
+*   토론의 끝은 의장이 토론 종결, 표결(`가결되었음을 선포합니다`), 또는 다음 안건을 상정하면서 명확해집니다. 이 지점이 종료점입니다.
+
+**4. 최종 검증 및 출력**
+*   위 단계에 따라 찾은 구간이 **실제 토론인지 다시 확인**하십시오.
+    *   구간 내에 `◯◯◯의원`과 같은 실제 발언자들의 대화가 포함되어 있습니까?
+    *   구간의 길이가 수천 자에 달하는 의미 있는 토론입니까?
+*   이 모든 조건을 만족하는 경우에만, 아래 JSON 형식으로 결과를 출력하십시오.
+*   **만약 특정 법안에 대한 의미 있는 토론 구간을 찾지 못했다면, 그 법안은 결과 JSON에서 완전히 제외하십시오.**
+
+**출력 형식 (JSON):**
 {{
   "segments": [
     {{
-      "bill_name": "위 목록에서 복사한 정확한 법안명",
-      "start_index": 해당_법안_첫_언급_지점,
-      "end_index": 해당_법안_논의_완전_종료_지점
+      "bill_name": "대상 법안 목록에 있는 정확한 법안명",
+      "start_index": "해당 법안의 '실제 토론' 시작 인덱스 ('상정' 발언)",
+      "end_index": "해당 법안의 '실제 토론' 종료 인덱스"
     }}
+    // 의미 있는 토론을 찾은 법안만 여기에 포함
   ]
 }}
-
-**절대적 조건들:**
-
-1. **완전한 대화 포함**: 
-   - 법안 첫 언급부터 마지막 관련 발언까지 **모든 것** 포함
-   - 의사진행 발언, 질의응답, 표결 과정 모두 포함
-   - 최소 2000자 이상이어야 완전한 대화로 인정
-
-2. **정확한 범위 설정**:
-   - start_index: 해당 법안이 **처음 언급되는** 지점 (법안명 언급 시작점)
-   - end_index: 해당 법안 관련 **마지막 발언이 끝나는** 지점 (다음 주제로 넘어가기 직전)
-
-3. **연속성 확인**: 
-   - 해당 법안에 대한 ◯ 발언들이 연속적으로 이어지는 전체 블록
-   - 중간에 다른 주제가 끼어들면 해당 지점까지만 포함
-
-4. **품질 검증**:
-   - 2000자 미만이면 완전한 대화가 아니므로 start_index: -1, end_index: -1
-   - 단순 언급만 있고 실제 토론이 없으면 start_index: -1, end_index: -1
-
-**올바른 예시:**
-- 법안 첫 언급: 위치 500 → 논의 완전 종료: 위치 8500 (8000자의 완전한 대화)
-- 법안 첫 언급: 위치 1200 → 논의 완전 종료: 위치 4800 (3600자의 완전한 대화)
-
-**잘못된 예시:**
-- start_index: 1882, end_index: 1890 (8자 - 너무 짧음, 완전한 대화 아님)
-- start_index: 80, end_index: 1265 (1185자 - 부분적 대화만 포함, 완전하지 않음)"""
+"""
 
         try:
             response = segmentation_llm.generate_content(prompt)
@@ -3982,8 +3981,9 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
             # NOTE: start_idx and end_idx below are expected to be precise Python string indices (0-based, inclusive start, exclusive end)
             valid_segments = []
             seen_bills = set()
-            
-            logger.error(f"🐛 DEBUG: Processing {len(segments)} segments from LLM")
+
+            logger.error(
+                f"🐛 DEBUG: Processing {len(segments)} segments from LLM")
             for i, seg in enumerate(segments):
                 logger.error(f"🐛 DEBUG: Segment {i+1}: {seg}")
                 # Ensure seg is a dictionary
@@ -4023,37 +4023,39 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                 if matched_bill_name and matched_bill_name not in seen_bills:
                     try:
                         start_idx = int(seg.get('start_index', 0))
-                        end_idx = int(seg.get('end_index', start_idx + 1000))  # Default to reasonable segment size
-                        
+                        end_idx = int(seg.get(
+                            'end_index', start_idx +
+                            1000))  # Default to reasonable segment size
+
                         # Skip if LLM couldn't find substantial discussion (-1 indices)
                         if start_idx == -1 or end_idx == -1:
                             logger.info(
                                 f"LLM found no substantial discussion for bill '{bill_name}' (indices: {start_idx}, {end_idx})"
                             )
                             continue
-                            
+
                         # Validate indices within chunk bounds
                         if start_idx < 0 or start_idx >= len(text_chunk):
                             logger.warning(
                                 f"Invalid start_index {start_idx} for bill '{bill_name}' (chunk length: {len(text_chunk)})"
                             )
                             continue
-                            
+
                         # Ensure end_idx is valid and creates a substantial segment
                         if end_idx <= start_idx or end_idx > len(text_chunk):
                             logger.warning(
                                 f"Invalid end_index {end_idx} for bill '{bill_name}' (start: {start_idx}, chunk length: {len(text_chunk)})"
                             )
                             continue
-                        
+
                         # Apply offset for global positioning
                         global_start = start_idx + offset
                         global_end = end_idx + offset
-                        
+
                         # Validate segment is substantial (minimum 2000 chars for complete conversation)
                         segment_length = global_end - global_start
                         MIN_CONVERSATION_LENGTH = 2000  # Require at least 2000 chars for complete conversation
-                        
+
                         if segment_length >= MIN_CONVERSATION_LENGTH:
                             valid_segments.append({
                                 'a': matched_bill_name,
@@ -4061,11 +4063,11 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                                 'e': global_end
                             })
                             seen_bills.add(matched_bill_name)
-                            
+
                             logger.info(
                                 f"✅ Found substantial conversation for '{matched_bill_name}': {global_start}-{global_end} ({segment_length} chars)"
                             )
-                            
+
                             if bill_name != matched_bill_name:
                                 logger.info(
                                     f"Mapped LLM response '{bill_name}' to original bill '{matched_bill_name}'"
@@ -4074,7 +4076,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                             logger.warning(
                                 f"Segment too short for complete conversation - bill '{bill_name}': {segment_length} chars (minimum: {MIN_CONVERSATION_LENGTH} required for full conversation)"
                             )
-                            
+
                     except (ValueError, TypeError) as e:
                         logger.warning(
                             f"Error processing indices for segment {bill_name}: {e}"
@@ -4086,9 +4088,12 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                     )
             # If no valid segments found, try intelligent fallback
             if not valid_segments and bill_names_list:
-                logger.warning(f"LLM segmentation found no substantial conversations. Trying intelligent fallback.")
-                return _fallback_bill_segmentation(text_chunk, bill_names_list, offset)
-            
+                logger.warning(
+                    f"LLM segmentation found no substantial conversations. Trying intelligent fallback."
+                )
+                return _fallback_bill_segmentation(text_chunk, bill_names_list,
+                                                   offset)
+
             return valid_segments
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
@@ -4097,78 +4102,89 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
                 f"Raw response that caused error: {response_text[:500]}...")
             # Try fallback when JSON parsing fails
             if bill_names_list:
-                logger.info("Attempting fallback segmentation due to JSON parsing error")
-                return _fallback_bill_segmentation(text_chunk, bill_names_list, offset)
+                logger.info(
+                    "Attempting fallback segmentation due to JSON parsing error"
+                )
+                return _fallback_bill_segmentation(text_chunk, bill_names_list,
+                                                   offset)
             return []
 
     except Exception as e:
         logger.error(f"Error in single segmentation chunk: {e}")
         # Try fallback when any error occurs
         if bill_names_list:
-            logger.info("Attempting fallback segmentation due to processing error")
-            return _fallback_bill_segmentation(text_chunk, bill_names_list, offset)
+            logger.info(
+                "Attempting fallback segmentation due to processing error")
+            return _fallback_bill_segmentation(text_chunk, bill_names_list,
+                                               offset)
         return []
 
 
 def _fallback_bill_segmentation(text_chunk, bill_names_list, offset):
     """Intelligent fallback for bill segmentation when LLM fails"""
     import re
-    
-    logger.info(f"🔄 Using intelligent fallback segmentation for {len(bill_names_list)} bills")
-    
+
+    logger.info(
+        f"🔄 Using intelligent fallback segmentation for {len(bill_names_list)} bills"
+    )
+
     valid_segments = []
-    
+
     # Find all speaker markers (◯) to identify conversation boundaries
     speaker_positions = []
     for match in re.finditer(r'◯', text_chunk):
         speaker_positions.append(match.start())
-    
+
     if len(speaker_positions) < 2:
-        logger.warning("Not enough speaker markers for meaningful segmentation")
+        logger.warning(
+            "Not enough speaker markers for meaningful segmentation")
         return []
-    
+
     # Try to find each bill by searching for keywords
     for bill_name in bill_names_list:
         # Extract key terms from bill name
         bill_keywords = []
-        
+
         # Remove common suffixes and extract core terms
         clean_name = bill_name.replace('법률안', '').replace('일부개정', '').strip()
         if '(' in clean_name:
             clean_name = clean_name.split('(')[0].strip()
-        
+
         # Split into meaningful keywords (remove short words)
         words = [w.strip() for w in clean_name.split() if len(w.strip()) > 2]
         bill_keywords.extend(words)
-        
+
         if not bill_keywords:
             continue
-        
+
         # Search for the bill in the text
         best_match_pos = -1
         best_match_score = 0
-        
+
         # Look for keyword combinations
         for i, keyword in enumerate(bill_keywords):
-            for match in re.finditer(re.escape(keyword), text_chunk, re.IGNORECASE):
+            for match in re.finditer(re.escape(keyword), text_chunk,
+                                     re.IGNORECASE):
                 pos = match.start()
-                
+
                 # Calculate score based on surrounding context
                 context_start = max(0, pos - 100)
                 context_end = min(len(text_chunk), pos + 100)
                 context = text_chunk[context_start:context_end].lower()
-                
+
                 # Score based on how many bill keywords appear in context
                 score = sum(1 for kw in bill_keywords if kw.lower() in context)
-                
+
                 if score > best_match_score:
                     best_match_score = score
                     best_match_pos = pos
-        
+
         if best_match_pos == -1 or best_match_score < 2:  # Need at least 2 keyword matches
-            logger.info(f"Could not find substantial content for bill: {bill_name[:50]}...")
+            logger.info(
+                f"Could not find substantial content for bill: {bill_name[:50]}..."
+            )
             continue
-        
+
         # Find the conversation segment around this position
         # Find the nearest speaker marker before the match
         start_speaker_pos = -1
@@ -4176,20 +4192,23 @@ def _fallback_bill_segmentation(text_chunk, bill_names_list, offset):
             if pos <= best_match_pos:
                 start_speaker_pos = pos
                 break
-        
+
         if start_speaker_pos == -1:
             start_speaker_pos = 0
-        
+
         # Find a reasonable end point (next few speaker markers or reasonable distance)
         end_pos = len(text_chunk)
-        speakers_after = [pos for pos in speaker_positions if pos > best_match_pos]
-        
+        speakers_after = [
+            pos for pos in speaker_positions if pos > best_match_pos
+        ]
+
         if speakers_after:
             # Take several speakers to ensure we get the full conversation
-            num_speakers_to_include = min(10, len(speakers_after))  # Include up to 10 speakers
+            num_speakers_to_include = min(
+                10, len(speakers_after))  # Include up to 10 speakers
             if num_speakers_to_include > 0:
                 end_pos = speakers_after[num_speakers_to_include - 1]
-                
+
                 # Extend to find natural break
                 remaining_text = text_chunk[end_pos:end_pos + 1000]
                 for break_pattern in ['\n\n', '의사일정', '○']:
@@ -4197,19 +4216,19 @@ def _fallback_bill_segmentation(text_chunk, bill_names_list, offset):
                     if break_match != -1:
                         end_pos += break_match
                         break
-        
+
         # Ensure substantial length
         segment_length = end_pos - start_speaker_pos
         if segment_length >= 2000:  # Minimum 2000 chars for complete conversation
             global_start = start_speaker_pos + offset
             global_end = end_pos + offset
-            
+
             valid_segments.append({
                 'a': bill_name,
                 'b': global_start,
                 'e': global_end
             })
-            
+
             logger.info(
                 f"✅ Fallback found conversation for '{bill_name[:50]}...': {global_start}-{global_end} ({segment_length} chars)"
             )
@@ -4217,8 +4236,10 @@ def _fallback_bill_segmentation(text_chunk, bill_names_list, offset):
             logger.info(
                 f"Fallback segment too short for '{bill_name[:30]}...': {segment_length} chars"
             )
-    
-    logger.info(f"🔄 Fallback segmentation completed: {len(valid_segments)} substantial segments found")
+
+    logger.info(
+        f"🔄 Fallback segmentation completed: {len(valid_segments)} substantial segments found"
+    )
     return valid_segments
 
     # Stage 2: Process bill segments by slicing text using indices
