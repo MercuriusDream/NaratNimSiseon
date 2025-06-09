@@ -1197,6 +1197,363 @@ def sentiment_by_party_and_topic(request):
 
             # Calculate averages
             for data in party_bill_data.values():
+
+@api_view(['GET'])
+def policy_sentiment_by_category(request):
+    """Get sentiment analysis by policy category with stance analysis"""
+    try:
+        from .models import Category, Subcategory, BillCategoryMapping, BillSubcategoryMapping
+        
+        category_filter = request.query_params.get('category')
+        party_filter = request.query_params.get('party')
+        time_range = request.query_params.get('time_range', 'all')
+        stance_filter = request.query_params.get('stance')  # progressive, conservative, moderate
+        
+        # Base queryset for statements with policy analysis
+        statements_qs = Statement.objects.filter(
+            sentiment_score__isnull=False,
+            bill__isnull=False
+        ).select_related('speaker', 'bill', 'session')
+        
+        # Apply time filter
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=timezone.now().date() - timedelta(days=365)
+            )
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=timezone.now().date() - timedelta(days=30)
+            )
+        
+        # Apply party filter
+        if party_filter:
+            statements_qs = statements_qs.filter(
+                speaker__current_party__name__icontains=party_filter
+            )
+        
+        results = []
+        
+        # Get all categories with their policy stance data
+        for category in Category.objects.all():
+            if category_filter and category.name != category_filter:
+                continue
+                
+            # Get bills in this category
+            category_bills = Bill.objects.filter(
+                category_mappings__category=category,
+                category_mappings__is_primary=True
+            )
+            
+            # Get statements for these bills
+            category_statements = statements_qs.filter(bill__in=category_bills)
+            
+            if not category_statements.exists():
+                continue
+            
+            # Analyze by subcategory and stance
+            subcategory_analysis = []
+            for subcat in category.subcategories.all():
+                subcat_bills = Bill.objects.filter(
+                    subcategory_mappings__subcategory=subcat,
+                    subcategory_mappings__relevance_score__gte=0.5
+                )
+                
+                subcat_statements = category_statements.filter(bill__in=subcat_bills)
+                
+                if subcat_statements.exists():
+                    # Get policy stance from subcategory mappings
+                    stance_data = BillSubcategoryMapping.objects.filter(
+                        subcategory=subcat,
+                        bill__in=subcat_bills
+                    ).values('policy_position').annotate(
+                        count=Count('id'),
+                        avg_sentiment=Avg('bill__statements__sentiment_score')
+                    )
+                    
+                    # Calculate sentiment by stance
+                    stance_sentiment = {}
+                    for stance_item in stance_data:
+                        position = stance_item['policy_position']
+                        if position and stance_item['avg_sentiment']:
+                            stance_sentiment[position] = {
+                                'count': stance_item['count'],
+                                'avg_sentiment': round(stance_item['avg_sentiment'], 3)
+                            }
+                    
+                    subcategory_analysis.append({
+                        'subcategory_name': subcat.name,
+                        'subcategory_description': subcat.description,
+                        'statement_count': subcat_statements.count(),
+                        'avg_sentiment': round(subcat_statements.aggregate(
+                            avg=Avg('sentiment_score'))['avg'] or 0, 3),
+                        'stance_breakdown': stance_sentiment,
+                        'policy_stance': subcat.policy_stance if hasattr(subcat, 'policy_stance') else 'moderate'
+                    })
+            
+            # Party breakdown for this category
+            party_breakdown = []
+            party_data = category_statements.values(
+                'speaker__current_party__name'
+            ).annotate(
+                party_name=F('speaker__current_party__name'),
+                statement_count=Count('id'),
+                avg_sentiment=Avg('sentiment_score'),
+                positive_count=Count('id', filter=Q(sentiment_score__gt=0.3)),
+                negative_count=Count('id', filter=Q(sentiment_score__lt=-0.3))
+            ).filter(statement_count__gte=3)
+            
+            for party in party_data:
+                if party['party_name']:
+                    party_breakdown.append({
+                        'party_name': party['party_name'],
+                        'statement_count': party['statement_count'],
+                        'avg_sentiment': round(party['avg_sentiment'] or 0, 3),
+                        'positive_count': party['positive_count'],
+                        'negative_count': party['negative_count'],
+                        'sentiment_trend': 'positive' if party['avg_sentiment'] > 0.1 else 'negative' if party['avg_sentiment'] < -0.1 else 'neutral'
+                    })
+            
+            results.append({
+                'category_id': category.id,
+                'category_name': category.name,
+                'category_description': category.description,
+                'total_statements': category_statements.count(),
+                'avg_sentiment': round(category_statements.aggregate(
+                    avg=Avg('sentiment_score'))['avg'] or 0, 3),
+                'subcategory_analysis': subcategory_analysis,
+                'party_breakdown': sorted(party_breakdown, key=lambda x: x['avg_sentiment'], reverse=True),
+                'policy_areas': len(subcategory_analysis)
+            })
+        
+        # Sort by average sentiment
+        results.sort(key=lambda x: x['avg_sentiment'], reverse=True)
+        
+        return Response({
+            'time_range': time_range,
+            'category_filter': category_filter,
+            'party_filter': party_filter,
+            'stance_filter': stance_filter,
+            'results': results,
+            'total_categories_analyzed': len(results)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in policy_sentiment_by_category: {e}")
+        return Response({'error': 'Failed to analyze policy sentiment'}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def speaker_policy_stance_analysis(request, speaker_id):
+    """Analyze individual speaker's policy stances across categories"""
+    try:
+        speaker = get_object_or_404(Speaker, naas_cd=speaker_id)
+        
+        # Get all statements by this speaker with policy analysis
+        statements = Statement.objects.filter(
+            speaker=speaker,
+            sentiment_score__isnull=False,
+            bill__isnull=False
+        ).select_related('bill', 'session')
+        
+        if not statements.exists():
+            return Response({
+                'speaker': {
+                    'id': speaker.naas_cd,
+                    'name': speaker.naas_nm,
+                    'party': speaker.get_current_party_name()
+                },
+                'policy_analysis': [],
+                'overall_stance': 'insufficient_data'
+            })
+        
+        # Analyze by policy category
+        policy_analysis = []
+        
+        for category in Category.objects.all():
+            # Get bills in this category that the speaker spoke about
+            category_bills = Bill.objects.filter(
+                category_mappings__category=category,
+                statements__speaker=speaker
+            ).distinct()
+            
+            if not category_bills.exists():
+                continue
+            
+            category_statements = statements.filter(bill__in=category_bills)
+            
+            # Analyze subcategory stances
+            subcategory_stances = []
+            for subcat in category.subcategories.all():
+                subcat_bills = category_bills.filter(
+                    subcategory_mappings__subcategory=subcat
+                )
+                
+                if subcat_bills.exists():
+                    subcat_statements = category_statements.filter(bill__in=subcat_bills)
+                    
+                    if subcat_statements.exists():
+                        avg_sentiment = subcat_statements.aggregate(
+                            avg=Avg('sentiment_score'))['avg']
+                        
+                        # Determine stance based on sentiment and policy position
+                        bill_positions = BillSubcategoryMapping.objects.filter(
+                            subcategory=subcat,
+                            bill__in=subcat_bills
+                        ).values_list('policy_position', flat=True)
+                        
+                        dominant_position = None
+                        if bill_positions:
+                            position_counts = {}
+                            for pos in bill_positions:
+                                if pos:
+                                    position_counts[pos] = position_counts.get(pos, 0) + 1
+                            if position_counts:
+                                dominant_position = max(position_counts.items(), key=lambda x: x[1])[0]
+                        
+                        subcategory_stances.append({
+                            'subcategory': subcat.name,
+                            'statement_count': subcat_statements.count(),
+                            'avg_sentiment': round(avg_sentiment, 3),
+                            'policy_position': dominant_position,
+                            'stance_interpretation': 'supportive' if avg_sentiment > 0.2 else 'opposing' if avg_sentiment < -0.2 else 'neutral'
+                        })
+            
+            if subcategory_stances:
+                category_avg = category_statements.aggregate(avg=Avg('sentiment_score'))['avg']
+                
+                policy_analysis.append({
+                    'category': category.name,
+                    'category_description': category.description,
+                    'statement_count': category_statements.count(),
+                    'avg_sentiment': round(category_avg, 3),
+                    'subcategory_breakdown': subcategory_stances,
+                    'overall_stance': 'progressive' if category_avg > 0.3 else 'conservative' if category_avg < -0.3 else 'moderate'
+                })
+        
+        # Calculate overall political stance
+        if policy_analysis:
+            overall_sentiment = sum(p['avg_sentiment'] for p in policy_analysis) / len(policy_analysis)
+            overall_stance = 'progressive' if overall_sentiment > 0.2 else 'conservative' if overall_sentiment < -0.2 else 'moderate'
+        else:
+            overall_stance = 'insufficient_data'
+        
+        return Response({
+            'speaker': {
+                'id': speaker.naas_cd,
+                'name': speaker.naas_nm,
+                'party': speaker.get_current_party_name(),
+                'electoral_district': speaker.elecd_nm
+            },
+            'policy_analysis': sorted(policy_analysis, key=lambda x: x['avg_sentiment'], reverse=True),
+            'overall_stance': overall_stance,
+            'total_statements_analyzed': statements.count(),
+            'active_policy_areas': len(policy_analysis)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in speaker_policy_stance_analysis: {e}")
+        return Response({'error': 'Failed to analyze speaker policy stance'}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def party_policy_comparison(request):
+    """Compare parties' stances across policy categories"""
+    try:
+        from .models import Party
+        
+        category_filter = request.query_params.get('category')
+        include_subcategories = request.query_params.get('subcategories', 'true').lower() == 'true'
+        
+        parties = Party.objects.filter(current_members__isnull=False).distinct()
+        
+        comparison_data = []
+        
+        for party in parties:
+            party_statements = Statement.objects.filter(
+                speaker__current_party=party,
+                sentiment_score__isnull=False,
+                bill__isnull=False
+            ).select_related('bill')
+            
+            if not party_statements.exists():
+                continue
+            
+            party_analysis = {
+                'party_id': party.id,
+                'party_name': party.name,
+                'total_statements': party_statements.count(),
+                'categories': []
+            }
+            
+            for category in Category.objects.all():
+                if category_filter and category.name != category_filter:
+                    continue
+                
+                # Get party statements in this category
+                category_bills = Bill.objects.filter(
+                    category_mappings__category=category,
+                    category_mappings__is_primary=True
+                )
+                
+                category_statements = party_statements.filter(bill__in=category_bills)
+                
+                if category_statements.exists():
+                    category_data = {
+                        'category_name': category.name,
+                        'statement_count': category_statements.count(),
+                        'avg_sentiment': round(category_statements.aggregate(
+                            avg=Avg('sentiment_score'))['avg'], 3),
+                        'stance': 'progressive' if category_statements.aggregate(
+                            avg=Avg('sentiment_score'))['avg'] > 0.2 else 
+                                'conservative' if category_statements.aggregate(
+                            avg=Avg('sentiment_score'))['avg'] < -0.2 else 'moderate'
+                    }
+                    
+                    if include_subcategories:
+                        subcategories = []
+                        for subcat in category.subcategories.all():
+                            subcat_bills = category_bills.filter(
+                                subcategory_mappings__subcategory=subcat
+                            )
+                            subcat_statements = category_statements.filter(bill__in=subcat_bills)
+                            
+                            if subcat_statements.exists():
+                                subcategories.append({
+                                    'name': subcat.name,
+                                    'statement_count': subcat_statements.count(),
+                                    'avg_sentiment': round(subcat_statements.aggregate(
+                                        avg=Avg('sentiment_score'))['avg'], 3)
+                                })
+                        
+                        category_data['subcategories'] = subcategories
+                    
+                    party_analysis['categories'].append(category_data)
+            
+            if party_analysis['categories']:
+                # Calculate overall party stance
+                overall_sentiment = sum(c['avg_sentiment'] for c in party_analysis['categories']) / len(party_analysis['categories'])
+                party_analysis['overall_stance'] = 'progressive' if overall_sentiment > 0.2 else 'conservative' if overall_sentiment < -0.2 else 'moderate'
+                party_analysis['overall_sentiment'] = round(overall_sentiment, 3)
+                
+                comparison_data.append(party_analysis)
+        
+        # Sort by overall sentiment
+        comparison_data.sort(key=lambda x: x.get('overall_sentiment', 0), reverse=True)
+        
+        return Response({
+            'category_filter': category_filter,
+            'include_subcategories': include_subcategories,
+            'party_comparison': comparison_data,
+            'total_parties_analyzed': len(comparison_data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in party_policy_comparison: {e}")
+        return Response({'error': 'Failed to compare party policies'}, 
+                       status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
                 if data['sentiment_scores']:
                     data['avg_sentiment'] = round(sum(data['sentiment_scores']) / len(data['sentiment_scores']), 3)
                     data['positive_count'] = len([s for s in data['sentiment_scores'] if s > 0.3])
