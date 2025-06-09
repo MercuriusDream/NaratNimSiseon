@@ -2297,6 +2297,14 @@ def _process_single_segmentation_chunk(segmentation_llm,
     return []  # Should not be reached, but good for safety
 
 
+
+def process_session_pdf_direct(session_id=None, force=False, debug=False):
+    """
+    Direct wrapper for process_session_pdf that can be called without Celery.
+    This is useful for management commands and testing.
+    """
+    return process_session_pdf(self=None, session_id=session_id, force=force, debug=debug)
+
 def _process_single_bill_segmentation_batch(segmentation_llm, text_batch,
                                             bill_names, batch_offset):
     """Process a single batch for bill segmentation and extract bill-level metadata."""
@@ -3220,7 +3228,7 @@ def extract_statements_with_bill_based_chunking(full_text,
 # In tasks.py, replace the existing process_session_pdf function
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_session_pdf(self, session_id=None, force=False, debug=False):
+def process_session_pdf(self=None, session_id=None, force=False, debug=False):
     """Download, parse PDF transcript for a session, and extract statements."""
     if not session_id:
         logger.error("session_id is required for process_session_pdf.")
@@ -3303,12 +3311,14 @@ def process_session_pdf(self, session_id=None, force=False, debug=False):
         logger.error(
             f"Request error downloading PDF for session {session_id}: {re_exc}"
         )
-        self.retry(exc=re_exc)
+        if self:
+            self.retry(exc=re_exc)
     except Exception as e:
         logger.error(
             f"❌ Unexpected error processing PDF for session {session_id}: {e}")
         logger.exception(f"Full traceback for PDF processing {session_id}:")
-        self.retry(exc=e)
+        if self:
+            self.retry(exc=e)
     finally:
         if temp_pdf_path and temp_pdf_path.exists():
             try:

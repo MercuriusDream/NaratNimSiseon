@@ -45,7 +45,8 @@ class Command(BaseCommand):
                 process_session_pdf.delay(session_id, force=force, debug=debug)
                 self.stdout.write(self.style.SUCCESS('✅ PDF processing task queued'))
             else:
-                process_session_pdf(session_id=session_id, force=force, debug=debug)
+                from api.tasks import process_session_pdf_direct
+                process_session_pdf_direct(session_id=session_id, force=force, debug=debug)
                 self.stdout.write(self.style.SUCCESS('✅ PDF processing completed'))
         else:
             self.stdout.write(f'Processing PDFs for up to {limit} sessions...')
@@ -68,7 +69,8 @@ class Command(BaseCommand):
                 if is_celery_available():
                     process_session_pdf.delay(session.conf_id, force=force, debug=debug)
                 else:
-                    process_session_pdf(session_id=session.conf_id, force=force, debug=debug)
+                    from api.tasks import process_session_pdf_direct
+                    process_session_pdf_direct(session_id=session.conf_id, force=force, debug=debug)
                 
                 processed_count += 1
             
