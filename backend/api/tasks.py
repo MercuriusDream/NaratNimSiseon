@@ -3560,23 +3560,50 @@ def split_text_into_chunks(text, max_chunk_size):
 
 
 def clean_pdf_text(text):
-    """Clean PDF text by removing session identifiers, bill agendas, and normalizing line breaks."""
+    """Clean PDF text while preserving agenda section for bill extraction."""
     import re
 
+    if not text:
+        return text
+
+    # Find the start of actual discussion (marked by time like "(14시07분 개의)")
+    timing_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
+    timing_match = re.search(timing_pattern, text)
+    
+    if timing_match:
+        # Keep agenda section as-is, clean only the discussion part
+        agenda_section = text[:timing_match.end()]
+        discussion_section = text[timing_match.end():]
+        
+        logger.info(f"🔍 Preserving agenda section: {len(agenda_section)} chars")
+        logger.info(f"🧹 Cleaning discussion section: {len(discussion_section)} chars")
+        
+        # Clean the discussion section
+        cleaned_discussion = clean_discussion_text(discussion_section)
+        
+        # Combine preserved agenda with cleaned discussion
+        cleaned_text = agenda_section + '\n' + cleaned_discussion
+    else:
+        # No timing marker found, clean the entire text but more conservatively
+        logger.info("⚠️ No timing marker found, applying conservative cleaning")
+        cleaned_text = clean_discussion_text(text)
+    
+    logger.info(f"🧹 Text cleaning: {len(text)} -> {len(cleaned_text)} chars")
+    return cleaned_text
+
+
+def clean_discussion_text(text):
+    """Clean discussion text by normalizing line breaks and removing artifacts."""
+    import re
+    
     if not text:
         return text
 
     # Remove session identifier patterns like "제424회-제6차(2025년4월24일)"
     session_pattern = r'^제\d+회-제\d+차\(\d{4}년\d{1,2}월\d{1,2}일\)$'
 
-    # Remove bill agenda headers with timing like "(14시09분 개의)"
-    timing_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
-
-    # Remove numbered bill agenda items like "1. 검사징계법 일부개정법률안(김용민 의원 대표발의)(의안번호 2208456)"
-
     lines = text.split('\n')
     cleaned_lines = []
-    skip_until_discussion = False
 
     for line in lines:
         line = line.strip()
@@ -3587,20 +3614,6 @@ def clean_pdf_text(text):
         if re.match(session_pattern, line):
             continue
 
-        # Remove timing markers
-        line = re.sub(timing_pattern, '', line).strip()
-        if not line:
-            continue
-
-        # Check if we've reached actual discussion content (starts with ◯)
-        if skip_until_discussion and line.startswith('◯'):
-            skip_until_discussion = False
-            logger.info(f"✅ Found start of actual discussion: {line[:50]}...")
-
-        # Skip lines while we're in the agenda section
-        if skip_until_discussion:
-            continue
-
         # Replace all \n with spaces within the line content
         line = line.replace('\n', ' ')
         # Normalize multiple spaces to single space
@@ -3608,87 +3621,81 @@ def clean_pdf_text(text):
         if line:  # Only add non-empty lines
             cleaned_lines.append(line)
 
-    cleaned_text = '\n'.join(cleaned_lines)
-    logger.info(f"🧹 Text cleaning: {len(text)} -> {len(cleaned_text)} chars")
-    return cleaned_text
+    return '\n'.join(cleaned_lines)
 
 
-def discover_bills_from_content_llm(full_text, max_bills=10, debug=False):
-    """Let LLM discover what bills are actually discussed in the PDF content"""
-    if not genai or debug:
-        return []
-
+def discover_bills_from_agenda_section(full_text, debug=False):
+    """Extract bills from the agenda section at the beginning of the PDF"""
+    import re
+    
     try:
-        discovery_model = genai.GenerativeModel(
-            'gemini-2.5-flash-preview-05-20')
-
-        # Use first 50k chars for discovery to avoid token limits
-        discovery_text = full_text[:50000] if len(
-            full_text) > 50000 else full_text
-
-        prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-
-국회 회의록에서 **실제로 논의되고 있는** 법안들을 찾아주세요. 단순히 목록에 나열된 것이 아니라, 의원들이 실제로 발언하고 토론하는 법안만 찾으세요.
-
-회의록 텍스트:
----
-{discovery_text}
----
-
-실제로 토론이 이루어지는 법안들을 찾아 JSON으로 응답:
-{{
-  "discussed_bills": [
-    {{
-      "bill_name": "실제로 논의되는 법안명 (정확한 이름)",
-      "discussion_type": "detailed_debate|simple_vote|procedural_mention",
-      "confidence": 0.0-1.0
-    }}
-  ]
-}}
-
-규칙:
-1. 실제 의원 발언(◯로 시작)에서 언급되는 법안만 포함
-2. 단순 목록 나열은 제외
-3. confidence 0.7 미만은 제외
-4. 최대 {max_bills}개까지만
-5. "discussion_type"이 "detailed_debate"인 것을 우선적으로 포함
-"""
-
-        response = discovery_model.generate_content(prompt)
-
-        if not response or not response.text:
-            logger.warning("No response from LLM for bill discovery")
-            return []
-
-        response_text = response.text.strip().replace('```json',
-                                                      '').replace('```',
-                                                                  '').strip()
-
-        try:
-            data = json.loads(response_text)
-            discussed_bills = data.get('discussed_bills', [])
-
-            valid_bills = []
-            for bill_info in discussed_bills:
-                if (bill_info.get('confidence', 0) >= 0.7
-                        and bill_info.get('bill_name', '').strip()):
-                    valid_bills.append(bill_info['bill_name'].strip())
-
-            logger.info(
-                f"🔍 LLM discovered {len(valid_bills)} actually discussed bills"
-            )
-            for bill in valid_bills:
-                logger.info(f"   📋 {bill[:80]}...")
-
-            return valid_bills
-
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in bill discovery: {e}")
-            return []
-
+        # Find the agenda section and extract text before the meeting starts
+        # Look for patterns like "(14시07분 개의)" or similar time markers
+        time_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
+        time_match = re.search(time_pattern, full_text)
+        
+        if time_match:
+            agenda_section = full_text[:time_match.start()]
+            logger.info(f"🔍 Found agenda section: {len(agenda_section)} chars before meeting start")
+        else:
+            # Fallback: use first 10k chars if no time marker found
+            agenda_section = full_text[:10000]
+            logger.info(f"⚠️ No time marker found, using first 10k chars as agenda section")
+        
+        discovered_bills = []
+        
+        # Look for bill patterns in the agenda section
+        # Pattern 1: "번호. 법안명(...)(의안번호 xxxxxx)"
+        bill_pattern_1 = r'\d+\.\s*([^(]+법률안)[^(]*\([^)]*\)\(의안번호\s*(\d+)\)'
+        matches_1 = re.findall(bill_pattern_1, agenda_section)
+        
+        for bill_name, bill_number in matches_1:
+            clean_bill_name = bill_name.strip()
+            if clean_bill_name and len(clean_bill_name) > 10:  # Filter out too short names
+                discovered_bills.append(clean_bill_name)
+                logger.info(f"📋 Found bill from agenda: {clean_bill_name[:60]}... (의안번호: {bill_number})")
+        
+        # Pattern 2: Look for bills in "상정된 안건" section specifically
+        # This is more reliable as it shows what was actually presented
+        presented_section_match = re.search(r'상정된\s*안건(.*?)(?=\(?\d{1,2}시\d{2}분|\Z)', agenda_section, re.DOTALL)
+        if presented_section_match:
+            presented_section = presented_section_match.group(1)
+            logger.info(f"📋 Found '상정된 안건' section: {len(presented_section)} chars")
+            
+            # Extract bills from presented section
+            presented_pattern = r'\d+\.\s*([^(]+법률안)[^(]*\([^)]*\)\(의안번호\s*(\d+)\)'
+            presented_matches = re.findall(presented_pattern, presented_section)
+            
+            presented_bills = []
+            for bill_name, bill_number in presented_matches:
+                clean_bill_name = bill_name.strip()
+                if clean_bill_name and len(clean_bill_name) > 10:
+                    presented_bills.append(clean_bill_name)
+                    logger.info(f"✅ Found presented bill: {clean_bill_name[:60]}... (의안번호: {bill_number})")
+            
+            # Prefer presented bills over planned bills
+            if presented_bills:
+                discovered_bills = presented_bills
+                logger.info(f"🎯 Using {len(presented_bills)} bills from '상정된 안건' section")
+        
+        # Remove duplicates while preserving order
+        unique_bills = []
+        seen = set()
+        for bill in discovered_bills:
+            if bill not in seen:
+                unique_bills.append(bill)
+                seen.add(bill)
+        
+        if debug:
+            logger.debug(f"🐛 DEBUG: Would extract {len(unique_bills)} bills from agenda")
+            for i, bill in enumerate(unique_bills[:5]):  # Show first 5
+                logger.debug(f"🐛 DEBUG: Bill {i+1}: {bill[:80]}...")
+        
+        logger.info(f"🔍 Agenda parsing discovered {len(unique_bills)} bills")
+        return unique_bills
+        
     except Exception as e:
-        logger.error(f"Error in bill discovery: {e}")
+        logger.error(f"❌ Error parsing agenda section: {e}")
         return []
 
 
@@ -3753,13 +3760,11 @@ def process_pdf_text_for_statements(full_text,
         )
         segmentation_llm = None
 
-    # First, let the LLM discover what bills are actually discussed
+    # First, extract bills from the agenda section at the beginning
     logger.info(
-        f"🔍 Step 1: Discovering bills actually discussed in session {session_id}"
+        f"🔍 Step 1: Extracting bills from agenda section for session {session_id}"
     )
-    discovered_bills = discover_bills_from_content_llm(full_text,
-                                                       max_bills=15,
-                                                       debug=debug)
+    discovered_bills = discover_bills_from_agenda_section(full_text, debug=debug)
 
     bill_segments_from_llm = []
     if segmentation_llm and discovered_bills:
