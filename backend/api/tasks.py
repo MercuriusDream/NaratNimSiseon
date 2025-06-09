@@ -3200,14 +3200,12 @@ def process_extracted_statements_data(statements_data_list,
                 sentiment_score=stmt_data.get('sentiment_score', 0.0),
                 sentiment_reason=stmt_data.get('sentiment_reason',
                                                'Analysis not fully run'),
+                bill_relevance_score=stmt_data.get('bill_relevance_score', 0.0),  # Add bill relevance score
                 category_analysis=json.dumps(stmt_data.get(
                     'policy_categories', []),
                                              ensure_ascii=False),
                 policy_keywords=', '.join(stmt_data.get('policy_keywords',
                                                         [])),
-                # Add new fields if your model has them
-                bill_relevance_score=stmt_data.get(
-                    'bill_relevance_score'),  # May be None
                 bill_specific_keywords_json=json.dumps(stmt_data.get(
                     'bill_specific_keywords', []),
                                                        ensure_ascii=False))
@@ -3650,6 +3648,9 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
             logger.error(f"Bill {bill_id} not found in database.")
             return
 
+        # Generate the bill link URL
+        bill_link_url = f"https://likms.assembly.go.kr/bill/billDetail.do?billId={bill_id}"
+        
         url = "https://open.assembly.go.kr/portal/openapi/BILLINFODETAIL"
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
@@ -3694,6 +3695,11 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
 
         # Update bill with detailed information
         updated_fields = []
+
+        # Update bill link URL
+        if bill.link_url != bill_link_url:
+            bill.link_url = bill_link_url
+            updated_fields.append('link_url')
 
         # Update bill number if not set or different
         if bill_detail_data.get(
