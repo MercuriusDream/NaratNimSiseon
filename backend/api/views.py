@@ -1202,6 +1202,9 @@ def sentiment_by_party_and_topic(request):
                     data['positive_count'] = len([s for s in data['sentiment_scores'] if s > 0.3])
                     data['negative_count'] = len([s for s in data['sentiment_scores'] if s < -0.3])
                     data['neutral_count'] = data['statement_count'] - data['positive_count'] - data['negative_count']
+                    # Remove raw sentiment scores to reduce response size
+                    del data['sentiment_scores']
+                    results.append(data)
 
 @api_view(['GET'])
 def policy_sentiment_by_category(request):
