@@ -13,4 +13,3 @@ lxml==5.1.0
 psutil==5.9.8 
 django-filter
 django-filter
-kombu[sqlalchemy]

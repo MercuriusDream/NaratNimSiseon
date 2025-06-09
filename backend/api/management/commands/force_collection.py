@@ -111,9 +111,7 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(
                     '🔄 Running synchronously (Celery not available)')
-                # Call the function directly without self parameter when Celery is not available
                 fetch_continuous_sessions(
-                    self=None,  # Pass None for self when calling directly
                     force=True, 
                     debug=debug, 
                     start_date=start_date.isoformat() if start_date else None
@@ -129,6 +127,3 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.ERROR(f'❌ Error starting collection: {e}'))
             logger.error(f"Force collection error: {e}")
-            # Print full traceback for debugging
-            import traceback
-            self.stdout.write(self.style.ERROR(f'📋 Full error details: {traceback.format_exc()}'))

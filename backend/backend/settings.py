@@ -58,7 +58,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
-    'django_celery_results',
     'api',
 ]
 
@@ -193,27 +192,13 @@ CORS_ALLOWED_HEADERS = [
     'x-requested-with',
 ]
 
-# Celery settings - try Redis, fallback to database if unavailable
-try:
-    import redis
-    # Test Redis connection
-    r = redis.Redis(host='localhost', port=6379, db=0, socket_connect_timeout=1)
-    r.ping()
-    # If we get here, Redis is available
-    CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-    CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-    print("✅ Redis connection successful - using Redis for Celery")
-except (redis.ConnectionError, redis.TimeoutError, ImportError) as e:
-    # Redis not available, use database backend
-    CELERY_BROKER_URL = 'db+sqlite:///celery_broker.db'
-    CELERY_RESULT_BACKEND = 'django-db'
-    print(f"⚠️ Redis not available ({e}) - using database backend for Celery")
-
+# Celery settings
+CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
-CELERY_CACHE_BACKEND = 'django-cache'
 
 # Assembly API settings
 ASSEMBLY_API_KEY = os.getenv('ASSEMBLY_API_KEY', 'sample key')
