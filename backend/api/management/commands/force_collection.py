@@ -188,55 +188,23 @@ class Command(BaseCommand):
                 f"  -> Processing {i+1}/{total_sessions}: Session {session.conf_id}"
             )
             try:
-                # Use a more robust approach to handle Celery tasks
+                # Use the direct wrapper function for non-Celery calls
                 try:
                     if use_celery:
                         from api.tasks import process_session_pdf
                         process_session_pdf.delay(session_id=session.conf_id,
                                                   force=True,
                                                   debug=debug)
+                        logger.info(f"✅ Queued PDF processing task for session {session.conf_id}")
                     else:
-                        raise ImportError("Celery not available")
-                except (ImportError, Exception):
-                    # Call the function directly without Celery
-                    try:
-                        # Import the actual task function
-                        from api.tasks import process_session_pdf
-                        
-                        # For bound tasks (@shared_task(bind=True)), we need to call the underlying function
-                        # The bound task expects 'self' as first parameter when called directly
-                        if hasattr(process_session_pdf, 'run'):
-                            # Use the .run() method which is the actual function without Celery wrapper
-                            process_session_pdf.run(session_id=session.conf_id, force=True, debug=debug)
-                        elif hasattr(process_session_pdf, '__wrapped__'):
-                            # Alternative: call the wrapped function directly with self=None
-                            process_session_pdf.__wrapped__(None, session_id=session.conf_id, force=True, debug=debug)
-                        else:
-                            # Last resort: try calling directly with keyword arguments
-                            process_session_pdf(session_id=session.conf_id, force=True, debug=debug)
-                        
+                        # Use the direct wrapper function
+                        from api.tasks import process_session_pdf_direct
+                        process_session_pdf_direct(session_id=session.conf_id, force=True, debug=debug)
                         logger.info(f"✅ Successfully processed PDF for session {session.conf_id} synchronously")
                         
-                    except Exception as e_fallback:
-                        logger.error(f"Failed to call process_session_pdf directly: {e_fallback}")
-                        
-                        # Final fallback - create a simple wrapper to handle the bound task properly
-                        try:
-                            # Import and call with proper signature handling
-                            def call_bound_task():
-                                from api.tasks import process_session_pdf
-                                # Call the function with a mock self parameter
-                                class MockSelf:
-                                    pass
-                                mock_self = MockSelf()
-                                return process_session_pdf(mock_self, session_id=session.conf_id, force=True, debug=debug)
-                            
-                            call_bound_task()
-                            logger.info(f"✅ Successfully processed PDF for session {session.conf_id} using mock self fallback")
-                            
-                        except Exception as e_final:
-                            logger.error(f"Final fallback failed for session {session.conf_id}: {e_final}")
-                            continue
+                except Exception as e:
+                    logger.error(f"Failed to process PDF for session {session.conf_id}: {e}")
+                    continue
             except Exception as e:
                 self.stderr.write(
                     self.style.ERROR(

@@ -91,7 +91,8 @@ class Command(BaseCommand):
                 process_session_pdf.delay(session_id, force=True, debug=debug)
                 self.stdout.write(self.style.SUCCESS('✅ PDF processing task queued'))
             else:
-                process_session_pdf(session_id=session_id, force=True, debug=debug)
+                from api.tasks import process_session_pdf_direct
+                process_session_pdf_direct(session_id=session_id, force=True, debug=debug)
                 self.stdout.write(self.style.SUCCESS('✅ PDF processing completed'))
                 
                 if not debug:

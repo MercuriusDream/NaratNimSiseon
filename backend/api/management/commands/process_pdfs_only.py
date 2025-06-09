@@ -93,7 +93,8 @@ class Command(BaseCommand):
                 process_session_pdf.delay(session_id, force=force, debug=debug)
                 self.stdout.write(self.style.SUCCESS('✅ PDF processing task queued'))
             else:
-                process_session_pdf(session_id=session_id, force=force, debug=debug)
+                from api.tasks import process_session_pdf_direct
+                process_session_pdf_direct(session_id=session_id, force=force, debug=debug)
                 self.stdout.write(self.style.SUCCESS('✅ PDF processing completed'))
                 
                 if not debug:
@@ -163,7 +164,8 @@ class Command(BaseCommand):
                     self.stdout.write('✅ PDF processing task queued')
                     success_count += 1
                 else:
-                    process_session_pdf(session_id=session.conf_id, force=force, debug=debug)
+                    from api.tasks import process_session_pdf_direct
+                    process_session_pdf_direct(session_id=session.conf_id, force=force, debug=debug)
                     
                     if not debug:
                         statement_count = session.statements.count()
