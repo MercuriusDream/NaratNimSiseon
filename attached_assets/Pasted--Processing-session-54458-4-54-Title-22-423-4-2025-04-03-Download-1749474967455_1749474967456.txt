@@ -1,0 +1,592 @@
+--- Processing session 54458 (4/54) ---
+📄 Title: 제22대 제423회 제4차 국회본회의 (2025년 04월 03일)
+📥 Downloading PDF from: https://record.assembly.go.kr/assembly/viewer/minutes/download/pdf.do?id=54458
+✅ PDF downloaded: temp_files/session_54458_1749474891.pdf
+📄 Extracting text from PDF...
+📖 Processing 85 pages...
+📄 Processed 20/85 pages...
+📄 Processed 40/85 pages...
+📄 Processed 60/85 pages...
+📄 Processed 80/85 pages...
+✅ Extracted 114486 characters
+🤖 Processing with LLM...
+📋 Bills context: 34 bills found
+2025-06-09 13:15:10,599 - api.tasks - INFO - tasks - process_pdf_text_for_statements - 3635 - 🔍 Checking LLM availability - model: True, genai: True
+2025-06-09 13:15:10,599 - api.tasks - INFO - tasks - process_pdf_text_for_statements - 3662 - 🧹 Cleaning PDF text for session 54458
+2025-06-09 13:15:10,617 - api.tasks - INFO - tasks - clean_pdf_text - 3617 - 🧹 Text cleaning: 114486 -> 114473 chars
+2025-06-09 13:15:10,617 - api.tasks - INFO - tasks - process_pdf_text_for_statements - 3664 - 📄 Cleaned text length: ~114473 chars
+2025-06-09 13:15:10,617 - api.tasks - INFO - tasks - process_pdf_text_for_statements - 3666 - 🤖 Starting simplified bill-based statement processing for session PDF 54458.
+2025-06-09 13:15:10,617 - api.tasks - INFO - tasks - process_pdf_text_for_statements - 3685 - 🔍 Getting bill segments with indices for session 54458 (found 34 bills)
+2025-06-09 13:15:10,617 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3777 - Processing bill segmentation in batches (text length: 114473)
+2025-06-09 13:15:10,617 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3790 - Processing bill segmentation batch: chars 0-80000
+2025-06-09 13:15:10,617 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3860 - 🔍 Segmenting text chunk: 80000 chars
+2025-06-09 13:15:10,617 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3861 - 📋 Bills to find: 34 bills
+2025-06-09 13:15:18,017 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3927 - 🐛 DEBUG: Full LLM response for bill segmentation:
+2025-06-09 13:15:18,017 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3928 - 🐛 DEBUG: Raw response length: 4016
+2025-06-09 13:15:18,017 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3929 - 🐛 DEBUG: Cleaned response: [
+  {
+    "bill_name": "34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 2205779)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2203867)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 2203003)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2205777)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 2205588)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 2203326)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 2203000)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)",
+    "start_index": -1,
+    "end_index": -1
+  }
+]
+2025-06-09 13:15:18,017 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3930 - 🐛 DEBUG: Bill names provided to LLM: ['34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)', '33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)', '32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)', '31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)', '30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 2205779)', '29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2203867)', '28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 2203003)', '27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2205777)', '26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 2205588)', '25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 2203326)', '24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 2203000)', '23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)', '22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)', '21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)', '20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)', '19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)', '18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)', '17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)', '16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)', '15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)', '14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)', '13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)', '12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)', '11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)', '10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)', '9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)', '8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)', '7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)', '6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)', '5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)', '4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)', '3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)', '2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)', '1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)']
+2025-06-09 13:15:18,017 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3955 - 🐛 DEBUG: Processing 34 segments from LLM
+2025-06-09 13:15:18,017 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 1: {'bill_name': '34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 2: {'bill_name': '33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 3: {'bill_name': '32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 4: {'bill_name': '31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 5: {'bill_name': '30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 2205779)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 2205779)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 6: {'bill_name': '29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2203867)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2203867)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 7: {'bill_name': '28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 2203003)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 2203003)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 8: {'bill_name': '27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2205777)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2205777)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 9: {'bill_name': '26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 2205588)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 2205588)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 10: {'bill_name': '25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 2203326)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 2203326)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 11: {'bill_name': '24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 2203000)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 2203000)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 12: {'bill_name': '23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 13: {'bill_name': '22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 14: {'bill_name': '21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 15: {'bill_name': '20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 16: {'bill_name': '19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)' (indices: -1, -1)
+2025-06-09 13:15:18,018 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 17: {'bill_name': '18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,018 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 18: {'bill_name': '17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 19: {'bill_name': '16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 20: {'bill_name': '15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 21: {'bill_name': '14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 22: {'bill_name': '13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 23: {'bill_name': '12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 24: {'bill_name': '11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 25: {'bill_name': '10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 26: {'bill_name': '9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 27: {'bill_name': '8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 28: {'bill_name': '7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 29: {'bill_name': '6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 30: {'bill_name': '5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 31: {'bill_name': '4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 32: {'bill_name': '3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 33: {'bill_name': '2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 34: {'bill_name': '1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)' (indices: -1, -1)
+2025-06-09 13:15:18,019 - api.tasks - WARNING - tasks - _process_single_segmentation_chunk - 4058 - LLM segmentation found no substantial conversations. Trying intelligent fallback.
+2025-06-09 13:15:18,019 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4086 - 🔄 Using intelligent fallback segmentation for 34 bills
+2025-06-09 13:15:18,020 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)...
+2025-06-09 13:15:18,020 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)...
+2025-06-09 13:15:18,020 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)...
+2025-06-09 13:15:18,020 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)...
+2025-06-09 13:15:18,020 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 220577...
+2025-06-09 13:15:18,021 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 220386...
+2025-06-09 13:15:18,021 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 220300...
+2025-06-09 13:15:18,021 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 220577...
+2025-06-09 13:15:18,021 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 220558...
+2025-06-09 13:15:18,022 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 220332...
+2025-06-09 13:15:18,022 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 220300...
+2025-06-09 13:15:18,022 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)...
+2025-06-09 13:15:18,022 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)...
+2025-06-09 13:15:18,022 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)...
+2025-06-09 13:15:18,022 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)...
+2025-06-09 13:15:18,023 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)...
+2025-06-09 13:15:18,023 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)...
+2025-06-09 13:15:18,023 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)...
+2025-06-09 13:15:18,023 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)...
+2025-06-09 13:15:18,023 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)...
+2025-06-09 13:15:18,024 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)...
+2025-06-09 13:15:18,025 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)...
+2025-06-09 13:15:18,025 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)...
+2025-06-09 13:15:18,025 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)...
+2025-06-09 13:15:18,025 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)...
+2025-06-09 13:15:18,025 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4190 - 🔄 Fallback segmentation completed: 0 substantial segments found
+2025-06-09 13:15:20,025 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3790 - Processing bill segmentation batch: chars 70000-114473
+2025-06-09 13:15:20,025 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3860 - 🔍 Segmenting text chunk: 44473 chars
+2025-06-09 13:15:20,025 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3861 - 📋 Bills to find: 34 bills
+2025-06-09 13:15:31,065 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3927 - 🐛 DEBUG: Full LLM response for bill segmentation:
+2025-06-09 13:15:31,065 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3928 - 🐛 DEBUG: Raw response length: 4016
+2025-06-09 13:15:31,065 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3929 - 🐛 DEBUG: Cleaned response: [
+  {
+    "bill_name": "34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 2205779)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2203867)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 2203003)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2205777)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 2205588)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 2203326)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 2203000)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)",
+    "start_index": -1,
+    "end_index": -1
+  },
+  {
+    "bill_name": "1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)",
+    "start_index": -1,
+    "end_index": -1
+  }
+]
+2025-06-09 13:15:31,065 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3930 - 🐛 DEBUG: Bill names provided to LLM: ['34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)', '33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)', '32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)', '31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)', '30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 2205779)', '29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2203867)', '28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 2203003)', '27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2205777)', '26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 2205588)', '25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 2203326)', '24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 2203000)', '23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)', '22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)', '21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)', '20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)', '19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)', '18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)', '17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)', '16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)', '15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)', '14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)', '13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)', '12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)', '11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)', '10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)', '9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)', '8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)', '7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)', '6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)', '5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)', '4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)', '3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)', '2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)', '1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)']
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3955 - 🐛 DEBUG: Processing 34 segments from LLM
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 1: {'bill_name': '34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 2: {'bill_name': '33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 3: {'bill_name': '32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 4: {'bill_name': '31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 5: {'bill_name': '30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 2205779)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 2205779)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 6: {'bill_name': '29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2203867)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2203867)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 7: {'bill_name': '28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 2203003)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 2203003)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 8: {'bill_name': '27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2205777)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 2205777)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 9: {'bill_name': '26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 2205588)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 2205588)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 10: {'bill_name': '25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 2203326)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 2203326)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 11: {'bill_name': '24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 2203000)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 2203000)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 12: {'bill_name': '23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)' (indices: -1, -1)
+2025-06-09 13:15:31,066 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 13: {'bill_name': '22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,066 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 14: {'bill_name': '21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 15: {'bill_name': '20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 16: {'bill_name': '19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 17: {'bill_name': '18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 18: {'bill_name': '17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 19: {'bill_name': '16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 20: {'bill_name': '15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 21: {'bill_name': '14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 22: {'bill_name': '13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 23: {'bill_name': '12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 24: {'bill_name': '11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 25: {'bill_name': '10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 26: {'bill_name': '9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 27: {'bill_name': '8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 28: {'bill_name': '7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 29: {'bill_name': '6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 30: {'bill_name': '5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,067 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)' (indices: -1, -1)
+2025-06-09 13:15:31,067 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 31: {'bill_name': '4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)' (indices: -1, -1)
+2025-06-09 13:15:31,068 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 32: {'bill_name': '3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)' (indices: -1, -1)
+2025-06-09 13:15:31,068 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 33: {'bill_name': '2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)' (indices: -1, -1)
+2025-06-09 13:15:31,068 - api.tasks - ERROR - tasks - _process_single_segmentation_chunk - 3957 - 🐛 DEBUG: Segment 34: {'bill_name': '1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)', 'start_index': -1, 'end_index': -1}
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _process_single_segmentation_chunk - 3999 - LLM found no substantial discussion for bill '1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)' (indices: -1, -1)
+2025-06-09 13:15:31,068 - api.tasks - WARNING - tasks - _process_single_segmentation_chunk - 4058 - LLM segmentation found no substantial conversations. Trying intelligent fallback.
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4086 - 🔄 Using intelligent fallback segmentation for 34 bills
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 34. 경비업법 일부개정법률안(김종양 의원 대표발의)(의안번호 2205734)...
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 33. 경비업법 일부개정법률안(김석기 의원 대표발의)(의안번호 2201900)...
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 32. 경비업법 일부개정법률안(한병도 의원 대표발의)(의안번호 2201298)...
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 31. 자연재해대책법 일부개정법률안(정부 제출)(의안번호 2201199)...
+2025-06-09 13:15:31,068 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4182 - ✅ Fallback found conversation for '30. 재난 및 안전관리 기본법 일부개정법률안(위성곤 의원 대표발의)(의안번호 220577...': 112776-114464 (1688 chars)
+2025-06-09 13:15:31,069 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4182 - ✅ Fallback found conversation for '29. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 220386...': 112776-114464 (1688 chars)
+2025-06-09 13:15:31,069 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4182 - ✅ Fallback found conversation for '28. 재난 및 안전관리 기본법 일부개정법률안(김종양 의원 대표발의)(의안번호 220300...': 112776-114464 (1688 chars)
+2025-06-09 13:15:31,069 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4182 - ✅ Fallback found conversation for '27. 재난 및 안전관리 기본법 일부개정법률안(조은희 의원 대표발의)(의안번호 220577...': 112776-114464 (1688 chars)
+2025-06-09 13:15:31,069 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4182 - ✅ Fallback found conversation for '26. 재난 및 안전관리 기본법 일부개정법률안(이달희 의원 대표발의)(의안번호 220558...': 112776-114464 (1688 chars)
+2025-06-09 13:15:31,069 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4182 - ✅ Fallback found conversation for '25. 재난 및 안전관리 기본법 일부개정법률안(김선교 의원 대표발의)(의안번호 220332...': 112776-114464 (1688 chars)
+2025-06-09 13:15:31,070 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4182 - ✅ Fallback found conversation for '24. 재난 및 안전관리 기본법 일부개정법률안(박성훈 의원 대표발의)(의안번호 220300...': 112776-114464 (1688 chars)
+2025-06-09 13:15:31,070 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4182 - ✅ Fallback found conversation for '23. 재난 및 안전관리 기본법 일부개정법률안(정부 제출)(의안번호 2201324)...': 112776-114464 (1688 chars)
+2025-06-09 13:15:31,070 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 22. 공직선거법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202250)...
+2025-06-09 13:15:31,070 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 21. 공직선거법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200712)...
+2025-06-09 13:15:31,070 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 20. 공직선거법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200028)...
+2025-06-09 13:15:31,070 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 19. 정치자금법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203179)...
+2025-06-09 13:15:31,070 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 18. 정치자금법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202249)...
+2025-06-09 13:15:31,070 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 17. 정치자금법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200909)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 16. 정치자금법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200719)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 15. 정치자금법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200045)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 14. 정치자금법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200029)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 13. 정당법 일부개정법률안(이언주 의원 대표발의)(의안번호 2205354)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 12. 정당법 일부개정법률안(고동진 의원 대표발의)(의안번호 2203178)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 11. 정당법 일부개정법률안(이해식 의원 대표발의)(의안번호 2202588)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 10. 정당법 일부개정법률안(임미애 의원 대표발의)(의안번호 2202251)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 9. 정당법 일부개정법률안(김윤덕 의원 대표발의)(의안번호 2201678)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 8. 정당법 일부개정법률안(장경태 의원 대표발의)(의안번호 2200910)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 7. 정당법 일부개정법률안(남인순 의원 대표발의)(의안번호 2200715)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 6. 정당법 일부개정법률안(윤상현 의원 대표발의)(의안번호 2200043)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 5. 정당법 일부개정법률안(김영배 의원 대표발의)(의안번호 2200027)...
+2025-06-09 13:15:31,071 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 4. 공직선거법 일부개정법률안(윤건영 의원 대표발의)(의안번호 2204085)...
+2025-06-09 13:15:31,072 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 3. 공직선거법 일부개정법률안(채현일 의원 대표발의)(의안번호 2203628)...
+2025-06-09 13:15:31,072 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 2. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200816)...
+2025-06-09 13:15:31,072 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4138 - Could not find substantial content for bill: 1. 공직선거법 일부개정법률안(한병도 의원 대표발의)(의안번호 2200354)...
+2025-06-09 13:15:31,072 - api.tasks - INFO - tasks - _fallback_bill_segmentation - 4190 - 🔄 Fallback segmentation completed: 8 substantial segments found
+2025-06-09 13:15:31,072 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3826 - Bill segmentation batching complete: 8 segments found
+✅ LLM processing completed
+🗑️ Cleaned up temporary PDF file
+✅ Success: 0 statements created

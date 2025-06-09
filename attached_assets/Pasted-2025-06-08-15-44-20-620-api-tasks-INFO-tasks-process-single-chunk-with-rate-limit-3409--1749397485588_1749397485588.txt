@@ -1,0 +1,13 @@
+2025-06-08 15:44:20,620 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3409 - [Segmentation LLM] Processing chunk 0-11095 (11095 chars)
+2025-06-08 15:44:23,147 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3499 - [Segmentation LLM] Found 0 valid segments in chunk 0-11095
+2025-06-08 15:44:23,147 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3515 - [Segmentation LLM] Completed chunk 1/6 (0-11095): 0 segments
+2025-06-08 15:44:25,148 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3409 - [Segmentation LLM] Processing chunk 9095-21095 (12000 chars)
+2025-06-08 15:44:25,543 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3499 - [Segmentation LLM] Found 0 valid segments in chunk 9095-21095
+2025-06-08 15:44:25,543 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3515 - [Segmentation LLM] Completed chunk 2/6 (9095-21095): 0 segments
+2025-06-08 15:44:27,543 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3409 - [Segmentation LLM] Processing chunk 19095-31095 (12000 chars)
+2025-06-08 15:44:29,089 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3475 - No matching bill found for '91. 폐기물관리법', skipping
+2025-06-08 15:44:29,089 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3475 - No matching bill found for '88. 자연환경보전법', skipping
+2025-06-08 15:44:29,089 - api.tasks - DEBUG - tasks - process_single_chunk_with_rate_limit - 3475 - No matching bill found for '87. 대기환경보전법', skipping
+2025-06-08 15:44:29,090 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3499 - [Segmentation LLM] Found 0 valid segments in chunk 19095-31095
+2025-06-08 15:44:29,090 - api.tasks - INFO - tasks - _process_bill_segmentation_with_batching - 3515 - [Segmentation LLM] Completed chunk 3/6 (19095-31095): 0 segments
+2025-06-08 15:44:31,090 - api.tasks - INFO - tasks - process_single_chunk_with_rate_limit - 3409 - [Segmentation LLM] Processing chunk 29095-41095 (12000 chars)

@@ -1,0 +1,30 @@
+--- Processing session 54510 (3/54) ---
+📄 Title: 제22대 제424회 제2차 국회본회의 (2025년 04월 14일)
+📥 Downloading PDF from: https://record.assembly.go.kr/assembly/viewer/minutes/download/pdf.do?id=54510
+✅ PDF downloaded: temp_files/session_54510_1749474864.pdf
+📄 Extracting text from PDF...
+📖 Processing 88 pages...
+📄 Processed 20/88 pages...
+📄 Processed 40/88 pages...
+📄 Processed 60/88 pages...
+📄 Processed 80/88 pages...
+✅ Extracted 118730 characters
+🤖 Processing with LLM...
+📋 Bills context: 0 bills found
+2025-06-09 13:14:48,130 - api.tasks - INFO - tasks - process_pdf_text_for_statements - 3635 - 🔍 Checking LLM availability - model: True, genai: True
+2025-06-09 13:14:48,130 - api.tasks - INFO - tasks - process_pdf_text_for_statements - 3662 - 🧹 Cleaning PDF text for session 54510
+2025-06-09 13:14:48,148 - api.tasks - INFO - tasks - clean_pdf_text - 3617 - 🧹 Text cleaning: 118730 -> 118717 chars
+2025-06-09 13:14:48,148 - api.tasks - INFO - tasks - process_pdf_text_for_statements - 3664 - 📄 Cleaned text length: ~118717 chars
+2025-06-09 13:14:48,148 - api.tasks - INFO - tasks - process_pdf_text_for_statements - 3666 - 🤖 Starting simplified bill-based statement processing for session PDF 54510.
+2025-06-09 13:14:48,148 - api.tasks - WARNING - tasks - process_pdf_text_for_statements - 3711 - ⚠️ No bill names found for session 54510, will process entire text as general discussion
+2025-06-09 13:14:48,191 - api.tasks - ERROR - tasks - process_pdf_text_for_statements - 3718 - 🔍 DEBUG INFO for session 54510:
+2025-06-09 13:14:48,191 - api.tasks - ERROR - tasks - process_pdf_text_for_statements - 3719 -    - Session title: 제22대 제424회 제2차 국회본회의 (2025년 04월 14일)
+2025-06-09 13:14:48,191 - api.tasks - ERROR - tasks - process_pdf_text_for_statements - 3720 -    - Session committee: 과학기술정보방송통신위원회
+2025-06-09 13:14:48,191 - api.tasks - ERROR - tasks - process_pdf_text_for_statements - 3721 -    - Session date: 2025-04-14
+2025-06-09 13:14:48,191 - api.tasks - ERROR - tasks - process_pdf_text_for_statements - 3722 -    - PDF URL exists: True
+2025-06-09 13:14:48,234 - api.tasks - ERROR - tasks - process_pdf_text_for_statements - 3726 -    - Bills in database: 0
+2025-06-09 13:14:48,276 - api.tasks - ERROR - tasks - process_pdf_text_for_statements - 3735 -    - No bills found in database for this session
+2025-06-09 13:14:48,276 - api.tasks - ERROR - tasks - process_pdf_text_for_statements - 3736 -    - This may be an administrative session or bills haven't been fetched yet
+✅ LLM processing completed
+🗑️ Cleaned up temporary PDF file
+✅ Success: 0 statements created
