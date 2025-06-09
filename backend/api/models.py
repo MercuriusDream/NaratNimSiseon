@@ -305,14 +305,14 @@ class Statement(models.Model):
     text = models.TextField(help_text=_("발언 내용"), verbose_name=_("발언 내용"))
     sentiment_score = models.FloatField(null=True,
                                         blank=True,
-                                        help_text=_("감성 점수 (-1 ~ 1)"),
+                                        help_text="감성 점수 (-1 ~ 1)",
                                         verbose_name=_("감성 점수"))
     sentiment_reason = models.TextField(blank=True,
                                         help_text=_("감성 분석 근거"),
                                         verbose_name=_("감성 분석 근거"))
     bill_relevance_score = models.FloatField(null=True,
                                              blank=True,
-                                             help_text=_("의안 관련성 점수 (0-1)"),
+                                             help_text="의안 관련성 점수 (0-1)",
                                              verbose_name=_("의안 관련성 점수"))
     text_hash = models.CharField(max_length=64,
                                  blank=True,
