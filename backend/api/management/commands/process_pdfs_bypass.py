@@ -40,8 +40,8 @@ class Command(BaseCommand):
         parser.add_argument(
             '--limit',
             type=int,
-            default=10,
-            help='Limit number of sessions to process (default: 10)',
+            default=100,
+            help='Limit number of sessions to process (default: 100)',
         )
 
     def handle(self, *args, **options):

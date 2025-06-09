@@ -1145,7 +1145,7 @@ def fetch_committee_members(committee_name, debug=False):
             "KEY": settings.ASSEMBLY_API_KEY,
             "DEPT_NM": committee_name,
             "Type": "json",
-            "pSize": 100  # Get up to 100 committee members
+            "pSize": 500  # Get up to 500 committee members
         }
 
         logger.info(f"🔍 Fetching committee members for: {committee_name}")
@@ -3820,7 +3820,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
 
         # Create simplified bill list for better matching
         bill_info = []
-        for bill in bill_names_list[:10]:  # Limit for better focus
+        for bill in bill_names_list:  # Process all bills
             core_name = bill.replace('법률안', '').replace('일부개정', '').strip()
             if '(' in core_name:
                 core_name = core_name.split('(')[0].strip()
