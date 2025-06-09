@@ -3573,7 +3573,6 @@ def clean_pdf_text(text):
     timing_pattern = r'\(\d{1,2}시\d{2}분\s*개의\)'
 
     # Remove numbered bill agenda items like "1. 검사징계법 일부개정법률안(김용민 의원 대표발의)(의안번호 2208456)"
-    bill_agenda_pattern = r'^\d+\.\s*[^◯]*?법률안[^◯]*?\)\s*$'
 
     lines = text.split('\n')
     cleaned_lines = []
@@ -3591,12 +3590,6 @@ def clean_pdf_text(text):
         # Remove timing markers
         line = re.sub(timing_pattern, '', line).strip()
         if not line:
-            continue
-
-        # Check for bill agenda items (numbered list of bills)
-        if re.match(bill_agenda_pattern, line):
-            skip_until_discussion = True
-            logger.info(f"🧹 Removing bill agenda item: {line[:50]}...")
             continue
 
         # Check if we've reached actual discussion content (starts with ◯)
