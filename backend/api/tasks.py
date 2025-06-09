@@ -479,6 +479,145 @@ def fetch_speaker_details(speaker_name):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def fetch_party_membership_data(self=None, force=False, debug=False):
+    """Fetch party membership data from Assembly API."""
+    logger.info(f"🏛️ Fetching party membership data (force={force}, debug={debug})")
+    
+    try:
+        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error("ASSEMBLY_API_KEY not configured for party membership data.")
+            return
+
+        # Use ALLNAMEMBER API to get all assembly members
+        url = "https://open.assembly.go.kr/portal/openapi/ALLNAMEMBER"
+        
+        all_members = []
+        current_page = 1
+        page_size = 300
+        max_pages = 10
+        
+        while current_page <= max_pages:
+            params = {
+                "KEY": settings.ASSEMBLY_API_KEY,
+                "Type": "json",
+                "pIndex": current_page,
+                "pSize": page_size
+            }
+            
+            logger.info(f"Fetching page {current_page} of party membership data")
+            
+            if debug:
+                logger.debug(f"🐛 DEBUG: Would fetch page {current_page} (skipping actual call)")
+                break
+                
+            response = requests.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            
+            members_on_page = []
+            if data and 'ALLNAMEMBER' in data and isinstance(data['ALLNAMEMBER'], list):
+                if len(data['ALLNAMEMBER']) > 1 and isinstance(data['ALLNAMEMBER'][1], dict):
+                    members_on_page = data['ALLNAMEMBER'][1].get('row', [])
+                elif len(data['ALLNAMEMBER']) > 0 and isinstance(data['ALLNAMEMBER'][0], dict):
+                    head_info = data['ALLNAMEMBER'][0].get('head')
+                    if head_info and head_info[0].get('RESULT', {}).get('CODE', '').startswith("INFO-200"):
+                        logger.info("API indicates no more member data available")
+                        break
+                    elif 'row' in data['ALLNAMEMBER'][0]:
+                        members_on_page = data['ALLNAMEMBER'][0].get('row', [])
+            
+            if not members_on_page:
+                logger.info(f"No members found on page {current_page}, ending pagination")
+                break
+                
+            all_members.extend(members_on_page)
+            logger.info(f"Fetched {len(members_on_page)} members from page {current_page}. Total: {len(all_members)}")
+            
+            if len(members_on_page) < page_size:
+                logger.info("Fetched less members than page size, assuming last page")
+                break
+                
+            current_page += 1
+            time.sleep(1)  # Be respectful to API
+        
+        if not all_members:
+            logger.info("No party membership data found")
+            return
+            
+        logger.info(f"✅ Found {len(all_members)} total members")
+        
+        # Process and update Speaker records with party information
+        processed_count = 0
+        for member_data in all_members:
+            try:
+                member_name = member_data.get('NAAS_NM', '').strip()
+                party_name = member_data.get('PLPT_NM', '').strip()
+                
+                if not member_name:
+                    continue
+                    
+                # Update or create Speaker with party information
+                speaker, created = Speaker.objects.update_or_create(
+                    naas_cd=member_data.get('NAAS_CD', f'TEMP_{member_name}'),
+                    defaults={
+                        'naas_nm': member_name,
+                        'naas_ch_nm': member_data.get('NAAS_CH_NM', ''),
+                        'plpt_nm': party_name or '정당정보없음',
+                        'elecd_nm': member_data.get('ELECD_NM', ''),
+                        'elecd_div_nm': member_data.get('ELECD_DIV_NM', ''),
+                        'cmit_nm': member_data.get('CMIT_NM', ''),
+                        'blng_cmit_nm': member_data.get('BLNG_CMIT_NM', ''),
+                        'rlct_div_nm': member_data.get('RLCT_DIV_NM', ''),
+                        'gtelt_eraco': member_data.get('GTELT_ERACO', ''),
+                        'ntr_div': member_data.get('NTR_DIV', ''),
+                        'naas_pic': member_data.get('NAAS_PIC', '')
+                    }
+                )
+                
+                # Create or update Party record
+                if party_name and party_name != '정당정보없음':
+                    party, party_created = Party.objects.get_or_create(
+                        name=party_name,
+                        defaults={
+                            'description': f'정당 - {party_name}',
+                            'assembly_era': 22
+                        }
+                    )
+                    
+                    # Update speaker's current party
+                    if not speaker.current_party:
+                        speaker.current_party = party
+                        speaker.save()
+                
+                processed_count += 1
+                
+                if processed_count % 50 == 0:
+                    logger.info(f"Processed {processed_count} members...")
+                    
+            except Exception as e:
+                logger.error(f"Error processing member data: {e}")
+                continue
+        
+        logger.info(f"🎉 Processed {processed_count} party membership records")
+        
+    except RequestException as re_exc:
+        logger.error(f"Request error fetching party membership data: {re_exc}")
+        if self:
+            try:
+                self.retry(exc=re_exc)
+            except MaxRetriesExceededError:
+                logger.error("Max retries for party membership data fetch")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error fetching party membership data: {e}")
+        logger.exception("Full traceback for party membership error:")
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error("Max retries after unexpected error for party membership")
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_additional_data_nepjpxkkabqiqpbvk(self=None,
                                             force=False,
                                             debug=False):
