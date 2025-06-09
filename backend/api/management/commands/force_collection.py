@@ -5,9 +5,8 @@ from datetime import datetime
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-# Import the actual task functions directly
-from api.tasks import (fetch_continuous_sessions, process_session_pdf,
-                       is_celery_available)
+# Import the utility function to check Celery availability
+from api.tasks import is_celery_available
 from api.models import Session
 
 logger = logging.getLogger(__name__)
@@ -78,22 +77,36 @@ class Command(BaseCommand):
                         'No previous sessions found. Starting from today.'))
 
         try:
-            # --- THE FINAL FIX: Simple if/else block ---
-            if is_celery_available():
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        "🚀 Calling 'fetch_continuous_sessions' asynchronously via Celery."
-                    ))
-                fetch_continuous_sessions.delay(
-                    force=True,
-                    debug=debug,
-                    start_date=start_date.isoformat() if start_date else None)
-            else:
+            # Use a more robust approach to handle Celery tasks
+            try:
+                if is_celery_available():
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            "🚀 Calling 'fetch_continuous_sessions' asynchronously via Celery."
+                        ))
+                    from api.tasks import fetch_continuous_sessions
+                    fetch_continuous_sessions.delay(
+                        force=True,
+                        debug=debug,
+                        start_date=start_date.isoformat() if start_date else None)
+                else:
+                    raise ImportError("Celery not available")
+            except (ImportError, Exception):
                 self.stdout.write(
                     self.style.WARNING(
                         "🔄 Calling 'fetch_continuous_sessions' synchronously.")
                 )
-                fetch_continuous_sessions(
+                # Import and call the function directly
+                from api.tasks import fetch_continuous_sessions
+                # Get the actual function if it's wrapped
+                if hasattr(fetch_continuous_sessions, 'func'):
+                    func = fetch_continuous_sessions.func
+                elif hasattr(fetch_continuous_sessions, '__wrapped__'):
+                    func = fetch_continuous_sessions.__wrapped__
+                else:
+                    func = fetch_continuous_sessions
+                
+                func(
                     force=True,
                     debug=debug,
                     start_date=start_date.isoformat() if start_date else None)
@@ -157,15 +170,29 @@ class Command(BaseCommand):
                 f"  -> Processing {i+1}/{total_sessions}: Session {session.conf_id}"
             )
             try:
-                # --- THE FINAL FIX: Simple if/else block ---
-                if use_celery:
-                    process_session_pdf.delay(session_id=session.conf_id,
-                                              force=True,
-                                              debug=debug)
-                else:
-                    process_session_pdf(session_id=session.conf_id,
-                                        force=True,
-                                        debug=debug)
+                # Use a more robust approach to handle Celery tasks
+                try:
+                    if use_celery:
+                        from api.tasks import process_session_pdf
+                        process_session_pdf.delay(session_id=session.conf_id,
+                                                  force=True,
+                                                  debug=debug)
+                    else:
+                        raise ImportError("Celery not available")
+                except (ImportError, Exception):
+                    # Import and call the function directly
+                    from api.tasks import process_session_pdf
+                    # Get the actual function if it's wrapped
+                    if hasattr(process_session_pdf, 'func'):
+                        func = process_session_pdf.func
+                    elif hasattr(process_session_pdf, '__wrapped__'):
+                        func = process_session_pdf.__wrapped__
+                    else:
+                        func = process_session_pdf
+                    
+                    func(session_id=session.conf_id,
+                         force=True,
+                         debug=debug)
             except Exception as e:
                 self.stderr.write(
                     self.style.ERROR(
