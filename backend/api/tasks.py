@@ -27,8 +27,8 @@ class GeminiRateLimiter:
     """Enhanced rate limiter for Gemini API calls to respect token limits"""
 
     def __init__(self,
-                 max_tokens_per_minute=1000000,
-                 max_requests_per_minute=15,
+                 max_tokens_per_minute=250000,
+                 max_requests_per_minute=10,
                  max_tokens_per_day=100000010000001000000):
         """
         Initialize rate limiter with conservative limits for free tier
@@ -305,9 +305,9 @@ def initialize_gemini():
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
             genai_module.configure(api_key=settings.GEMINI_API_KEY)
             model_instance = genai_module.GenerativeModel(
-                'gemini-2.0-flash-lite')
+                'gemini-2.5-flash-preview-05-20')
             logger.info(
-                "✅ Gemini API configured successfully with gemini-2.0-flash-lite model"
+                "✅ Gemini API configured successfully with gemini-2.5-flash-preview-05-20 model"
             )
             return genai_module, model_instance
         else:
@@ -2137,7 +2137,8 @@ def _process_single_segmentation_batch(text_segment,
     """Process a single batch of text for speech segmentation with proper chunking."""
     try:
         # Use lightweight model for segmentation
-        segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        segmentation_model = genai.GenerativeModel(
+            'gemini-2.5-flash-preview-05-20')
 
         # Ensure we have actual text content
         if not text_segment or len(text_segment.strip()) < 100:
@@ -2499,17 +2500,18 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
         return []
 
     logger.info(
-        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.0-flash-lite"
+        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.5-flash-preview-05-20"
     )
 
     # Get assembly members once for the entire batch
     assembly_members = get_all_assembly_members()
 
-    # Use gemini-2.0-flash-lite for batch processing
+    # Use gemini-2.5-flash-preview-05-20 for batch processing
     try:
-        batch_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        batch_model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
     except Exception as e:
-        logger.error(f"Failed to initialize gemini-2.0-flash-lite: {e}")
+        logger.error(
+            f"Failed to initialize gemini-2.5-flash-preview-05-20: {e}")
         return []
 
     results = []
@@ -2815,7 +2817,7 @@ def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name,
                                                     estimated_tokens):
     """Legacy function - now redirects to batch processing for consistency."""
     # For single segment, just use batch processing with 1 item
-    batch_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+    batch_model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
     results = analyze_batch_statements_single_request(batch_model,
                                                       [speech_segment],
                                                       bill_name,
@@ -2970,7 +2972,7 @@ def extract_statements_with_bill_based_chunking(full_text,
         return []
 
     try:
-        segmentation_model_name = 'gemini-2.0-flash-lite'
+        segmentation_model_name = 'gemini-2.5-flash-preview-05-20'
         segmentation_llm = genai.GenerativeModel(segmentation_model_name)
         speaker_detection_llm = genai.GenerativeModel(segmentation_model_name)
     except Exception as e_model:
@@ -3624,7 +3626,8 @@ def discover_bills_from_content_llm(full_text, max_bills=10, debug=False):
         return []
 
     try:
-        discovery_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        discovery_model = genai.GenerativeModel(
+            'gemini-2.5-flash-preview-05-20')
 
         # Use first 50k chars for discovery to avoid token limits
         discovery_text = full_text[:50000] if len(
@@ -3749,7 +3752,7 @@ def process_pdf_text_for_statements(full_text,
 
     # Stage 1: Get bill segments with indices
     try:
-        segmentation_model_name = 'gemini-2.0-flash-lite'
+        segmentation_model_name = 'gemini-2.5-flash-preview-05-20'
         segmentation_llm = genai.GenerativeModel(segmentation_model_name)
     except Exception as e_model:
         logger.error(
