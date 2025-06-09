@@ -93,17 +93,23 @@ class Bill(models.Model):
                                verbose_name=_("의안 상세 URL"))
     policy_categories = models.JSONField(default=list,
                                          blank=True,
-                                         help_text=_("정책 카테고리 목록"),
+                                         help_text=_("정책 카테고리 분석 결과"),
                                          verbose_name=_("정책 카테고리"))
     key_policy_phrases = models.JSONField(default=list,
                                           blank=True,
-                                          help_text=_("핵심 정책 어구 목록"),
-                                          verbose_name=_("핵심 정책 어구"))
-    bill_specific_keywords_found = models.JSONField(
+                                          help_text=_("핵심 정책 키워드 목록"),
+                                          verbose_name=_("핵심 정책 키워드"))
+    bill_specific_keywords = models.JSONField(
         default=list,
         blank=True,
-        help_text=_("의안 관련 키워드 목록"),
-        verbose_name=_("의안 관련 키워드"))
+        help_text=_("의안별 특화 키워드 목록"),
+        verbose_name=_("의안별 특화 키워드"))
+    category_analysis = models.TextField(blank=True,
+                                         help_text=_("카테고리 분석 결과"),
+                                         verbose_name=_("카테고리 분석 결과"))
+    policy_keywords = models.TextField(blank=True,
+                                       help_text=_("정책 키워드 (쉼표 구분)"),
+                                       verbose_name=_("정책 키워드"))
     created_at = models.DateTimeField(auto_now_add=True,
                                       verbose_name=_("생성일시"))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_("수정일시"))
@@ -115,6 +121,18 @@ class Bill(models.Model):
 
     def __str__(self):
         return self.bill_nm
+
+    def get_link_url(self):
+        """Generate the proper bill detail URL"""
+        if self.bill_id:
+            return f"https://likms.assembly.go.kr/bill/billDetail.do?billId={self.bill_id}"
+        return ""
+
+    def save(self, *args, **kwargs):
+        # Auto-generate link_url if not provided
+        if not self.link_url and self.bill_id:
+            self.link_url = self.get_link_url()
+        super().save(*args, **kwargs)
 
 
 class Party(models.Model):
@@ -292,18 +310,10 @@ class Statement(models.Model):
     sentiment_reason = models.TextField(blank=True,
                                         help_text=_("감성 분석 근거"),
                                         verbose_name=_("감성 분석 근거"))
-    category_analysis = models.TextField(blank=True,
-                                         help_text=_("카테고리 분석 결과"),
-                                         verbose_name=_("카테고리 분석 결과"))
-    policy_keywords = models.TextField(blank=True,
-                                       help_text=_("정책 키워드"),
-                                       verbose_name=_("정책 키워드"))
     bill_relevance_score = models.FloatField(null=True,
                                              blank=True,
                                              help_text=_("의안 관련성 점수 (0-1)"),
                                              verbose_name=_("의안 관련성 점수"))
-    bill_specific_keywords_json = models.TextField(
-        blank=True, help_text=_("의안 관련 키워드 JSON"), verbose_name=_("의안 관련 키워드"))
     text_hash = models.CharField(max_length=64,
                                  blank=True,
                                  help_text=_("텍스트 해시"),
