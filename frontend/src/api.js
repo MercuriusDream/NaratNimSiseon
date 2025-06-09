@@ -1,10 +1,10 @@
-import axios from 'axios';
-import { API_BASE_URL } from './apiConfig'; // Import base URL
+import axios from "axios";
+import { API_BASE_URL } from "./apiConfig"; // Import base URL
 
 const api = axios.create({
   baseURL: API_BASE_URL, // Use the configured base URL
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
@@ -15,10 +15,10 @@ const CACHE_DURATION = 30000; // 30 seconds
 // Fetch home page data
 export const fetchHomeData = async () => {
   try {
-    const response = await api.get('/api/home-data/');
+    const response = await api.get("/api/home-data/");
     return response.data;
   } catch (error) {
-    console.error('Error fetching home data:', error);
+    console.error("Error fetching home data:", error);
     throw error;
   }
 };
@@ -26,21 +26,23 @@ export const fetchHomeData = async () => {
 // Fetch overall stats
 export const fetchStatsOverview = async () => {
   try {
-    const response = await api.get('/api/stats-overview/');
+    const response = await api.get("/api/stats-overview/");
     return response.data;
   } catch (error) {
-    console.error('Error fetching stats:', error);
+    console.error("Error fetching stats:", error);
     throw error;
   }
 };
 
 // Fetch sentiment data
-export const fetchSentimentData = async (timeRange = 'all') => {
+export const fetchSentimentData = async (timeRange = "all") => {
   try {
-    const response = await api.get(`/api/analytics/sentiment/?time_range=${timeRange}`);
+    const response = await api.get(
+      `/api/analytics/sentiment/?time_range=${timeRange}`,
+    );
     return response.data;
   } catch (error) {
-    console.error('Error fetching sentiment data:', error);
+    console.error("Error fetching sentiment data:", error);
     throw error;
   }
 };
@@ -58,26 +60,26 @@ export const fetchSessions = async (filters = {}) => {
     }
 
     const params = new URLSearchParams();
-    if (filters.era_co) params.append('era_co', filters.era_co);
-    if (filters.sess) params.append('sess', filters.sess);
-    if (filters.dgr) params.append('dgr', filters.dgr);
-    if (filters.date_from) params.append('date_from', filters.date_from);
-    if (filters.date_to) params.append('date_to', filters.date_to);
+    if (filters.era_co) params.append("era_co", filters.era_co);
+    if (filters.sess) params.append("sess", filters.sess);
+    if (filters.dgr) params.append("dgr", filters.dgr);
+    if (filters.date_from) params.append("date_from", filters.date_from);
+    if (filters.date_to) params.append("date_to", filters.date_to);
 
     // Add page size limit to reduce data transfer
-    params.append('page_size', '20');
+    params.append("page_size", "20");
 
     const response = await api.get(`/api/sessions/?${params}`);
 
     // Cache the response
     sessionsCache.set(cacheKey, {
       data: response.data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     return response.data;
   } catch (error) {
-    console.error('Error fetching sessions:', error);
+    console.error("Error fetching sessions:", error);
     throw error;
   }
 };
@@ -86,15 +88,15 @@ export const fetchSessions = async (filters = {}) => {
 export const fetchBills = async (filters = {}) => {
   try {
     const params = new URLSearchParams();
-    if (filters.name) params.append('name', filters.name);
-    if (filters.session_id) params.append('session_id', filters.session_id);
-    if (filters.date_from) params.append('date_from', filters.date_from);
-    if (filters.date_to) params.append('date_to', filters.date_to);
-    
+    if (filters.name) params.append("name", filters.name);
+    if (filters.session_id) params.append("session_id", filters.session_id);
+    if (filters.date_from) params.append("date_from", filters.date_from);
+    if (filters.date_to) params.append("date_to", filters.date_to);
+
     const response = await api.get(`/api/bills/?${params}`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching bills:', error);
+    console.error("Error fetching bills:", error);
     throw error;
   }
 };
@@ -105,7 +107,7 @@ export const fetchBillDetail = async (billId) => {
     const response = await api.get(`/api/bills/${billId}/`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching bill detail:', error);
+    console.error("Error fetching bill detail:", error);
     throw error;
   }
 };
@@ -113,10 +115,10 @@ export const fetchBillDetail = async (billId) => {
 // Fetch parties
 export const fetchParties = async () => {
   try {
-    const response = await api.get('/api/parties/');
+    const response = await api.get("/api/parties/");
     return response.data;
   } catch (error) {
-    console.error('Error fetching parties:', error);
+    console.error("Error fetching parties:", error);
     throw error;
   }
 };
@@ -127,7 +129,7 @@ export const fetchPartyDetail = async (partyId) => {
     const response = await api.get(`/api/parties/${partyId}/`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching party detail:', error);
+    console.error("Error fetching party detail:", error);
     throw error;
   }
 };
@@ -136,13 +138,28 @@ export const fetchPartyDetail = async (partyId) => {
 export const fetchSpeakers = async (filters = {}) => {
   try {
     const params = new URLSearchParams();
-    if (filters.name) params.append('name', filters.name);
-    if (filters.party) params.append('party', filters.party);
-    
+    if (filters.name) params.append("name", filters.name);
+    if (filters.party) params.append("party", filters.party);
+    if (filters.elecd_nm) params.append("elecd_nm", filters.elecd_nm);
+    if (filters.era_co) params.append("era_co", filters.era_co);
+    // Add any other new fields as filter params if needed
+    if (filters.page) params.append("page", filters.page);
+    // You can add more fields according to backend support
     const response = await api.get(`/api/speakers/?${params}`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching speakers:', error);
+    console.error("Error fetching speakers:", error);
+    throw error;
+  }
+};
+
+// Fetch speaker detail by id
+export const fetchSpeakerDetail = async (speakerId) => {
+  try {
+    const response = await api.get(`/api/speakers/${speakerId}/`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching speaker detail:", error);
     throw error;
   }
 };
@@ -153,7 +170,7 @@ export const fetchSessionDetail = async (sessionId) => {
     const response = await api.get(`/api/sessions/${sessionId}/`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching session detail:', error);
+    console.error("Error fetching session detail:", error);
     throw error;
   }
 };

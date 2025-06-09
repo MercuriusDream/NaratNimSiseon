@@ -1,4 +1,3 @@
-
 from rest_framework import serializers
 from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory, VotingRecord
 from django.utils import timezone
@@ -19,10 +18,65 @@ class StatementCategorySerializer(serializers.ModelSerializer):
 
 
 class SpeakerSerializer(serializers.ModelSerializer):
+    # Optionally, you can add explicit fields for clarity
+    elecd_nm = serializers.ListField(child=serializers.CharField(),
+                                     required=False)
+    elecd_div_nm = serializers.ListField(child=serializers.CharField(),
+                                         required=False)
+    cmit_nm = serializers.ListField(child=serializers.CharField(),
+                                    required=False)
+    blng_cmit_nm = serializers.ListField(child=serializers.CharField(),
+                                         required=False)
+    gtelt_eraco = serializers.ListField(child=serializers.IntegerField(),
+                                        required=False)
+    era_int = serializers.IntegerField(required=False, allow_null=True)
+    nth_term = serializers.IntegerField(required=False, allow_null=True)
+    naas_pic = serializers.URLField(required=False,
+                                    allow_blank=True,
+                                    allow_null=True)
 
     class Meta:
         model = Speaker
         fields = '__all__'
+
+    def to_representation(self, instance):
+        """Ensure list/integer fields are serialized correctly."""
+        rep = super().to_representation(instance)
+        # Ensure JSONFields are always serialized as lists
+        for field in [
+                'elecd_nm', 'elecd_div_nm', 'cmit_nm', 'blng_cmit_nm',
+                'gtelt_eraco'
+        ]:
+            value = getattr(instance, field, None)
+            if value is None:
+                rep[field] = []
+            else:
+                rep[field] = value if isinstance(value, list) else [value]
+        # Integer fields
+        rep['era_int'] = instance.era_int
+        rep['nth_term'] = instance.nth_term
+        # naas_pic as URL
+        rep['naas_pic'] = instance.naas_pic
+        return rep
+
+    def to_internal_value(self, data):
+        """Allow input as string or list for JSONFields."""
+        for field in ['elecd_nm', 'elecd_div_nm', 'cmit_nm', 'blng_cmit_nm']:
+            value = data.get(field)
+            if value and isinstance(value, str):
+                # Accept comma or slash separated strings
+                sep = ',' if field in ['cmit_nm', 'blng_cmit_nm'] else '/'
+                data[field] = [
+                    v.strip() for v in value.split(sep) if v.strip()
+                ]
+        # gtelt_eraco: accept string like '제21대, 제22대' or list of ints
+        gtelt = data.get('gtelt_eraco')
+        import re
+        if gtelt and isinstance(gtelt, str):
+            data['gtelt_eraco'] = [
+                int(num) for num in re.findall(r'제(\d+)대', gtelt)
+            ]
+        return super().to_internal_value(data)
 
     def validate_naas_nm(self, value):
         if len(value) < 2:
@@ -37,14 +91,18 @@ class SpeakerSerializer(serializers.ModelSerializer):
 
 class BillSerializer(serializers.ModelSerializer):
     bill_name = serializers.SerializerMethodField()
-    session_date = serializers.DateField(source='session.conf_dt', read_only=True)
+    session_date = serializers.DateField(source='session.conf_dt',
+                                         read_only=True)
     content = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
 
     class Meta:
         model = Bill
-        fields = ['bill_id', 'bill_nm', 'bill_name', 'bill_no', 'session', 'session_date', 
-                 'proposer', 'propose_dt', 'content', 'status', 'link_url', 'created_at', 'updated_at']
+        fields = [
+            'bill_id', 'bill_nm', 'bill_name', 'bill_no', 'session',
+            'session_date', 'proposer', 'propose_dt', 'content', 'status',
+            'link_url', 'created_at', 'updated_at'
+        ]
 
     def get_bill_name(self, obj):
         """Clean bill name by removing leading numbers like '10. '"""
@@ -77,7 +135,9 @@ class StatementSerializer(serializers.ModelSerializer):
                                          read_only=True)
     bill_name = serializers.CharField(source='bill.bill_nm', read_only=True)
     categories = StatementCategorySerializer(many=True, read_only=True)
-    content = serializers.CharField(source='text', read_only=True)  # Add content field for frontend compatibility
+    content = serializers.CharField(
+        source='text',
+        read_only=True)  # Add content field for frontend compatibility
 
     class Meta:
         model = Statement
@@ -96,11 +156,13 @@ class StatementSerializer(serializers.ModelSerializer):
 
 class SessionListSerializer(serializers.ModelSerializer):
     """Optimized serializer for session list view without expensive joins"""
-    
+
     class Meta:
         model = Session
-        fields = ['conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 'conf_knd', 
-                 'cmit_nm', 'title']
+        fields = [
+            'conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 'conf_knd',
+            'cmit_nm', 'title'
+        ]
 
 
 class SessionSerializer(serializers.ModelSerializer):
@@ -109,9 +171,11 @@ class SessionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Session
-        fields = ['conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 'conf_knd', 
-                 'cmit_nm', 'conf_plc', 'title', 'bg_ptm', 'ed_ptm', 'down_url', 
-                 'bills', 'statements']
+        fields = [
+            'conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 'conf_knd',
+            'cmit_nm', 'conf_plc', 'title', 'bg_ptm', 'ed_ptm', 'down_url',
+            'bills', 'statements'
+        ]
 
     def validate_conf_dt(self, value):
         if value > timezone.now().date():  # Compare date with date
@@ -190,11 +254,16 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class VotingRecordSerializer(serializers.ModelSerializer):
-    speaker_name = serializers.CharField(source='speaker.naas_nm', read_only=True)
-    party_name = serializers.CharField(source='speaker.plpt_nm', read_only=True)
+    speaker_name = serializers.CharField(source='speaker.naas_nm',
+                                         read_only=True)
+    party_name = serializers.CharField(source='speaker.plpt_nm',
+                                       read_only=True)
     bill_name = serializers.CharField(source='bill.bill_nm', read_only=True)
 
     class Meta:
         model = VotingRecord
-        fields = ['id', 'bill', 'speaker', 'vote_result', 'vote_date', 'sentiment_score', 
-                 'speaker_name', 'party_name', 'bill_name', 'created_at']
+        fields = [
+            'id', 'bill', 'speaker', 'vote_result', 'vote_date',
+            'sentiment_score', 'speaker_name', 'party_name', 'bill_name',
+            'created_at'
+        ]
