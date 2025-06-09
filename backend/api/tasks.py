@@ -2,7 +2,7 @@ import requests
 import pdfplumber
 from celery import shared_task
 from django.conf import settings
-from .models import Session, Bill, Speaker, Statement, VotingRecord  # Assuming these models are correctly defined
+from .models import Session, Bill, Speaker, Statement, VotingRecord, Party  # Added Party import to fix NameError
 from celery.exceptions import MaxRetriesExceededError
 from requests.exceptions import RequestException
 import logging
@@ -481,21 +481,24 @@ def fetch_speaker_details(speaker_name):
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_party_membership_data(self=None, force=False, debug=False):
     """Fetch party membership data from Assembly API."""
-    logger.info(f"🏛️ Fetching party membership data (force={force}, debug={debug})")
-    
+    logger.info(
+        f"🏛️ Fetching party membership data (force={force}, debug={debug})")
+
     try:
-        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
-            logger.error("ASSEMBLY_API_KEY not configured for party membership data.")
+        if not hasattr(settings,
+                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error(
+                "ASSEMBLY_API_KEY not configured for party membership data.")
             return
 
         # Use ALLNAMEMBER API to get all assembly members
         url = "https://open.assembly.go.kr/portal/openapi/ALLNAMEMBER"
-        
+
         all_members = []
         current_page = 1
         page_size = 300
         max_pages = 10
-        
+
         while current_page <= max_pages:
             params = {
                 "KEY": settings.ASSEMBLY_API_KEY,
@@ -503,59 +506,72 @@ def fetch_party_membership_data(self=None, force=False, debug=False):
                 "pIndex": current_page,
                 "pSize": page_size
             }
-            
-            logger.info(f"Fetching page {current_page} of party membership data")
-            
+
+            logger.info(
+                f"Fetching page {current_page} of party membership data")
+
             if debug:
-                logger.debug(f"🐛 DEBUG: Would fetch page {current_page} (skipping actual call)")
+                logger.debug(
+                    f"🐛 DEBUG: Would fetch page {current_page} (skipping actual call)"
+                )
                 break
-                
+
             response = requests.get(url, params=params, timeout=60)
             response.raise_for_status()
             data = response.json()
-            
+
             members_on_page = []
-            if data and 'ALLNAMEMBER' in data and isinstance(data['ALLNAMEMBER'], list):
-                if len(data['ALLNAMEMBER']) > 1 and isinstance(data['ALLNAMEMBER'][1], dict):
+            if data and 'ALLNAMEMBER' in data and isinstance(
+                    data['ALLNAMEMBER'], list):
+                if len(data['ALLNAMEMBER']) > 1 and isinstance(
+                        data['ALLNAMEMBER'][1], dict):
                     members_on_page = data['ALLNAMEMBER'][1].get('row', [])
-                elif len(data['ALLNAMEMBER']) > 0 and isinstance(data['ALLNAMEMBER'][0], dict):
+                elif len(data['ALLNAMEMBER']) > 0 and isinstance(
+                        data['ALLNAMEMBER'][0], dict):
                     head_info = data['ALLNAMEMBER'][0].get('head')
-                    if head_info and head_info[0].get('RESULT', {}).get('CODE', '').startswith("INFO-200"):
-                        logger.info("API indicates no more member data available")
+                    if head_info and head_info[0].get('RESULT', {}).get(
+                            'CODE', '').startswith("INFO-200"):
+                        logger.info(
+                            "API indicates no more member data available")
                         break
                     elif 'row' in data['ALLNAMEMBER'][0]:
                         members_on_page = data['ALLNAMEMBER'][0].get('row', [])
-            
+
             if not members_on_page:
-                logger.info(f"No members found on page {current_page}, ending pagination")
+                logger.info(
+                    f"No members found on page {current_page}, ending pagination"
+                )
                 break
-                
+
             all_members.extend(members_on_page)
-            logger.info(f"Fetched {len(members_on_page)} members from page {current_page}. Total: {len(all_members)}")
-            
+            logger.info(
+                f"Fetched {len(members_on_page)} members from page {current_page}. Total: {len(all_members)}"
+            )
+
             if len(members_on_page) < page_size:
-                logger.info("Fetched less members than page size, assuming last page")
+                logger.info(
+                    "Fetched less members than page size, assuming last page")
                 break
-                
+
             current_page += 1
             time.sleep(1)  # Be respectful to API
-        
+
         if not all_members:
             logger.info("No party membership data found")
             return
-            
+
         logger.info(f"✅ Found {len(all_members)} total members")
-        
+
         # Process and update Speaker records with party information
         processed_count = 0
         for member_data in all_members:
             try:
                 member_name = member_data.get('NAAS_NM', '').strip()
                 party_name = member_data.get('PLPT_NM', '').strip()
-                
+
                 if not member_name:
                     continue
-                    
+
                 # Update or create Speaker with party information
                 speaker, created = Speaker.objects.update_or_create(
                     naas_cd=member_data.get('NAAS_CD', f'TEMP_{member_name}'),
@@ -571,9 +587,8 @@ def fetch_party_membership_data(self=None, force=False, debug=False):
                         'gtelt_eraco': member_data.get('GTELT_ERACO', ''),
                         'ntr_div': member_data.get('NTR_DIV', ''),
                         'naas_pic': member_data.get('NAAS_PIC', '')
-                    }
-                )
-                
+                    })
+
                 # Create or update Party record
                 if party_name and party_name != '정당정보없음':
                     party, party_created = Party.objects.get_or_create(
@@ -581,25 +596,24 @@ def fetch_party_membership_data(self=None, force=False, debug=False):
                         defaults={
                             'description': f'정당 - {party_name}',
                             'assembly_era': 22
-                        }
-                    )
-                    
+                        })
+
                     # Update speaker's current party
                     if not speaker.current_party:
                         speaker.current_party = party
                         speaker.save()
-                
+
                 processed_count += 1
-                
+
                 if processed_count % 50 == 0:
                     logger.info(f"Processed {processed_count} members...")
-                    
+
             except Exception as e:
                 logger.error(f"Error processing member data: {e}")
                 continue
-        
+
         logger.info(f"🎉 Processed {processed_count} party membership records")
-        
+
     except RequestException as re_exc:
         logger.error(f"Request error fetching party membership data: {re_exc}")
         if self:
@@ -614,7 +628,8 @@ def fetch_party_membership_data(self=None, force=False, debug=False):
             try:
                 self.retry(exc=e)
             except MaxRetriesExceededError:
-                logger.error("Max retries after unexpected error for party membership")
+                logger.error(
+                    "Max retries after unexpected error for party membership")
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -2857,7 +2872,7 @@ def update_bill_policy_data(bill_obj, segment_data):
     """Update bill with policy analysis data from segmentation and create database mappings."""
     try:
         from .models import Category, Subcategory, BillCategoryMapping, BillSubcategoryMapping
-        
+
         # Extract data from segment
         main_policy_category = segment_data.get('main_policy_category', '')
         policy_subcategories = segment_data.get('policy_subcategories', [])
@@ -2865,12 +2880,13 @@ def update_bill_policy_data(bill_obj, segment_data):
         bill_specific_keywords = segment_data.get('bill_specific_keywords', [])
         policy_stance = segment_data.get('policy_stance', 'moderate')
         bill_analysis = segment_data.get('bill_analysis', '')
-        
+
         # Update bill fields
-        bill_obj.policy_categories = [main_policy_category] if main_policy_category else []
+        bill_obj.policy_categories = [main_policy_category
+                                      ] if main_policy_category else []
         bill_obj.key_policy_phrases = key_policy_phrases
         bill_obj.bill_specific_keywords = bill_specific_keywords
-        
+
         # Create category analysis text
         if main_policy_category:
             category_analysis = f"주요 정책 분야: {main_policy_category}"
@@ -2879,26 +2895,28 @@ def update_bill_policy_data(bill_obj, segment_data):
             if bill_analysis:
                 category_analysis += f"\n분석: {bill_analysis}"
             bill_obj.category_analysis = category_analysis
-        
+
         # Create policy keywords string
         if key_policy_phrases:
             bill_obj.policy_keywords = ', '.join(key_policy_phrases)
-        
+
         # Set LLM analysis metadata
         bill_obj.llm_analysis_version = "v1.0"
         bill_obj.llm_confidence_score = 0.8  # Default confidence
-        
+
         # Calculate policy impact score based on keywords and content
-        impact_score = len(key_policy_phrases) * 2 + len(bill_specific_keywords)
+        impact_score = len(key_policy_phrases) * 2 + len(
+            bill_specific_keywords)
         bill_obj.policy_impact_score = min(10.0, impact_score)
-            
+
         bill_obj.save()
-        
+
         # Create category mappings in database
         if main_policy_category:
             try:
                 # Find or create main category
-                category_obj = Category.objects.filter(name=main_policy_category).first()
+                category_obj = Category.objects.filter(
+                    name=main_policy_category).first()
                 if category_obj:
                     # Create or update bill-category mapping
                     mapping, created = BillCategoryMapping.objects.update_or_create(
@@ -2908,40 +2926,49 @@ def update_bill_policy_data(bill_obj, segment_data):
                             'confidence_score': 0.8,
                             'is_primary': True,
                             'analysis_method': 'llm_discovery'
-                        }
-                    )
-                    
+                        })
+
                     # Create subcategory mappings
                     for subcat_name in policy_subcategories:
                         subcategory_obj = Subcategory.objects.filter(
-                            category=category_obj,
-                            name=subcat_name
-                        ).first()
-                        
+                            category=category_obj, name=subcat_name).first()
+
                         if subcategory_obj:
                             subcat_mapping, sub_created = BillSubcategoryMapping.objects.update_or_create(
                                 bill=bill_obj,
                                 subcategory=subcategory_obj,
                                 defaults={
-                                    'relevance_score': 0.7,
-                                    'supporting_evidence': bill_analysis,
-                                    'extracted_keywords': bill_specific_keywords,
-                                    'policy_position': 'support' if policy_stance == 'progressive' else 'neutral'
-                                }
-                            )
+                                    'relevance_score':
+                                    0.7,
+                                    'supporting_evidence':
+                                    bill_analysis,
+                                    'extracted_keywords':
+                                    bill_specific_keywords,
+                                    'policy_position':
+                                    'support' if policy_stance == 'progressive'
+                                    else 'neutral'
+                                })
                             if sub_created:
-                                logger.info(f"✅ Created subcategory mapping: {bill_obj.bill_nm[:30]}... -> {subcat_name}")
-                    
+                                logger.info(
+                                    f"✅ Created subcategory mapping: {bill_obj.bill_nm[:30]}... -> {subcat_name}"
+                                )
+
                     if created:
-                        logger.info(f"✅ Created category mapping: {bill_obj.bill_nm[:30]}... -> {main_policy_category}")
+                        logger.info(
+                            f"✅ Created category mapping: {bill_obj.bill_nm[:30]}... -> {main_policy_category}"
+                        )
                 else:
-                    logger.warning(f"⚠️ Category '{main_policy_category}' not found in database")
-                    
+                    logger.warning(
+                        f"⚠️ Category '{main_policy_category}' not found in database"
+                    )
+
             except Exception as mapping_error:
-                logger.error(f"❌ Error creating category mappings: {mapping_error}")
-        
-        logger.info(f"✅ Updated policy data for bill: {bill_obj.bill_nm[:50]}...")
-        
+                logger.error(
+                    f"❌ Error creating category mappings: {mapping_error}")
+
+        logger.info(
+            f"✅ Updated policy data for bill: {bill_obj.bill_nm[:50]}...")
+
     except Exception as e:
         logger.error(f"❌ Error updating bill policy data: {e}")
         logger.exception("Full traceback for bill policy update:")
@@ -2973,10 +3000,11 @@ def extract_statements_with_llm_discovery(full_text,
 
     # Load policy categories from database for enhanced analysis
     from .models import Category, Subcategory
-    
+
     policy_categories_from_db = {}
     try:
-        for category in Category.objects.prefetch_related('subcategories').all():
+        for category in Category.objects.prefetch_related(
+                'subcategories').all():
             subcats = [sub.name for sub in category.subcategories.all()]
             policy_categories_from_db[category.name] = {
                 'description': category.description,
@@ -3120,8 +3148,8 @@ I already know about the following bills. You MUST find the discussion for these
         if not debug:
             for segment in all_segments:
                 if segment.get("is_newly_discovered"):
-                    bill_obj = create_placeholder_bill_from_llm(session_obj,
-                                                               segment["bill_name"])
+                    bill_obj = create_placeholder_bill_from_llm(
+                        session_obj, segment["bill_name"])
                     # Update bill with policy analysis from segmentation
                     if bill_obj:
                         update_bill_policy_data(bill_obj, segment)
@@ -3143,12 +3171,13 @@ I already know about the following bills. You MUST find the discussion for these
                     # Find the existing bill and update its policy data
                     existing_bill = Bill.objects.filter(
                         session=session_obj,
-                        bill_nm__iexact=bill_name
-                    ).first()
+                        bill_nm__iexact=bill_name).first()
                     if existing_bill:
                         update_bill_policy_data(existing_bill, segment)
                 except Exception as e:
-                    logger.warning(f"Could not update policy data for known bill '{bill_name}': {e}")
+                    logger.warning(
+                        f"Could not update policy data for known bill '{bill_name}': {e}"
+                    )
 
             segment_text = full_text[start:end]
             logger.info(
@@ -3162,9 +3191,11 @@ I already know about the following bills. You MUST find the discussion for these
             for stmt in statements_in_segment:
                 stmt['associated_bill_name'] = bill_name
                 # Add policy context to statements
-                stmt['policy_categories'] = segment.get('policy_categories', [])
+                stmt['policy_categories'] = segment.get(
+                    'policy_categories', [])
                 stmt['policy_keywords'] = segment.get('key_policy_phrases', [])
-                stmt['bill_specific_keywords'] = segment.get('bill_specific_keywords', [])
+                stmt['bill_specific_keywords'] = segment.get(
+                    'bill_specific_keywords', [])
 
             all_statements.extend(statements_in_segment)
 
@@ -3437,7 +3468,8 @@ def process_extracted_statements_data(statements_data_list,
                 sentiment_score=stmt_data.get('sentiment_score', 0.0),
                 sentiment_reason=stmt_data.get('sentiment_reason',
                                                'Analysis not fully run'),
-                bill_relevance_score=stmt_data.get('bill_relevance_score', 0.0),  # Add bill relevance score
+                bill_relevance_score=stmt_data.get(
+                    'bill_relevance_score', 0.0),  # Add bill relevance score
                 category_analysis=json.dumps(stmt_data.get(
                     'policy_categories', []),
                                              ensure_ascii=False),
@@ -3887,7 +3919,7 @@ def fetch_bill_detail_info(self, bill_id, force=False, debug=False):
 
         # Generate the bill link URL
         bill_link_url = f"https://likms.assembly.go.kr/bill/billDetail.do?billId={bill_id}"
-        
+
         url = "https://open.assembly.go.kr/portal/openapi/BILLINFODETAIL"
         params = {
             "KEY": settings.ASSEMBLY_API_KEY,
@@ -4289,12 +4321,15 @@ def create_placeholder_bill(session_obj, title, bill_no=None):
             'proposer': None,  # Proposer is unknown from PDF agenda
         })
     if created:
-        logger.info(f"✨ Created placeholder bill for: '{title[:60]}...'")
+        # Only log the rightmost party in the chain
+        rightmost_party = title.split('/')[-1]
+        logger.info(
+            f"✨ Created placeholder bill for: '{rightmost_party[:60]}...'")
+
     return bill
 
 
-def process_pdf_text_for_statements(
-        full_text,
+def process_session_pdf_text(
         session_id,
         session_obj,
         bills_context_str,  # Deprecated
