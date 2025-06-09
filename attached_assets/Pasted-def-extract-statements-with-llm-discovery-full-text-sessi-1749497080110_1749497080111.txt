@@ -1,0 +1,190 @@
+def extract_statements_with_llm_discovery(full_text,
+                                          session_id,
+                                          known_bill_names,
+                                          session_obj,
+                                          debug=False):
+    """
+    Uses a single, powerful LLM call to:
+    1. Find discussion segments for a list of known bills.
+    2. Discover and segment any additional bills/topics discussed in the text.
+    3. Creates placeholder bills for newly discovered items.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info(
+        f"🤖 Starting LLM discovery and segmentation for session: {session_id}")
+
+    if not reinitialize_gemini():
+        logger.error("❌ Gemini not available. Cannot perform LLM discovery.")
+        return []
+
+    # Prepare the list of known bills for the prompt
+    if known_bill_names:
+        known_bills_str = "\n".join(f"- {name}" for name in known_bill_names)
+    else:
+        known_bills_str = "No known bills were provided."
+
+    prompt = f"""You are a world-class legislative analyst AI. Your task is to read a parliamentary transcript
+and perfectly segment the entire discussion for all topics, while also analyzing policy content.
+
+**CONTEXT:**
+I already know about the following bills. You MUST find the discussion for these if they exist.
+--- KNOWN BILLS ---
+{known_bills_str}
+
+**YOUR CRITICAL MISSION:**
+1. Read the entire transcript below.
+2. Identify the exact start and end character index for the complete discussion of each **KNOWN BILL**.
+3. Discover any additional bills/topics not in the known list, and identify their discussion spans.
+4. For each bill/topic, analyze the policy content and categorize it.
+5. Return a JSON object with segmentation AND policy analysis.
+
+**POLICY CATEGORIES:**
+- 경제/산업: 경제정책, 산업진흥, 금융, 무역, 중소기업, 벤처
+- 사회복지: 복지정책, 사회보장, 의료보험, 연금, 돌봄서비스
+- 교육/문화: 교육정책, 대학, 문화예술, 체육, 관광
+- 환경/에너지: 환경보호, 기후변화, 신재생에너지, 원자력
+- 국방/외교: 국방정책, 외교관계, 통일, 안보
+- 행정/법무: 행정개혁, 사법제도, 인권, 개인정보보호
+- 과학기술: 과학기술진흥, IT, 디지털전환, 인공지능
+- 농림/해양: 농업, 임업, 수산업, 농촌개발
+- 국토/교통: 국토개발, 교통정책, 주택, 도시계획
+- 보건/의료: 보건정책, 의료서비스, 질병관리, 건강증진
+
+**RULES:**
+- Ignore any mentions that occur in the table-of-contents or front-matter portion of the document
+  (before the Chair officially opens the debate).
+- A discussion segment **must** be substantive, containing actual debate or remarks from multiple speakers.
+  Do not segment short procedural announcements.
+- `bill_name` for known bills MUST EXACTLY MATCH the provided list.
+- For new items, create a concise, accurate `bill_name`.
+- Analyze policy content for each segment and assign appropriate categories.
+- Extract key policy phrases and specific keywords related to the bill.
+- Return **ONLY** the final JSON object.
+
+**TRANSCRIPT:**
+---
+{full_text}
+---
+
+**REQUIRED JSON OUTPUT FORMAT:**
+{{
+  "bills_found": [
+    {{
+      "bill_name": "Exact name of a KNOWN bill",
+      "start_index": 1234,
+      "end_index": 5678,
+      "policy_categories": ["경제/산업", "사회복지"],
+      "key_policy_phrases": ["중소기업 지원", "일자리 창출", "사회안전망"],
+      "bill_analysis": ["dddd하는 의안입니다."]
+    }}
+    // …more known bills
+  ],
+  "newly_discovered": [
+    {{
+      "bill_name": "Name of a newly discovered topic",
+      "start_index": 2345,
+      "end_index": 6789,
+      "policy_categories": ["환경/에너지"],
+      "key_policy_phrases": ["탄소중립", "재생에너지"],
+      "bill_analysis": ["dddd하는 의안입니다."]
+    }}
+    // …more new topics
+  ]
+}}
+"""
+    try:
+        segmentation_model = genai.GenerativeModel(
+            'gemini-2.5-flash-preview-05-20')
+        estimated_tokens = len(prompt) // 3
+
+        if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+            logger.error("Rate limit timeout for LLM discovery. Aborting.")
+            return []
+
+        response = segmentation_model.generate_content(prompt)
+        gemini_rate_limiter.record_request(estimated_tokens, success=True)
+
+        # Strip markdown fences if present
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            response_text = response_text.split("```", 2)[-1].strip()
+
+        data = json.loads(response_text)
+        if not isinstance(data, dict):
+            logger.error("LLM discovery did not return a JSON object.")
+            return []
+
+        # Merge the two arrays into one flat list, tagging each entry
+        all_segments = []
+
+        for seg in data.get("bills_found", []):
+            seg["is_newly_discovered"] = False
+            all_segments.append(seg)
+
+        for seg in data.get("newly_discovered", []):
+            seg["is_newly_discovered"] = True
+            all_segments.append(seg)
+
+        logger.info(
+            f"✅ LLM segmented {len(all_segments)} total discussion topics.")
+
+        # Create placeholders for newly discovered bills with policy analysis
+        if not debug:
+            for segment in all_segments:
+                if segment.get("is_newly_discovered"):
+                    bill_obj = create_placeholder_bill_from_llm(session_obj,
+                                                               segment["bill_name"])
+                    # Update bill with policy analysis from segmentation
+                    if bill_obj:
+                        update_bill_policy_data(bill_obj, segment)
+
+        # Process each segment to extract statements and update policy data
+        all_statements = []
+        for segment in sorted(all_segments,
+                              key=lambda x: x.get('start_index', 0)):
+            bill_name = segment.get("bill_name")
+            start = segment.get("start_index", 0)
+            end = segment.get("end_index", 0)
+
+            if not bill_name or end <= start:
+                continue
+
+            # Update policy data for known bills as well
+            if not debug and not segment.get("is_newly_discovered"):
+                try:
+                    # Find the existing bill and update its policy data
+                    existing_bill = Bill.objects.filter(
+                        session=session_obj,
+                        bill_nm__iexact=bill_name
+                    ).first()
+                    if existing_bill:
+                        update_bill_policy_data(existing_bill, segment)
+                except Exception as e:
+                    logger.warning(f"Could not update policy data for known bill '{bill_name}': {e}")
+
+            segment_text = full_text[start:end]
+            logger.info(
+                f"--- Processing segment for: '{bill_name}' (Chars {start}-{end}) ---"
+            )
+
+            statements_in_segment = extract_statements_for_bill_segment(
+                segment_text, session_id, bill_name, debug)
+
+            # Associate these statements with the correct bill name and policy data
+            for stmt in statements_in_segment:
+                stmt['associated_bill_name'] = bill_name
+                # Add policy context to statements
+                stmt['policy_categories'] = segment.get('policy_categories', [])
+                stmt['policy_keywords'] = segment.get('key_policy_phrases', [])
+                stmt['bill_specific_keywords'] = segment.get('bill_specific_keywords', [])
+
+            all_statements.extend(statements_in_segment)
+
+        return all_statements
+
+    except Exception as e:
+        gemini_rate_limiter.record_error("llm_discovery_error")
+        logger.error(
+            f"❌ Critical error during LLM discovery and segmentation: {e}")
+        logger.exception("Full traceback for LLM discovery:")
+        return []

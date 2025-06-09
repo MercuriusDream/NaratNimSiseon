@@ -2826,7 +2826,7 @@ I already know about the following bills. You MUST find the discussion for these
       "end_index": 5678,
       "policy_categories": ["경제/산업", "사회복지"],
       "key_policy_phrases": ["중소기업 지원", "일자리 창출", "사회안전망"],
-      "bill_specific_keywords": ["세제혜택", "금융지원", "고용보험"]
+      "bill_analysis": ["dddd하는 의안입니다."]
     }}
     // …more known bills
   ],
@@ -2837,7 +2837,7 @@ I already know about the following bills. You MUST find the discussion for these
       "end_index": 6789,
       "policy_categories": ["환경/에너지"],
       "key_policy_phrases": ["탄소중립", "재생에너지"],
-      "bill_specific_keywords": ["태양광", "풍력", "배터리"]
+      "bill_analysis": ["dddd하는 의안입니다."]
     }}
     // …more new topics
   ]
