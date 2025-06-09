@@ -200,22 +200,44 @@ class Command(BaseCommand):
                 except (ImportError, Exception):
                     # Call the function directly without Celery
                     try:
+                        # Direct import and call
                         from api.tasks import process_session_pdf
-                        # Call the task function directly, bypassing Celery
-                        if hasattr(process_session_pdf, '__wrapped__'):
-                            # If it's a decorated function, get the original
+                        
+                        # For Celery tasks, we need to call the underlying function
+                        # The task decorator wraps the original function
+                        if hasattr(process_session_pdf, 'run'):
+                            # Call the Celery task's run method directly
+                            process_session_pdf.run(session_id=session.conf_id, force=True, debug=debug)
+                        elif hasattr(process_session_pdf, '__wrapped__'):
+                            # If it's a wrapped function, call the original with self=None for bound tasks
                             process_session_pdf.__wrapped__(None, session_id=session.conf_id, force=True, debug=debug)
                         else:
-                            # Try calling directly
+                            # Try calling the function directly
                             process_session_pdf(session_id=session.conf_id, force=True, debug=debug)
+                            
+                        logger.info(f"✅ Successfully processed PDF for session {session.conf_id} synchronously")
+                        
                     except Exception as e_fallback:
                         logger.error(f"Failed to call process_session_pdf directly: {e_fallback}")
-                        # Last resort - try importing and calling synchronously
+                        
+                        # Final fallback - try to call the function by importing the module differently
                         try:
-                            from api import tasks
-                            tasks.process_session_pdf(session_id=session.conf_id, force=True, debug=debug)
+                            import importlib
+                            tasks_module = importlib.import_module('api.tasks')
+                            func = getattr(tasks_module, 'process_session_pdf')
+                            
+                            # Try the same calling patterns
+                            if hasattr(func, 'run'):
+                                func.run(session_id=session.conf_id, force=True, debug=debug)
+                            elif hasattr(func, '__wrapped__'):
+                                func.__wrapped__(None, session_id=session.conf_id, force=True, debug=debug)
+                            else:
+                                func(session_id=session.conf_id, force=True, debug=debug)
+                                
+                            logger.info(f"✅ Successfully processed PDF for session {session.conf_id} using fallback method")
+                            
                         except Exception as e_final:
-                            logger.error(f"Final fallback failed: {e_final}")
+                            logger.error(f"Final fallback failed for session {session.conf_id}: {e_final}")
                             continue
             except Exception as e:
                 self.stderr.write(
