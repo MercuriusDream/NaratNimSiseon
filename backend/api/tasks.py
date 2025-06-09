@@ -3869,7 +3869,7 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
 당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
 국회 회의록에서 법안별 논의 구간을 정확히 식별해주세요.
 
-대상 법안들 (반드시 이 정확한 문자열을 사용하세요):
+대상 법안들:
 {bill_list_str}
 
 핵심 키워드: {keywords_str}
@@ -3899,7 +3899,6 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk,
 - end_index는 다음 법안 논의 시작 전까지 또는 구간 끝까지
 - 실제 토론/발언이 있는 구간만 포함 (단순 언급 제외)
 - 각 법안별로 반드시 하나의 구간만 반환
-- confidence 값은 포함하지 말 것
 - 의안 목록이나 의사진행 발언은 이미 제거되었으므로 ◯ 발언만 분석
 
 예시:
