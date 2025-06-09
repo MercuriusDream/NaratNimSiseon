@@ -2303,7 +2303,101 @@ def process_session_pdf_direct(session_id=None, force=False, debug=False):
     Direct wrapper for process_session_pdf that can be called without Celery.
     This is useful for management commands and testing.
     """
-    return process_session_pdf(self=None, session_id=session_id, force=force, debug=debug)
+    # Call the underlying function directly without the Celery task wrapper
+    if not session_id:
+        logger.error("session_id is required for process_session_pdf.")
+        return
+
+    logger.info(
+        f"📄 Processing PDF for session: {session_id} (force={force}, debug={debug}) [DIRECT CALL]"
+    )
+
+    try:
+        session = Session.objects.get(conf_id=session_id)
+    except Session.DoesNotExist:
+        logger.error(
+            f"❌ Session {session_id} not found in DB. Cannot process PDF.")
+        return
+
+    if not session.down_url:
+        logger.info(
+            f"ℹ️ No PDF URL for session {session_id}. Skipping PDF processing."
+        )
+        return
+
+    if Statement.objects.filter(
+            session=session).exists() and not force and not debug:
+        logger.info(
+            f"Statements already exist for session {session_id} and not in force/debug mode. Skipping."
+        )
+        return
+
+    if debug:
+        logger.debug(f"🐛 DEBUG: Simulating PDF processing for {session_id}.")
+        return
+
+    temp_pdf_path = None
+    try:
+        logger.info(f"📥 Downloading PDF from: {session.down_url}")
+        response = requests.get(session.down_url, timeout=120, stream=True)
+        response.raise_for_status()
+
+        temp_dir = Path(getattr(settings, "TEMP_FILE_DIR", "temp_files"))
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_pdf_path = temp_dir / f"session_{session_id}_{int(time.time())}.pdf"
+
+        with open(temp_pdf_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        logger.info(
+            f"📥 PDF for session {session_id} downloaded to {temp_pdf_path}")
+
+        full_text = ""
+        with pdfplumber.open(temp_pdf_path) as pdf:
+            pages = pdf.pages
+            logger.info(f"Extracting text from {len(pages)} pages...")
+            for i, page in enumerate(pages):
+                page_text = page.extract_text(x_tolerance=1, y_tolerance=3)
+                if page_text:
+                    full_text += page_text + "\n"
+                if (i + 1) % 20 == 0:
+                    logger.info(f"Processed {i+1}/{len(pages)} pages...")
+        logger.info(f"📄 Extracted ~{len(full_text)} chars from PDF.")
+
+        if not full_text.strip():
+            logger.warning(
+                f"Extracted text is empty for session {session_id}.")
+            return
+
+        # Fetch the list of bills from the database
+        bills_for_session = get_session_bill_names(session_id)
+
+        # Process the PDF text for statements
+        process_pdf_text_for_statements(
+            full_text,
+            session_id,
+            session,
+            None,  # bills_context_str is no longer needed
+            bills_for_session,  # Pass the list of bills from the DB
+            debug)
+
+    except RequestException as re_exc:
+        logger.error(
+            f"Request error downloading PDF for session {session_id}: {re_exc}"
+        )
+        # Don't retry in direct calls
+    except Exception as e:
+        logger.error(
+            f"❌ Unexpected error processing PDF for session {session_id}: {e}")
+        logger.exception(f"Full traceback for PDF processing {session_id}:")
+    finally:
+        if temp_pdf_path and temp_pdf_path.exists():
+            try:
+                temp_pdf_path.unlink()
+                logger.info(f"🗑️ Deleted temporary PDF: {temp_pdf_path}")
+            except OSError as e_del:
+                logger.error(
+                    f"Error deleting temporary PDF {temp_pdf_path}: {e_del}")
 
 def _process_single_bill_segmentation_batch(segmentation_llm, text_batch,
                                             bill_names, batch_offset):
