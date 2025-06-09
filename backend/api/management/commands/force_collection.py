@@ -96,20 +96,30 @@ class Command(BaseCommand):
                     self.style.WARNING(
                         "🔄 Calling 'fetch_continuous_sessions' synchronously.")
                 )
-                # Import and call the function directly
-                from api.tasks import fetch_continuous_sessions
-                # Get the actual function if it's wrapped
-                if hasattr(fetch_continuous_sessions, 'func'):
-                    func = fetch_continuous_sessions.func
-                elif hasattr(fetch_continuous_sessions, '__wrapped__'):
-                    func = fetch_continuous_sessions.__wrapped__
-                else:
-                    func = fetch_continuous_sessions
-                
-                func(
-                    force=True,
-                    debug=debug,
-                    start_date=start_date.isoformat() if start_date else None)
+                # Call the function directly without accessing Celery task attributes
+                try:
+                    import importlib
+                    tasks_module = importlib.import_module('api.tasks')
+                    
+                    func_name = 'fetch_continuous_sessions'
+                    if hasattr(tasks_module, func_name):
+                        func = getattr(tasks_module, func_name)
+                        # If it's a Celery task, try to get the original function
+                        if hasattr(func, 'func'):
+                            func = func.func
+                        elif hasattr(func, '__wrapped__'):
+                            func = func.__wrapped__
+                        
+                        # Call with self=None for bound tasks
+                        func(
+                            self=None,
+                            force=True,
+                            debug=debug,
+                            start_date=start_date.isoformat() if start_date else None)
+                    else:
+                        logger.error(f"Function {func_name} not found in tasks module")
+                except Exception as e_fallback:
+                    logger.error(f"Failed to call function directly: {e_fallback}")
 
             self.stdout.write(
                 self.style.SUCCESS(
@@ -180,19 +190,29 @@ class Command(BaseCommand):
                     else:
                         raise ImportError("Celery not available")
                 except (ImportError, Exception):
-                    # Import and call the function directly
-                    from api.tasks import process_session_pdf
-                    # Get the actual function if it's wrapped
-                    if hasattr(process_session_pdf, 'func'):
-                        func = process_session_pdf.func
-                    elif hasattr(process_session_pdf, '__wrapped__'):
-                        func = process_session_pdf.__wrapped__
-                    else:
-                        func = process_session_pdf
-                    
-                    func(session_id=session.conf_id,
-                         force=True,
-                         debug=debug)
+                    # Call the function directly without trying to access Celery task attributes
+                    try:
+                        # Import the actual function from tasks module
+                        import importlib
+                        tasks_module = importlib.import_module('api.tasks')
+                        
+                        # Get the function by name - this bypasses Celery task wrapper issues
+                        func_name = 'process_session_pdf'
+                        if hasattr(tasks_module, func_name):
+                            func = getattr(tasks_module, func_name)
+                            # If it's a Celery task, try to get the original function
+                            if hasattr(func, 'func'):
+                                func = func.func
+                            elif hasattr(func, '__wrapped__'):
+                                func = func.__wrapped__
+                            
+                            # Call the function directly
+                            func(self=None, session_id=session.conf_id, force=True, debug=debug)
+                        else:
+                            logger.error(f"Function {func_name} not found in tasks module")
+                    except Exception as e_fallback:
+                        logger.error(f"Failed to call function directly: {e_fallback}")
+                        continue
             except Exception as e:
                 self.stderr.write(
                     self.style.ERROR(
