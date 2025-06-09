@@ -1067,6 +1067,7 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                 if is_celery_available():
                     process_session_pdf.delay(session_id=confer_num, force=force, debug=debug)
                 else:
+                    # Call the function directly without 'self' parameter when Celery is not available
                     process_session_pdf(session_id=confer_num, force=force, debug=debug)
             else:
                 logger.info(f"No PDF URL for session {confer_num}, skipping PDF processing.")
@@ -1447,7 +1448,7 @@ def fetch_session_details(self,
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_session_bills(self,
+def fetch_session_bills(self=None,
                         session_id=None,
                         force=False,
                         debug=False):  # Celery provides 'self'
@@ -1604,10 +1605,11 @@ def fetch_session_bills(self,
     except RequestException as re_exc:
         logger.error(
             f"Request error fetching bills for session {session_id}: {re_exc}")
-        try:
-            self.retry(exc=re_exc)
-        except MaxRetriesExceededError:
-            logger.error(f"Max retries for session bills {session_id}.")
+        if self:
+            try:
+                self.retry(exc=re_exc)
+            except MaxRetriesExceededError:
+                logger.error(f"Max retries for session bills {session_id}.")
     except json.JSONDecodeError as json_e:
         logger.error(
             f"JSON decode error for session {session_id} bills: {json_e}")
@@ -1616,12 +1618,13 @@ def fetch_session_bills(self,
             f"❌ Unexpected error fetching bills for session {session_id}: {e}")
         logger.exception(
             f"Full traceback for session {session_id} bill fetch:")
-        try:
-            self.retry(exc=e)
-        except MaxRetriesExceededError:
-            logger.error(
-                f"Max retries after unexpected error for bills of {session_id}."
-            )
+        if self:
+            try:
+                self.retry(exc=e)
+            except MaxRetriesExceededError:
+                logger.error(
+                    f"Max retries after unexpected error for bills of {session_id}."
+                )
         # raise # Optionally
 
 
@@ -3097,7 +3100,7 @@ def extract_statements_with_bill_based_chunking(full_text,
 # In tasks.py, replace the existing process_session_pdf function
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_session_pdf(self, session_id=None, force=False, debug=False):
+def process_session_pdf(self=None, session_id=None, force=False, debug=False):
     """Download, parse PDF transcript for a session, and extract statements."""
     if not session_id:
         logger.error("session_id is required for process_session_pdf.")
@@ -3169,11 +3172,13 @@ def process_session_pdf(self, session_id=None, force=False, debug=False):
 
     except RequestException as re_exc:
         logger.error(f"Request error downloading PDF for session {session_id}: {re_exc}")
-        self.retry(exc=re_exc)
+        if self:
+            self.retry(exc=re_exc)
     except Exception as e:
         logger.error(f"❌ Unexpected error processing PDF for session {session_id}: {e}")
         logger.exception(f"Full traceback for PDF processing {session_id}:")
-        self.retry(exc=e)
+        if self:
+            self.retry(exc=e)
     finally:
         if temp_pdf_path and temp_pdf_path.exists():
             try:
