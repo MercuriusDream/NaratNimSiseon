@@ -1,7 +1,7 @@
 import logging
 from django.core.management import call_command
 from api.models import Party, Speaker
-from api.tasks import fetch_party_membership_data, fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
+from .tasks import fetch_party_membership_data, fetch_additional_data_nepjpxkkabqiqpbvk, is_celery_available
 
 logger = logging.getLogger(__name__)
 
