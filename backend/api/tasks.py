@@ -24,61 +24,115 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiRateLimiter:
-    """Rate limiter for Gemini API calls to respect token limits"""
+    """Enhanced rate limiter for Gemini API calls to respect token limits"""
 
     def __init__(self,
-                 max_tokens_per_minute=1000000,
-                 max_requests_per_minute=30):
+                 max_tokens_per_minute=12000,
+                 max_requests_per_minute=15,
+                 max_tokens_per_day=50000):
         """
         Initialize rate limiter with conservative limits for free tier
-        max_tokens_per_minute: Conservative estimate (12K vs 15K limit)
-        max_requests_per_minute: Conservative request limit
+        max_tokens_per_minute: Conservative estimate for free tier
+        max_requests_per_minute: Conservative request limit for free tier
+        max_tokens_per_day: Daily token limit for free tier
         """
         self.max_tokens_per_minute = max_tokens_per_minute
         self.max_requests_per_minute = max_requests_per_minute
+        self.max_tokens_per_day = max_tokens_per_day
+        
         self.token_usage = deque()  # Store (timestamp, token_count) tuples
         self.request_times = deque()  # Store request timestamps
+        self.daily_token_usage = deque()  # Store daily token usage
         self.lock = threading.Lock()
+        
+        # Error tracking
+        self.consecutive_errors = 0
+        self.last_error_time = None
+        self.backoff_time = 1  # Start with 1 second backoff
 
     def _cleanup_old_records(self):
-        """Remove records older than 1 minute"""
-        cutoff_time = datetime.now() - timedelta(minutes=1)
+        """Remove records older than their respective time windows"""
+        now = datetime.now()
+        minute_cutoff = now - timedelta(minutes=1)
+        day_cutoff = now - timedelta(days=1)
 
-        # Clean token usage records
-        while self.token_usage and self.token_usage[0][0] < cutoff_time:
+        # Clean minute-based records
+        while self.token_usage and self.token_usage[0][0] < minute_cutoff:
             self.token_usage.popleft()
 
-        # Clean request time records
-        while self.request_times and self.request_times[0] < cutoff_time:
+        while self.request_times and self.request_times[0] < minute_cutoff:
             self.request_times.popleft()
+
+        # Clean daily records
+        while self.daily_token_usage and self.daily_token_usage[0][0] < day_cutoff:
+            self.daily_token_usage.popleft()
+
+    def _calculate_backoff_time(self):
+        """Calculate exponential backoff time based on consecutive errors"""
+        if self.consecutive_errors == 0:
+            return 0
+        
+        # Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 60s
+        backoff = min(60, 2 ** (self.consecutive_errors - 1))
+        return backoff
 
     def can_make_request(self, estimated_tokens=1000):
         """Check if we can make a request without hitting limits"""
         with self.lock:
             self._cleanup_old_records()
 
-            # Check request count limit
-            if len(self.request_times) >= self.max_requests_per_minute:
-                return False, "Request limit reached"
+            # Check if we're in backoff period due to errors
+            if self.last_error_time and self.consecutive_errors > 0:
+                time_since_error = (datetime.now() - self.last_error_time).total_seconds()
+                required_backoff = self._calculate_backoff_time()
+                if time_since_error < required_backoff:
+                    return False, f"In backoff period ({required_backoff - time_since_error:.1f}s remaining)"
 
-            # Check token limit
+            # Check request count limit (per minute)
+            if len(self.request_times) >= self.max_requests_per_minute:
+                return False, f"Request limit reached ({len(self.request_times)}/{self.max_requests_per_minute} per minute)"
+
+            # Check token limit (per minute)
             current_tokens = sum(count for _, count in self.token_usage)
             if current_tokens + estimated_tokens > self.max_tokens_per_minute:
-                return False, f"Token limit would be exceeded ({current_tokens} + {estimated_tokens} > {self.max_tokens_per_minute})"
+                return False, f"Token limit would be exceeded ({current_tokens} + {estimated_tokens} > {self.max_tokens_per_minute} per minute)"
+
+            # Check daily token limit
+            daily_tokens = sum(count for _, count in self.daily_token_usage)
+            if daily_tokens + estimated_tokens > self.max_tokens_per_day:
+                return False, f"Daily token limit would be exceeded ({daily_tokens} + {estimated_tokens} > {self.max_tokens_per_day})"
 
             return True, "OK"
 
-    def record_request(self, actual_tokens=1000):
+    def record_request(self, actual_tokens=1000, success=True):
         """Record a completed request"""
         with self.lock:
             now = datetime.now()
             self.request_times.append(now)
             self.token_usage.append((now, actual_tokens))
+            self.daily_token_usage.append((now, actual_tokens))
+            
+            # Update error tracking
+            if success:
+                self.consecutive_errors = 0
+                self.last_error_time = None
+            else:
+                self.consecutive_errors += 1
+                self.last_error_time = now
+                logger.warning(f"API error recorded. Consecutive errors: {self.consecutive_errors}")
+            
             self._cleanup_old_records()
 
-    def wait_if_needed(self, estimated_tokens=1000):
-        """Wait if necessary to respect rate limits"""
-        max_wait_time = 65  # Maximum wait time in seconds
+    def record_error(self, error_type="unknown"):
+        """Record an API error for backoff calculation"""
+        with self.lock:
+            self.consecutive_errors += 1
+            self.last_error_time = datetime.now()
+            backoff_time = self._calculate_backoff_time()
+            logger.warning(f"API error ({error_type}). Consecutive errors: {self.consecutive_errors}, backoff: {backoff_time}s")
+
+    def wait_if_needed(self, estimated_tokens=1000, max_wait_time=120):
+        """Wait if necessary to respect rate limits with enhanced backoff"""
         wait_start = time.time()
 
         while time.time() - wait_start < max_wait_time:
@@ -86,16 +140,52 @@ class GeminiRateLimiter:
             if can_proceed:
                 return True
 
-            logger.info(f"Rate limit hit: {reason}. Waiting 5 seconds...")
-            time.sleep(5)
+            # Determine wait time based on reason
+            if "backoff" in reason.lower():
+                # Extract remaining backoff time from reason
+                try:
+                    remaining_time = float(reason.split('(')[1].split('s')[0])
+                    wait_time = min(10, max(1, remaining_time))
+                except:
+                    wait_time = 5
+            elif "daily" in reason.lower():
+                logger.error(f"Daily rate limit exceeded: {reason}")
+                return False  # Don't wait for daily limits
+            else:
+                wait_time = 10  # Default wait time for other limits
 
-        logger.warning(
-            f"Max wait time ({max_wait_time}s) exceeded for rate limiting")
+            logger.info(f"Rate limit hit: {reason}. Waiting {wait_time} seconds...")
+            time.sleep(wait_time)
+
+        logger.warning(f"Max wait time ({max_wait_time}s) exceeded for rate limiting")
         return False
+
+    def get_usage_stats(self):
+        """Get current usage statistics"""
+        with self.lock:
+            self._cleanup_old_records()
+            
+            current_requests = len(self.request_times)
+            current_tokens = sum(count for _, count in self.token_usage)
+            daily_tokens = sum(count for _, count in self.daily_token_usage)
+            
+            return {
+                "requests_per_minute": f"{current_requests}/{self.max_requests_per_minute}",
+                "tokens_per_minute": f"{current_tokens}/{self.max_tokens_per_minute}",
+                "daily_tokens": f"{daily_tokens}/{self.max_tokens_per_day}",
+                "consecutive_errors": self.consecutive_errors,
+                "backoff_time": self._calculate_backoff_time() if self.consecutive_errors > 0 else 0
+            }
 
 
 # Global rate limiter instance
 gemini_rate_limiter = GeminiRateLimiter()
+
+def log_rate_limit_status():
+    """Log current rate limit status for monitoring"""
+    stats = gemini_rate_limiter.get_usage_stats()
+    logger.info(f"📊 Rate Limit Status: {stats}")
+    return stats
 
 
 def with_db_retry(func, max_retries=3):
@@ -2301,14 +2391,21 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
             continue
 
         # Create batch prompt for 20 statements
-        batch_results = analyze_batch_statements_single_request(
-            batch_model, batch_segments, bill_name, assembly_members,
-            estimated_tokens, batch_start)
-
-        results.extend(batch_results)
-
-        # Record the API usage
-        gemini_rate_limiter.record_request(estimated_tokens)
+        try:
+            batch_results = analyze_batch_statements_single_request(
+                batch_model, batch_segments, bill_name, assembly_members,
+                estimated_tokens, batch_start)
+            results.extend(batch_results)
+            
+            # Record successful API usage
+            gemini_rate_limiter.record_request(estimated_tokens, success=True)
+            
+        except Exception as e:
+            # Record failed API usage
+            error_type = "timeout" if "timeout" in str(e).lower() else "api_error"
+            gemini_rate_limiter.record_error(error_type)
+            logger.error(f"Batch analysis failed: {e}")
+            continue
 
         # Brief pause between batches
         if batch_end < len(speech_segments):
@@ -3535,8 +3632,14 @@ def _process_single_segmentation_chunk(segmentation_llm, text_chunk, bill_names_
 예시:
 만약 논의 구간이 텍스트의 123번째 문자에서 시작해 456번째 문자에서 끝난다면, start_index=123, end_index=456로 표기해 주세요."""
 
-        response = segmentation_llm.generate_content(prompt)
-        gemini_rate_limiter.record_request(estimated_tokens)
+        try:
+            response = segmentation_llm.generate_content(prompt)
+            gemini_rate_limiter.record_request(estimated_tokens, success=True)
+        except Exception as e:
+            error_type = "quota" if "quota" in str(e).lower() else "timeout" if "timeout" in str(e).lower() else "api_error"
+            gemini_rate_limiter.record_error(error_type)
+            logger.error(f"Segmentation API call failed: {e}")
+            return []
 
         if not response or not response.text:
             return []

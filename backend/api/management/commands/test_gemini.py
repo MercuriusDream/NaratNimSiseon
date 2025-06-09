@@ -76,6 +76,18 @@ class Command(BaseCommand):
                 )
                 return
 
+        # Test rate limiter status
+        try:
+            from api.tasks import gemini_rate_limiter, log_rate_limit_status
+            self.stdout.write('🔄 Checking rate limiter status...')
+            stats = log_rate_limit_status()
+            self.stdout.write(f'✅ Rate limiter operational: {stats}')
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(f'❌ Rate limiter check failed: {e}')
+            )
+
         self.stdout.write(
-            self.style.SUCCESS('🎉 All Gemini LLM tests passed!')
+            self.style.SUCCESS('🎉 All Gemini tests completed successfully!')
+        )tyle.SUCCESS('🎉 All Gemini LLM tests passed!')
         )
