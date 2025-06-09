@@ -8,6 +8,7 @@ from django.utils import timezone
 # Import the utility function to check Celery availability
 from api.tasks import is_celery_available
 from api.models import Session
+from api import tasks  # Import the tasks module directly for easier access
 
 logger = logging.getLogger(__name__)
 
@@ -77,57 +78,27 @@ class Command(BaseCommand):
                         'No previous sessions found. Starting from today.'))
 
         try:
-            # Use a more robust approach to handle Celery tasks
-            try:
-                if is_celery_available():
-                    self.stdout.write(
-                        self.style.SUCCESS(
-                            "🚀 Calling 'fetch_continuous_sessions' asynchronously via Celery."
-                        ))
-                    from api.tasks import fetch_continuous_sessions
-                    fetch_continuous_sessions.delay(
-                        force=True,
-                        debug=debug,
-                        start_date=start_date.isoformat() if start_date else None)
-                else:
-                    raise ImportError("Celery not available")
-            except (ImportError, Exception):
+            if is_celery_available():
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        "🚀 Calling 'fetch_continuous_sessions' asynchronously via Celery."
+                    ))
+                tasks.fetch_continuous_sessions.delay(
+                    force=True,
+                    debug=debug,
+                    start_date=start_date.isoformat() if start_date else None)
+            else:
                 self.stdout.write(
                     self.style.WARNING(
                         "🔄 Calling 'fetch_continuous_sessions' synchronously.")
                 )
-                # Call the function directly without accessing Celery task attributes
-                try:
-                    import importlib
-                    tasks_module = importlib.import_module('api.tasks')
-                    
-                    func_name = 'fetch_continuous_sessions'
-                    if hasattr(tasks_module, func_name):
-                        func = getattr(tasks_module, func_name)
-                        # If it's a Celery task, try to get the original function
-                        if hasattr(func, 'func'):
-                            func = func.func
-                        elif hasattr(func, '__wrapped__'):
-                            func = func.__wrapped__
-                        
-                        # Call directly (bound tasks don't need self when called directly)
-                        func(
-                            force=True,
-                            debug=debug,
-                            start_date=start_date.isoformat() if start_date else None)
-                    else:
-                        logger.error(f"Function {func_name} not found in tasks module")
-                except Exception as e_fallback:
-                    logger.error(f"Failed to call fetch_continuous_sessions directly: {e_fallback}")
-                    # Last resort - try importing and calling synchronously
-                    try:
-                        from api import tasks
-                        tasks.fetch_continuous_sessions(
-                            force=True,
-                            debug=debug,
-                            start_date=start_date.isoformat() if start_date else None)
-                    except Exception as e_final:
-                        logger.error(f"Final fallback for fetch_continuous_sessions failed: {e_final}")
+                # The task is bound (bind=True), so the wrapped function's first arg is `self`.
+                # Call it with None for the `self` parameter.
+                tasks.fetch_continuous_sessions.__wrapped__(
+                    None,  # For self
+                    force=True,
+                    debug=debug,
+                    start_date=start_date.isoformat() if start_date else None)
 
             self.stdout.write(
                 self.style.SUCCESS(
@@ -173,7 +144,6 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Found {total_sessions} sessions to re-process PDFs for.")
 
-        # Determine if we're running async or sync once at the start
         use_celery = is_celery_available()
         if use_celery:
             self.stdout.write(
@@ -188,42 +158,18 @@ class Command(BaseCommand):
                 f"  -> Processing {i+1}/{total_sessions}: Session {session.conf_id}"
             )
             try:
-                # Use a more robust approach to handle Celery tasks
-                try:
-                    if use_celery:
-                        from api.tasks import process_session_pdf
-                        process_session_pdf.delay(session_id=session.conf_id,
-                                                  force=True,
-                                                  debug=debug)
-                    else:
-                        raise ImportError("Celery not available")
-                except (ImportError, Exception):
-                    # Call the function directly without Celery
-                    try:
-                        # Import the actual task function
-                        from api.tasks import process_session_pdf as pdf_task
-                        
-                        # Call the task function directly, bypassing Celery
-                        # For @shared_task(bind=True), we need to pass self=None as first argument
-                        pdf_task(self=None, session_id=session.conf_id, force=True, debug=debug)
-                        
-                        logger.info(f"✅ Successfully processed PDF for session {session.conf_id} synchronously")
-                        
-                    except Exception as e_fallback:
-                        logger.error(f"Failed to call process_session_pdf directly: {e_fallback}")
-                        
-                        # Final fallback - try calling with keyword arguments only
-                        try:
-                            from api.tasks import process_session_pdf
-                            
-                            # Try calling with just keyword arguments
-                            process_session_pdf(session_id=session.conf_id, force=True, debug=debug)
-                            
-                            logger.info(f"✅ Successfully processed PDF for session {session.conf_id} using keyword-only fallback")
-                            
-                        except Exception as e_final:
-                            logger.error(f"Final fallback failed for session {session.conf_id}: {e_final}")
-                            continue
+                if use_celery:
+                    tasks.process_session_pdf.delay(session_id=session.conf_id,
+                                                    force=True,
+                                                    debug=debug)
+                else:
+                    # The task is bound (bind=True), so the wrapped function's first arg is `self`.
+                    # Call the original function via `__wrapped__` with None for `self`.
+                    tasks.process_session_pdf.__wrapped__(
+                        None,  # for self
+                        session_id=session.conf_id,
+                        force=True,
+                        debug=debug)
             except Exception as e:
                 self.stderr.write(
                     self.style.ERROR(
