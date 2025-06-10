@@ -94,11 +94,13 @@ class Command(BaseCommand):
                     self.style.WARNING(
                         "🔄 Calling 'fetch_continuous_sessions' synchronously (Celery not available)."
                     ))
-                # Import the actual function implementation directly
-                from api.tasks import fetch_continuous_sessions_impl
-                fetch_continuous_sessions_impl(force=True,
-                                               debug=debug,
-                                               start_date=start_date_iso)
+                # Call the Celery task function directly without .delay()
+                from api.tasks import fetch_continuous_sessions
+                # For Celery tasks, we can call the function directly when not using Celery
+                fetch_continuous_sessions(self=None,
+                                         force=True,
+                                         debug=debug,
+                                         start_date=start_date_iso)
 
             self.stdout.write(
                 self.style.SUCCESS(
@@ -153,8 +155,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(
                 self.style.WARNING("🔄 Running tasks synchronously."))
-            # Import the actual implementation function directly
-            from api.tasks import process_session_pdf_impl
+            # We'll call the direct function for PDF processing
 
         for i, session in enumerate(sessions_to_process):
             self.stdout.write(
@@ -170,10 +171,11 @@ class Command(BaseCommand):
                         f"✅ Queued PDF processing task for session {session.conf_id}"
                     )
                 else:
-                    # Call the implementation function directly
-                    process_session_pdf_impl(session_id=session.conf_id,
-                                             force=True,
-                                             debug=debug)
+                    # Call the direct PDF processing function
+                    from api.tasks import process_session_pdf_direct
+                    process_session_pdf_direct(session_id=session.conf_id,
+                                               force=True,
+                                               debug=debug)
                     logger.info(
                         f"✅ Successfully processed PDF for session {session.conf_id} synchronously"
                     )
