@@ -295,3 +295,13 @@ urlpatterns = [
          views.party_policy_comparison,
          name='party_policy_comparison'),
 ]
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from . import views
+
+# Add to your existing urlpatterns
+urlpatterns = [
+    # ... existing patterns
+    path('management/force-collection/', views.trigger_force_collection, name='trigger_force_collection'),
+    path('management/check-status/', views.check_data_status, name='check_data_status'),
+]

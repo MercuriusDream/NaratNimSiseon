@@ -996,6 +996,46 @@ def category_analytics(request):
         categories_param = request.query_params.get('categories')
 
         # Base queryset for statements
+
+
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.core.management import call_command
+import io
+import sys
+
+@require_POST
+def trigger_force_collection(request):
+    """Trigger force collection via API"""
+    try:
+        # Capture output
+        out = io.StringIO()
+        call_command('force_collection', stdout=out)
+        return JsonResponse({
+            'status': 'success',
+            'output': out.getvalue()
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'error': str(e)
+        }, status=500)
+
+def check_data_status(request):
+    """Check data status via API"""
+    try:
+        out = io.StringIO()
+        call_command('check_data_status', stdout=out)
+        return JsonResponse({
+            'status': 'success',
+            'output': out.getvalue()
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'error': str(e)
+        }, status=500)
+
         statements_qs = Statement.objects.all()
 
         # Apply time filter
