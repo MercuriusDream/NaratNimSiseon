@@ -6,49 +6,42 @@ from .models import Session, Bill, Speaker, Statement, VotingRecord, Party, Cate
 from celery.exceptions import MaxRetriesExceededError
 from requests.exceptions import RequestException
 import logging
-from celery.schedules import crontab  # Keep if you plan to use Celery Beat schedules
+from celery.schedules import crontab
 from datetime import datetime, timedelta, time as dt_time
 import json
-import os  # Keep if used elsewhere or for future Path handling consistency
 import time
 from pathlib import Path
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import concurrent.futures
-import queue
 from collections import deque
-from datetime import datetime, timedelta
 import re
+
+# Import the new Gemini SDK
+from google import genai
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
 
 class GeminiRateLimiter:
-    """Enhanced rate limiter for Gemini API calls to respect token limits"""
+    """Enhanced rate limiter for Gemini API calls to respect token limits."""
 
-    def __init__(self,
-                 max_tokens_per_minute=250000,
-                 max_requests_per_minute=10,
-                 max_tokens_per_day=100000010000001000000):
+    def __init__(
+        self,
+        max_tokens_per_minute=250000,
+        max_requests_per_minute=60,  # Standard Gemini 1.5 Flash limit
+        max_tokens_per_day=2000000):  # Realistic free tier daily limit
         """
-        Initialize rate limiter with conservative limits for free tier
-        max_tokens_per_minute: Conservative estimate for free tier
-        max_requests_per_minute: Conservative request limit for free tier
-        max_tokens_per_day: Daily token limit for free tier
+        Initialize rate limiter with updated limits.
         """
         self.max_tokens_per_minute = max_tokens_per_minute
         self.max_requests_per_minute = max_requests_per_minute
         self.max_tokens_per_day = max_tokens_per_day
-
-        self.token_usage = deque()  # Store (timestamp, token_count) tuples
-        self.request_times = deque()  # Store request timestamps
-        self.daily_token_usage = deque()  # Store daily token usage
+        self.token_usage = deque()
+        self.request_times = deque()
+        self.daily_token_usage = deque()
         self.lock = threading.Lock()
-
-        # Error tracking
         self.consecutive_errors = 0
         self.last_error_time = None
-        self.backoff_time = 1  # Start with 1 second backoff
 
     def _cleanup_old_records(self):
         """Remove records older than their respective time windows"""
@@ -192,13 +185,121 @@ class GeminiRateLimiter:
             }
 
 
-# Global rate limiter instance
+# Global instances
 gemini_rate_limiter = GeminiRateLimiter()
+client = None  # Will be initialized by initialize_gemini()
+
+
+def initialize_gemini():
+    """Initializes the `google.genai` client and performs a status check."""
+    global client
+    try:
+        if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
+            # Use the new genai.Client
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            # Perform a simple status check
+            model_name = "gemini-1.5-flash-latest"
+            response = client.models.generate_content(model=model_name,
+                                                      contents=["Hello"])
+            logger.info(
+                f"✅ Gemini API configured successfully with '{model_name}'. Status check succeeded. Preview: {response.text[:100]}"
+            )
+            return True
+        else:
+            logger.error(
+                "❌ GEMINI_API_KEY not found or empty. LLM features will be disabled."
+            )
+            client = None
+            return False
+    except ImportError as e:
+        logger.error(
+            f"❌ google.genai library not available: {e}. LLM features will be disabled."
+        )
+        client = None
+        return False
+    except Exception as e:
+        logger.error(
+            f"❌ Error configuring Gemini API: {e}. LLM features will be disabled."
+        )
+        client = None
+        return False
+
+
+# Initialize on module load
+initialize_gemini()
+
+
+def _call_gemini_api(prompt: str,
+                     model_name: str = "gemini-1.5-flash-latest",
+                     system_instruction: str = None,
+                     response_mime_type: str = "text/plain",
+                     max_retries: int = 2,
+                     timeout: int = 180) -> str | dict | None:
+    """
+    A unified, robust function to call the Gemini API.
+    Handles rate limiting, error handling, retries, and JSON parsing.
+    """
+    global client
+    if not client:
+        logger.error("Gemini client not initialized. Cannot make API call.")
+        return None
+
+    # Estimate tokens for rate limiting (very rough but better than nothing)
+    estimated_tokens = len(prompt) // 2
+    if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+        logger.error("Aborting API call due to rate limiting timeout.")
+        return None
+
+    # Construct generation configuration
+    gen_config = types.GenerateContentConfig(
+        response_mime_type=response_mime_type,
+        temperature=
+        0.2,  # Lower temperature for more deterministic/factual output
+        top_p=0.8,
+        top_k=40,
+        max_output_tokens=8192)
+
+    for attempt in range(max_retries + 1):
+        try:
+            # Make the API call
+            response = client.models.generate_content(model=model_name,
+                                                      contents=[prompt],
+                                                      config=gen_config,
+                                                      timeout=timeout)
+
+            # Record successful request
+            gemini_rate_limiter.record_request(estimated_tokens, success=True)
+
+            # Parse response based on mime type
+            if response_mime_type == "application/json":
+                try:
+                    return json.loads(response.text)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON response: {e}")
+                    return None
+            return response.text
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(
+                f"Gemini API call failed (attempt {attempt + 1}/{max_retries + 1}): {error_msg}"
+            )
+            gemini_rate_limiter.record_request(estimated_tokens, success=False)
+
+            if attempt < max_retries:
+                # Exponential backoff
+                backoff = min(60, 2**attempt)
+                logger.info(f"Retrying in {backoff} seconds...")
+                time.sleep(backoff)
+                continue
+
+            return None
 
 
 def log_rate_limit_status():
     """Log current rate limit status for monitoring"""
     stats = gemini_rate_limiter.get_usage_stats()
+    logger.info("Rate limit status: %s", stats)
     logger.info(f"📊 Rate Limit Status: {stats}")
     return stats
 
@@ -311,29 +412,30 @@ def initialize_gemini():
                 contents = [
                     types.Content(
                         role="user",
-                        parts=[
-                            types.Part.from_text(text="Hello")
-                        ],
+                        parts=[types.Part.from_text(text="Hello")],
                     ),
                 ]
-                
+
                 config = types.GenerateContentConfig(
-                    response_mime_type="text/plain",
-                )
-                
+                    response_mime_type="text/plain", )
+
                 response_text = ""
                 for chunk in client.models.generate_content_stream(
-                    model=model,
-                    contents=contents,
-                    config=config,
+                        model=model,
+                        contents=contents,
+                        config=config,
                 ):
                     response_text += chunk.text
                     break  # Just get first chunk for test
-                
-                logger.info(f"✅ Gemini API configured successfully and status check succeeded. Preview: {response_text[:100]}")
+
+                logger.info(
+                    f"✅ Gemini API configured successfully and status check succeeded. Preview: {response_text[:100]}"
+                )
                 return genai, client
             except Exception as status_exc:
-                logger.warning(f"⚠️ Gemini API configured but status check failed: {status_exc}")
+                logger.warning(
+                    f"⚠️ Gemini API configured but status check failed: {status_exc}"
+                )
                 return None, None
         else:
             logger.error(
@@ -353,7 +455,7 @@ def initialize_gemini():
 
 
 # Initialize Gemini
-genai, client = initialize_gemini()
+initialize_gemini()
 
 
 def reinitialize_gemini():
@@ -370,22 +472,18 @@ def check_gemini_api_status():
     Check Gemini API status by sending a minimal prompt and returning the response or error.
     Returns a tuple: (status: str, info: str)
     """
-    global genai, model
+    global client
+
+    if client is None:
+        return "error", "Gemini API client not initialized"
+
     try:
-        # Always perform (re)init and check
-        reinitialize_gemini()
-        if not genai or not model:
-            return ("error", "Gemini API not initialized.")
-        # Use a minimal, safe prompt
-        prompt = "Hello"
-        response = model.generate_content(prompt)
-        # Try to extract a short preview of the response
-        preview = getattr(response, 'text', str(response))
-        logger.info(f"✅ Gemini API status check succeeded. Preview: {preview[:100]}")
-        return ("ok", preview[:200])
+        # Test with a minimal prompt
+        response = client.models.generate_content(
+            model="gemini-1.5-flash-latest", contents=["Hello"])
+        return "success", f"API is responding. Model: {response.model}"
     except Exception as e:
-        logger.error(f"❌ Gemini API status check failed: {e}")
-        return ("error", str(e))
+        return "error", f"API Error: {str(e)}"
 
 
 # Check if Celery/Redis is available
@@ -739,12 +837,11 @@ def fetch_additional_data_nepjpxkkabqiqpbvk(self=None,
                             data[api_endpoint_name][0], dict):
                         head_info = data[api_endpoint_name][0].get('head')
                         if head_info and head_info[0].get('RESULT', {}).get(
-                                'CODE',
-                                '').startswith("INFO-200"):  # No more data
+                                'CODE', '').startswith("INFO-200"):
                             logger.info(
                                 f"API result for {api_endpoint_name} (page {current_page}) indicates no more data."
                             )
-                            break  # End pagination
+                            break
                         elif 'row' in data[api_endpoint_name][0]:
                             items_on_page = data[api_endpoint_name][0].get(
                                 'row', [])
@@ -1139,8 +1236,8 @@ def extract_sessions_from_response(data, debug=False):
             # Check head for result code before assuming it's data
             head_info = data[api_key_name][0].get('head')
             if head_info:
-                result_code_info = head_info[0].get('RESULT',
-                                                    {}).get('CODE', 'UNKNOWN')
+                result_code_info = head_info[0].get('RESULT', {}).get(
+                    'CODE', '').startswith("INFO-200")
                 if result_code_info.startswith(
                         "INFO-") or result_code_info.startswith(
                             "ERROR-"):  # Assuming "INFO-200" is no data
@@ -1151,10 +1248,6 @@ def extract_sessions_from_response(data, debug=False):
                     if 'row' in data[api_key_name][0]:
                         sessions_data_list = data[api_key_name][0].get(
                             'row', [])
-                        if debug and sessions_data_list:
-                            logger.debug(
-                                "Extracted data from data['{api_key_name}'][0]['row'] despite head info code."
-                            )
 
         if not sessions_data_list and debug:  # if still no data and debug
             logger.debug(
@@ -1313,377 +1406,76 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             logger.exception("Full traceback for session processing error:")
             continue
 
-    logger.info(
-        f"🎉 Sessions processing complete: {created_count} created, {updated_count} updated."
-    )
-
-
-def fetch_committee_members(committee_name, debug=False):
-    """Fetch committee members from nktulghcadyhmiqxi API."""
     try:
-        if not hasattr(settings,
-                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
-            logger.error(
-                "ASSEMBLY_API_KEY not configured for fetch_committee_members.")
-            return []
-
-        # Clean committee name - remove any extra whitespace
-        committee_name = committee_name.strip()
-
-        url = "https://open.assembly.go.kr/portal/openapi/nktulghcadyhmiqxi"
-        params = {
-            "KEY": settings.ASSEMBLY_API_KEY,
-            "DEPT_NM": committee_name,
-            "Type": "json",
-            "pSize": 500  # Get up to 500 committee members
-        }
-
-        logger.info(f"🔍 Fetching committee members for: {committee_name}")
-        response = requests.get(url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        if debug:
-            logger.debug(
-                f"🐛 DEBUG: Committee members API response for {committee_name}: {json.dumps(data, indent=2, ensure_ascii=False)}"
-            )
-
-        members_data = []
-        api_key_name = 'nktulghcadyhmiqxi'
-        if data and api_key_name in data and isinstance(
-                data[api_key_name], list):
-            if len(data[api_key_name]) > 1 and isinstance(
-                    data[api_key_name][1], dict):
-                members_data = data[api_key_name][1].get('row', [])
-                logger.info(
-                    f"📊 Found {len(members_data)} member records for {committee_name}"
-                )
-            elif len(data[api_key_name]) > 0 and isinstance(
-                    data[api_key_name][0], dict):
-                head_info = data[api_key_name][0].get('head')
-                if head_info:
-                    result_info = head_info[0].get('RESULT', {})
-                    result_code = result_info.get('CODE', '')
-                    result_message = result_info.get('MESSAGE', '')
-
-                    if result_code.startswith(
-                            "INFO-200") or "데이터가 없습니다" in result_message:
-                        logger.info(
-                            f"ℹ️ No data available for committee: {committee_name}"
-                        )
-                        return []
-                    elif result_code.startswith("ERROR"):
-                        logger.warning(
-                            f"⚠️ API error for committee {committee_name}: {result_code} - {result_message}"
-                        )
-                        return []
-
-                # Try to get data from row field anyway
-                if 'row' in data[api_key_name][0]:
-                    members_data = data[api_key_name][0].get('row', [])
-                    logger.info(
-                        f"📊 Found {len(members_data)} member records (fallback path) for {committee_name}"
-                    )
-
-        if not members_data:
-            logger.warning(
-                f"⚠️ No committee members found for: {committee_name}")
-            return []
-
-        # Extract member names and other relevant info
-        members = []
-        unique_names = set()  # To avoid duplicates
-
-        for member_data in members_data:
-            member_name = member_data.get('HG_NM', '').strip()
-            if not member_name or member_name in unique_names:
-                continue
-
-            unique_names.add(member_name)
-            member_info = {
-                'name': member_name,
-                'position': member_data.get('JOB_RES_NM', '').strip(),
-                'party': member_data.get('POLY_NM', '').strip(),
-                'constituency': member_data.get('ORIG_NM', '').strip(),
-                'dept_code': member_data.get('DEPT_CD', '').strip(),
-                'dept_name': member_data.get('DEPT_NM', '').strip(),
-                'mona_cd': member_data.get('MONA_CD', '').strip(),
-                'email': member_data.get('ASSEM_EMAIL', '').strip(),
-                'tel': member_data.get('ASSEM_TEL', '').strip()
-            }
-            members.append(member_info)
-
-        logger.info(
-            f"✅ Successfully extracted {len(members)} unique committee members for: {committee_name}"
-        )
-
-        # Log member summary for debugging
-        if members:
-            member_names = [m['name'] for m in members[:5]]  # First 5 names
-            if len(members) > 5:
-                member_summary = f"{', '.join(member_names)} 외 {len(members)-5}명"
-            else:
-                member_summary = ', '.join(member_names)
-            logger.info(f"📋 {committee_name} members: {member_summary}")
-
-        return members
-
-    except requests.exceptions.RequestException as e:
-        logger.error(
-            f"❌ Network error fetching committee members for {committee_name}: {e}"
-        )
-    except json.JSONDecodeError as e:
-        logger.error(
-            f"❌ JSON parsing error for committee members {committee_name}: {e}"
-        )
-    except Exception as e:
-        logger.error(
-            f"❌ Unexpected error fetching committee members for {committee_name}: {e}"
-        )
-        logger.exception("Full traceback:")
-    return []
-
-
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def fetch_session_details(self,
-                          session_id=None,
-                          force=False,
-                          debug=False):  # Celery provides 'self'
-    """Fetch detailed information for a specific session using VCONFDETAIL."""
-    if not session_id:
-        logger.error("session_id is required for fetch_session_details.")
-        return
-
-    logger.info(
-        f"🔍 Fetching details for session: {session_id} (force={force}, debug={debug})"
-    )
-    if debug:
-        logger.debug(
-            f"🐛 DEBUG: Fetching details for session {session_id} in debug mode"
-        )
-
-    try:
-        if not hasattr(settings,
-                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
-            logger.error("ASSEMBLY_API_KEY not configured.")
-            return
-
-        formatted_conf_id = format_conf_id(session_id)
-        url = "https://open.assembly.go.kr/portal/openapi/VCONFDETAIL"
-        params = {
-            "KEY": settings.ASSEMBLY_API_KEY,
-            "Type": "json",
-            "CONF_ID": formatted_conf_id
-        }
-
-        response = requests.get(url, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        if debug:
-            logger.debug(
-                f"🐛 DEBUG: VCONFDETAIL API response for {session_id}: {json.dumps(data, indent=2, ensure_ascii=False)}"
-            )
-
-        detail_data_item = None
-        api_key_name = 'VCONFDETAIL'
-        if data and api_key_name in data and isinstance(
-                data[api_key_name], list):
-            if len(data[api_key_name]) > 1 and isinstance(
-                    data[api_key_name][1],
-                    dict) and 'row' in data[api_key_name][1]:
-                rows = data[api_key_name][1]['row']
-                if rows and isinstance(rows, list) and len(rows) > 0:
-                    detail_data_item = rows[0]
-            elif len(data[api_key_name]) > 0 and isinstance(
-                    data[api_key_name][0], dict):
-                # Check head, similar to extract_sessions_from_response
-                head_info = data[api_key_name][0].get('head')
-                if head_info and head_info[0].get('RESULT', {}).get(
-                        'CODE', '').startswith("INFO-200"):  # No data
-                    logger.info(
-                        f"API result for VCONFDETAIL ({session_id}) indicates no detailed data (INFO-200)."
-                    )
-                elif 'row' in data[api_key_name][
-                        0]:  # Fallback for inconsistent structure
-                    rows = data[api_key_name][0]['row']
-                    if rows and isinstance(rows, list) and len(rows) > 0:
-                        detail_data_item = rows[0]
-
-        if not detail_data_item:
-            logger.info(
-                f"ℹ️ No detailed info available from VCONFDETAIL API for session {session_id}. Might be normal."
-            )
-            # Still proceed to fetch bills as they might be linked even without VCONFDETAIL entry
-            if not debug:  # Avoid chaining calls rapidly in debug, or make it conditional
-                if is_celery_available():
-                    fetch_session_bills.delay(session_id=session_id,
-                                              force=force,
-                                              debug=debug)
-                else:
-                    fetch_session_bills(session_id=session_id,
-                                        force=force,
-                                        debug=debug)
-            return
-
-        if debug:
-            logger.debug(
-                f"🐛 DEBUG: Would update session {session_id} with details: {detail_data_item}"
-            )
-        else:
+        # Process each session item
+        for confer_num, items_for_session in sessions_by_confer_num.items():
+            connection.ensure_connection()
+            main_item = items_for_session[0]
             try:
-                session_obj = Session.objects.get(conf_id=session_id)
-                updated_fields = False
+                # ... [existing session processing code] ...
 
-                if detail_data_item.get('CONF_TIME'):
-                    try:
-                        time_str = detail_data_item.get('CONF_TIME', '09:00')
-                        parsed_time = datetime.strptime(time_str,
-                                                        '%H:%M').time()
-                        if session_obj.bg_ptm != parsed_time:
-                            session_obj.bg_ptm = parsed_time
-                            updated_fields = True
-                    except ValueError:
-                        logger.warning(
-                            f"Could not parse CONF_TIME: {detail_data_item.get('CONF_TIME')} for session {session_id}"
-                        )
-
-                if detail_data_item.get('ED_TIME'):
-                    try:
-                        time_str = detail_data_item.get('ED_TIME', '18:00')
-                        parsed_time = datetime.strptime(time_str,
-                                                        '%H:%M').time()
-                        if session_obj.ed_ptm != parsed_time:
-                            session_obj.ed_ptm = parsed_time
-                            updated_fields = True
-                    except ValueError:
-                        logger.warning(
-                            f"Could not parse ED_TIME: {detail_data_item.get('ED_TIME')} for session {session_id}"
-                        )
-
-                # Update other fields from VCONFDETAIL if they are more accurate or missing
-                # e.g. 'CMITNM', 'CONFKINDNM' etc. if available and different from initial fetch
-                if detail_data_item.get(
-                        'TITLE') and session_obj.title != detail_data_item.get(
-                            'TITLE'):
-                    session_obj.title = detail_data_item.get('TITLE')
-                    updated_fields = True
-
-                # Process committee information from CMIT_NM and update session
-                cmit_nm = detail_data_item.get('CMIT_NM', '').strip()
-                if cmit_nm:
-                    # Update session's cmit_nm field if it's different
-                    if session_obj.cmit_nm != cmit_nm:
-                        session_obj.cmit_nm = cmit_nm
-                        updated_fields = True
-                        logger.info(f"🔄 Updated session cmit_nm to: {cmit_nm}")
-
-                    # Define institutional/non-individual proposers that should not be looked up
-                    institutional_proposers = [
-                        '국회본회의', '국회', '본회의', '정부', '대통령', '국무총리', '행정부',
-                        '정부제출', '의장', '부의장', '국회의장', '국회부의장'
-                    ]
-
-                    if cmit_nm.endswith('위원회'):
-                        logger.info(
-                            f"🏛️ Found committee proposer: {cmit_nm} for session {session_id}"
-                        )
-                        if not debug:
-                            # Fetch committee members for this committee
-                            committee_members = fetch_committee_members(
-                                cmit_nm, debug=debug)
-                            if committee_members:
-                                logger.info(
-                                    f"📋 Found {len(committee_members)} members in {cmit_nm}"
-                                )
-                                # The committee members will be used when processing bills for this session
-                    elif cmit_nm in institutional_proposers or any(
-                            inst in cmit_nm
-                            for inst in institutional_proposers):
-                        logger.info(
-                            f"🏛️ Found institutional proposer: {cmit_nm} for session {session_id} - skipping individual member lookup"
-                        )
-                    else:
-                        logger.info(
-                            f"👤 Found individual proposer: {cmit_nm} for session {session_id}"
-                        )
-                        # Verify if this is a real assembly member
-                        if not debug:
-                            speaker_details = fetch_speaker_details(cmit_nm)
-                            if speaker_details:
-                                logger.info(
-                                    f"✅ Verified {cmit_nm} as assembly member")
-                            else:
-                                logger.info(
-                                    f"ℹ️ {cmit_nm} may be a non-member proposer"
-                                )
-
-                if updated_fields or force:  # Save if fields changed or force is on
-                    session_obj.save()
-                    logger.info(
-                        f"✅ Updated session details for: {session_id} from VCONFDETAIL."
-                    )
-                else:
-                    logger.info(
-                        f"No changes to session details for {session_id} from VCONFDETAIL or not in force mode."
-                    )
-
-                # Chain calls: fetch bills, then process PDF
+                # 1. Fetch bills for this session.
                 if is_celery_available():
-                    fetch_session_bills.delay(session_id=session_id,
+                    fetch_session_bills.delay(session_id=confer_num,
                                               force=force,
                                               debug=debug)
                 else:
-                    fetch_session_bills(session_id=session_id,
+                    fetch_session_bills(session_id=confer_num,
                                         force=force,
                                         debug=debug)
 
-                if session_obj.down_url:  # PDF processing depends on down_url
+                # 2. Process the PDF if a URL exists.
+                if session_obj.down_url:
                     if is_celery_available():
-                        process_session_pdf.delay(session_id=session_id,
+                        process_session_pdf.delay(session_id=confer_num,
                                                   force=force,
                                                   debug=debug)
                     else:
-                        process_session_pdf(session_id=session_id,
+                        process_session_pdf(session_id=confer_num,
                                             force=force,
                                             debug=debug)
                 else:
                     logger.info(
-                        f"No PDF URL (down_url) for session {session_id}, skipping PDF processing."
+                        f"No PDF URL for session {confer_num}, skipping PDF processing."
                     )
 
-            except Session.DoesNotExist:
+            except Exception as e:
                 logger.error(
-                    f"❌ Session {session_id} not found in database when trying to update details. Original session creation might have failed."
+                    f"❌ Error processing session data for CONFER_NUM {confer_num}: {e}"
                 )
-            except Exception as e_db:
-                logger.error(
-                    f"❌ DB error updating session {session_id} details: {e_db}"
-                )
+                logger.exception(
+                    "Full traceback for session processing error:")
+                continue
+
+        logger.info(
+            f"🎉 Sessions processing complete: {created_count} created, {updated_count} updated."
+        )
 
     except RequestException as re_exc:
-        logger.error(
-            f"Request error fetching details for session {session_id}: {re_exc}"
-        )
+        error_msg = f"API request failed while processing sessions: {str(re_exc)}"
+        logger.error(error_msg)
         try:
-            self.retry(exc=re_exc)
-        except MaxRetriesExceededError:
-            logger.error(f"Max retries for session details {session_id}.")
-    except json.JSONDecodeError as json_e:
-        logger.error(
-            f"JSON decode error for session {session_id} details: {json_e}")
-        # Probably don't retry JSON errors from API, it indicates bad data
-    except Exception as e:
-        logger.error(
-            f"❌ Unexpected error fetching session {session_id} details: {e}")
-        logger.exception(
-            f"Full traceback for session {session_id} detail fetch:")
-        try:
-            self.retry(exc=e)
+            self.retry(exc=RequestException(error_msg))
         except MaxRetriesExceededError:
             logger.error(
-                f"Max retries after unexpected error for {session_id}.")
-        # raise # Optionally
+                "❌ Max retries (3) reached for session details API request")
+            raise
+
+    except json.JSONDecodeError as json_e:
+        error_msg = f"Failed to parse API response as JSON: {str(json_e)}"
+        logger.error(error_msg)
+        # Don't retry JSON decode errors as they indicate malformed response
+        raise ValueError(error_msg)
+
+    except Exception as e:
+        error_msg = f"Unexpected error in process_sessions_data: {str(e)}"
+        logger.error(f"❌ {error_msg}")
+        logger.exception("Stack trace for debugging:")
+        try:
+            self.retry(exc=Exception(error_msg))
+        except MaxRetriesExceededError:
+            logger.error("❌ Max retries (3) reached after unexpected error")
+            raise
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -2752,18 +2544,24 @@ def _execute_batch_analysis(batch_model,
             if bill_name:
                 try:
                     from .models import Bill
-                    bill_obj = Bill.objects.filter(bill_nm__icontains=bill_name).order_by('-created_at').first()
+                    bill_obj = Bill.objects.filter(
+                        bill_nm__icontains=bill_name).order_by(
+                            '-created_at').first()
                     if bill_obj:
                         # Main policy category (list of names, highest confidence first)
                         main_policy_category = list(
-                            bill_obj.category_mappings.filter(is_primary=True).order_by('-confidence_score').values_list('category__name', flat=True)
-                        )
+                            bill_obj.category_mappings.filter(is_primary=True).
+                            order_by('-confidence_score').values_list(
+                                'category__name', flat=True))
                         # Policy subcategories (list of names, highest relevance first)
                         policy_subcategories = list(
-                            bill_obj.subcategory_mappings.order_by('-relevance_score').values_list('subcategory__name', flat=True)
-                        )
+                            bill_obj.subcategory_mappings.order_by(
+                                '-relevance_score').values_list(
+                                    'subcategory__name', flat=True))
                 except Exception as cat_exc:
-                    logger.warning(f"Could not fetch policy categories for bill '{bill_name}': {cat_exc}")
+                    logger.warning(
+                        f"Could not fetch policy categories for bill '{bill_name}': {cat_exc}"
+                    )
             # --- END: DB Policy Category Attachment ---
             for i, analysis_json in enumerate(analysis_array):
                 if not isinstance(analysis_json, dict):
@@ -4404,13 +4202,14 @@ def create_placeholder_bill(session_obj, title, bill_no=None):
         pass
         # Only log the rightmost party in the chain
 
+
 def process_session_pdf_text(
-    full_text,
-    session_id,
-    session_obj,
-    bills_context_str,  # Deprecated
-    bill_names_list_from_api,  # Now used as the "known_bill_names"
-    debug=False):
+        full_text,
+        session_id,
+        session_obj,
+        bills_context_str,  # Deprecated
+        bill_names_list_from_api,  # Now used as the "known_bill_names"
+        debug=False):
     if not full_text:
         logger.warning(f"No text provided for session {session_id}")
         return
@@ -4440,9 +4239,18 @@ def process_session_pdf_text(
     )
     process_extracted_statements_data(statements_data, session_obj, debug)
 
-def process_pdf_text_for_statements(full_text, session_id, session_obj, bills_context_str, bill_names_list_from_api, debug=False):
+
+def process_pdf_text_for_statements(full_text,
+                                    session_id,
+                                    session_obj,
+                                    bills_context_str,
+                                    bill_names_list_from_api,
+                                    debug=False):
     """Alias for process_session_pdf_text for future compatibility."""
-    return process_session_pdf_text(full_text, session_id, session_obj, bills_context_str, bill_names_list_from_api, debug)
+    return process_session_pdf_text(full_text, session_id, session_obj,
+                                    bills_context_str,
+                                    bill_names_list_from_api, debug)
+
 
 def clean_pdf_text(text: str) -> str:
     if not text:
@@ -4499,6 +4307,7 @@ def clean_pdf_text(text: str) -> str:
 
     logger.info(f"🧹 Text cleaning complete. Final length: {len(final_text)}")
     return final_text
+
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_additional_data_nepjpxkkabqiqpbvk(self=None,
@@ -4582,5 +4391,6 @@ def fetch_additional_data_nepjpxkkabqiqpbvk(self=None,
             else:
                 logger.error("Sync execution failed, no retry available")
                 raise
-        logger.error(f"❌ Error fetching from nepjpxkkabqiqpbvk API: {e}")
-        raise
+        else:
+            logger.error(f"❌ Error fetching from nepjpxkkabqiqpbvk API: {e}")
+            raise
