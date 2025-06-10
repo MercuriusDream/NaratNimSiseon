@@ -133,24 +133,9 @@ class GeminiRateLimiter:
             self.consecutive_errors += 1
             self.last_error_time = datetime.now()
             backoff_time = self._calculate_backoff_time()
-            
-            # Get current usage for context
-            current_usage = self.get_usage_stats()
-            
             logger.warning(
-                f"🚨 API error recorded ({error_type}). "
-                f"Consecutive errors: {self.consecutive_errors}, "
-                f"backoff: {backoff_time}s"
+                f"API error ({error_type}). Consecutive errors: {self.consecutive_errors}, backoff: {backoff_time}s"
             )
-            logger.warning(f"📊 Current usage at error time: {current_usage}")
-            
-            # Log specific guidance based on error type
-            if error_type == "llm_discovery_error":
-                logger.warning("💡 This error occurred during LLM discovery - check JSON parsing and API response format")
-            elif "timeout" in error_type:
-                logger.warning("💡 Consider reducing prompt size or text length for timeout errors")
-            elif "quota" in error_type or "rate" in error_type:
-                logger.warning("💡 Consider implementing longer delays between requests")
 
     def wait_if_needed(self, estimated_tokens=1000, max_wait_time=120):
         """Wait if necessary to respect rate limits with enhanced backoff"""
@@ -320,11 +305,17 @@ def initialize_gemini():
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
             genai_module.configure(api_key=settings.GEMINI_API_KEY)
             model_instance = genai_module.GenerativeModel(
-                'gemini-2.0-flash-lite')
-            logger.info(
-                "✅ Gemini API configured successfully with gemini-2.0-flash-lite model"
-            )
-            return genai_module, model_instance
+                'gemini-2.5-flash-preview-04-17')
+            # Check Gemini API status immediately after configuration
+            try:
+                prompt = "Hello"
+                response = model_instance.generate_content(prompt)
+                preview = getattr(response, 'text', str(response))
+                logger.info(f"✅ Gemini API configured successfully and status check succeeded. Preview: {preview[:100]}")
+                return genai_module, model_instance
+            except Exception as status_exc:
+                logger.warning(f"⚠️ Gemini API configured but status check failed: {status_exc}")
+                return None, None
         else:
             logger.error(
                 "❌ GEMINI_API_KEY not found or empty in settings. LLM features will be disabled."
@@ -353,6 +344,29 @@ def reinitialize_gemini():
         logger.info("🔄 Attempting to reinitialize Gemini API...")
         genai, model = initialize_gemini()
     return genai is not None and model is not None
+
+
+def check_gemini_api_status():
+    """
+    Check Gemini API status by sending a minimal prompt and returning the response or error.
+    Returns a tuple: (status: str, info: str)
+    """
+    global genai, model
+    try:
+        # Always perform (re)init and check
+        reinitialize_gemini()
+        if not genai or not model:
+            return ("error", "Gemini API not initialized.")
+        # Use a minimal, safe prompt
+        prompt = "Hello"
+        response = model.generate_content(prompt)
+        # Try to extract a short preview of the response
+        preview = getattr(response, 'text', str(response))
+        logger.info(f"✅ Gemini API status check succeeded. Preview: {preview[:100]}")
+        return ("ok", preview[:200])
+    except Exception as e:
+        logger.error(f"❌ Gemini API status check failed: {e}")
+        return ("error", str(e))
 
 
 # Check if Celery/Redis is available
@@ -2291,7 +2305,8 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
 def _process_single_segmentation_batch(text_segment, bill_name, offset):
     """Process a single text segment for speech segmentation indices."""
     try:
-        segmentation_llm = genai.GenerativeModel('gemini-2.0-flash-lite')
+        segmentation_llm = genai.GenerativeModel(
+            'gemini-2.5-flash-preview-04-17')
 
         # Create basic indices by splitting at ◯ markers as fallback
         speech_indices = []
@@ -2477,17 +2492,18 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
         return []
 
     logger.info(
-        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.0-flash-lite"
+        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.5-flash-preview-04-17"
     )
 
     # Get assembly members once for the entire batch
     assembly_members = get_all_assembly_members()
 
-    # Use gemini-2.0-flash-lite for batch processing
+    # Use gemini-2.5-flash-preview-04-17 for batch processing
     try:
-        batch_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        batch_model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
     except Exception as e:
-        logger.error(f"Failed to initialize gemini-2.0-flash-lite: {e}")
+        logger.error(
+            f"Failed to initialize gemini-2.5-flash-preview-04-17: {e}")
         return []
 
     results = []
@@ -2640,7 +2656,7 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
 
     return _execute_batch_analysis(batch_model, prompt, cleaned_segments,
                                    processed_segments, assembly_members,
-                                   batch_start_index)
+                                   batch_start_index, bill_name)
 
 
 def _process_large_batch_in_chunks(batch_model, segments, bill_name,
@@ -2674,6 +2690,7 @@ def _execute_batch_analysis(batch_model,
                             original_segments,
                             assembly_members,
                             batch_start_index,
+                            bill_name,
                             max_retries=3):
     """Execute the actual batch analysis request with retry logic for API errors."""
 
@@ -2716,24 +2733,18 @@ def _execute_batch_analysis(batch_model,
             if bill_name:
                 try:
                     from .models import Bill
-                    bill_obj = Bill.objects.filter(
-                        bill_nm__icontains=bill_name).order_by(
-                            '-created_at').first()
+                    bill_obj = Bill.objects.filter(bill_nm__icontains=bill_name).order_by('-created_at').first()
                     if bill_obj:
                         # Main policy category (list of names, highest confidence first)
                         main_policy_category = list(
-                            bill_obj.category_mappings.filter(is_primary=True).
-                            order_by('-confidence_score').values_list(
-                                'category__name', flat=True))
+                            bill_obj.category_mappings.filter(is_primary=True).order_by('-confidence_score').values_list('category__name', flat=True)
+                        )
                         # Policy subcategories (list of names, highest relevance first)
                         policy_subcategories = list(
-                            bill_obj.subcategory_mappings.order_by(
-                                '-relevance_score').values_list(
-                                    'subcategory__name', flat=True))
+                            bill_obj.subcategory_mappings.order_by('-relevance_score').values_list('subcategory__name', flat=True)
+                        )
                 except Exception as cat_exc:
-                    logger.warning(
-                        f"Could not fetch policy categories for bill '{bill_name}': {cat_exc}"
-                    )
+                    logger.warning(f"Could not fetch policy categories for bill '{bill_name}': {cat_exc}")
             # --- END: DB Policy Category Attachment ---
             for i, analysis_json in enumerate(analysis_array):
                 if not isinstance(analysis_json, dict):
@@ -2869,7 +2880,7 @@ def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name,
                                                     estimated_tokens):
     """Legacy function - now redirects to batch processing for consistency."""
     # For single segment, just use batch processing with 1 item
-    batch_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+    batch_model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
     results = analyze_batch_statements_single_request(batch_model,
                                                       [speech_segment],
                                                       bill_name,
@@ -3051,21 +3062,6 @@ def extract_statements_with_llm_discovery(full_text,
         logger.error("❌ Gemini not available. Cannot perform LLM discovery.")
         return []
 
-    # Double-check that genai and model are properly initialized
-    if not genai:
-        logger.error("❌ genai module is None after reinitialize_gemini()")
-        return []
-
-    # Test a simple model creation to ensure API is accessible
-    try:
-        test_model = genai.GenerativeModel('gemini-2.0-flash-lite')
-        logger.info("✅ Gemini model creation test passed")
-    except Exception as model_test_error:
-        logger.error(f"❌ Gemini model creation test failed: {model_test_error}")
-        logger.error(f"   Error type: {type(model_test_error).__name__}")
-        gemini_rate_limiter.record_error("model_creation_failed")
-        return []
-
     # Load policy categories from database for enhanced analysis
     from .models import Category, Subcategory
 
@@ -3177,116 +3173,25 @@ I already know about the following bills. You MUST find the discussion for these
 }}
 """
     try:
-        segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        segmentation_model = genai.GenerativeModel(
+            'gemini-2.5-flash-preview-04-17')
         estimated_tokens = len(prompt) // 3
-
-        logger.info(f"🎯 LLM Discovery - Estimated tokens: {estimated_tokens}")
-        logger.info(f"🎯 LLM Discovery - Prompt length: {len(prompt)} chars")
 
         if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
             logger.error("Rate limit timeout for LLM discovery. Aborting.")
             return []
 
-        logger.info("🎯 LLM Discovery - Sending request to Gemini...")
         response = segmentation_model.generate_content(prompt)
-        logger.info("🎯 LLM Discovery - Received response from Gemini")
-
-        # Debug response object
-        if not response:
-            logger.error("❌ LLM Discovery - Response object is None")
-            gemini_rate_limiter.record_request(estimated_tokens, success=False)
-            return []
-
-        logger.info(f"🎯 LLM Discovery - Response type: {type(response)}")
-        logger.info(f"🎯 LLM Discovery - Response attributes: {dir(response)}")
-
-        if not hasattr(response, 'text'):
-            logger.error("❌ LLM Discovery - Response has no 'text' attribute")
-            gemini_rate_limiter.record_request(estimated_tokens, success=False)
-            return []
-
-        response_text_raw = response.text
-        logger.info(f"🎯 LLM Discovery - Raw response text type: {type(response_text_raw)}")
-        logger.info(f"🎯 LLM Discovery - Raw response text length: {len(response_text_raw) if response_text_raw else 'None'}")
-
-        if not response_text_raw:
-            logger.error("❌ LLM Discovery - Response text is empty or None")
-            gemini_rate_limiter.record_request(estimated_tokens, success=False)
-            return []
-
-        # Log first 500 chars of raw response for debugging
-        logger.info(f"🎯 LLM Discovery - Raw response preview: {repr(response_text_raw[:500])}")
-
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
         # Strip markdown fences if present
-        response_text = response_text_raw.strip()
-        logger.info(f"🎯 LLM Discovery - After strip length: {len(response_text)}")
-
+        response_text = response.text.strip()
         if response_text.startswith("```"):
-            logger.info("🎯 LLM Discovery - Removing markdown fences")
-            parts = response_text.split("```")
-            logger.info(f"🎯 LLM Discovery - Split into {len(parts)} parts")
-            
-            # Find the JSON content between fences
-            json_content = ""
-            for i, part in enumerate(parts):
-                part = part.strip()
-                if part and (part.startswith("{") or part.startswith("json\n{") or part.startswith("json {")):
-                    # Remove "json" prefix if present
-                    if part.startswith("json"):
-                        part = part[4:].strip()
-                    json_content = part
-                    break
-            
-            if json_content:
-                response_text = json_content
-            else:
-                # Fallback: take the middle part if we have 3+ parts
-                if len(parts) >= 3:
-                    response_text = parts[1].strip()
-                elif len(parts) >= 2:
-                    response_text = parts[1].strip()
-            
-            logger.info(f"🎯 LLM Discovery - After fence removal length: {len(response_text)}")
+            response_text = response_text.split("```", 2)[-1].strip()
 
-        # Additional cleaning for common LLM response patterns
-        if response_text.startswith("json"):
-            logger.info("🎯 LLM Discovery - Removing 'json' prefix")
-            response_text = response_text[4:].strip()
-
-        # Log cleaned response for debugging
-        logger.info(f"🎯 LLM Discovery - Cleaned response preview: {repr(response_text[:500])}")
-        logger.info(f"🎯 LLM Discovery - Final response length: {len(response_text)}")
-
-        if not response_text:
-            logger.error("❌ LLM Discovery - Response text is empty after cleaning")
-            return []
-
-        try:
-            data = json.loads(response_text)
-            logger.info(f"✅ LLM Discovery - Successfully parsed JSON, type: {type(data)}")
-        except json.JSONDecodeError as json_err:
-            logger.error(f"❌ LLM Discovery - JSON decode error: {json_err}")
-            logger.error(f"❌ LLM Discovery - JSON error position: line {json_err.lineno}, column {json_err.colno}")
-            logger.error(f"❌ LLM Discovery - JSON error message: {json_err.msg}")
-            logger.error(f"❌ LLM Discovery - Problematic text around error:")
-            
-            # Show context around the error position
-            if hasattr(json_err, 'pos') and json_err.pos is not None:
-                start_pos = max(0, json_err.pos - 100)
-                end_pos = min(len(response_text), json_err.pos + 100)
-                context = response_text[start_pos:end_pos]
-                logger.error(f"❌ Context: {repr(context)}")
-            else:
-                # Show first 1000 chars if no position info
-                logger.error(f"❌ Full response text: {repr(response_text[:1000])}")
-            
-            return []
-
+        data = json.loads(response_text)
         if not isinstance(data, dict):
-            logger.error(f"❌ LLM discovery did not return a JSON object. Got type: {type(data)}")
-            logger.error(f"❌ Data content: {data}")
+            logger.error("LLM discovery did not return a JSON object.")
             return []
 
         # Merge the two arrays into one flat list, tagging each entry
@@ -3359,32 +3264,8 @@ I already know about the following bills. You MUST find the discussion for these
 
     except Exception as e:
         gemini_rate_limiter.record_error("llm_discovery_error")
-        
-        # Detailed error logging
-        error_type = type(e).__name__
-        logger.error(f"❌ Critical error during LLM discovery and segmentation:")
-        logger.error(f"   Error type: {error_type}")
-        logger.error(f"   Error message: {str(e)}")
-        
-        # Check if this is a specific API error
-        if "quota" in str(e).lower() or "rate" in str(e).lower():
-            logger.error("   🚫 This appears to be a rate limiting or quota error")
-        elif "timeout" in str(e).lower() or "deadline" in str(e).lower():
-            logger.error("   ⏰ This appears to be a timeout error")
-        elif "json" in str(e).lower() or "expecting value" in str(e).lower():
-            logger.error("   📄 This appears to be a JSON parsing error")
-        elif "connection" in str(e).lower() or "network" in str(e).lower():
-            logger.error("   🌐 This appears to be a network/connection error")
-        
-        # Log current rate limiter status
-        rate_stats = gemini_rate_limiter.get_usage_stats()
-        logger.error(f"   📊 Rate limiter status: {rate_stats}")
-        
-        # Log session and text info
-        logger.error(f"   📋 Session ID: {session_id}")
-        logger.error(f"   📝 Text length: {len(full_text)} chars")
-        logger.error(f"   📚 Known bills: {len(known_bill_names) if known_bill_names else 0}")
-        
+        logger.error(
+            f"❌ Critical error during LLM discovery and segmentation: {e}")
         logger.exception("Full traceback for LLM discovery:")
         return []
 
@@ -4504,14 +4385,13 @@ def create_placeholder_bill(session_obj, title, bill_no=None):
         pass
         # Only log the rightmost party in the chain
 
-
 def process_session_pdf_text(
-        full_text,
-        session_id,
-        session_obj,
-        bills_context_str,  # Deprecated
-        bill_names_list_from_api,  # Now used as the "known_bill_names"
-        debug=False):
+    full_text,
+    session_id,
+    session_obj,
+    bills_context_str,  # Deprecated
+    bill_names_list_from_api,  # Now used as the "known_bill_names"
+    debug=False):
     if not full_text:
         logger.warning(f"No text provided for session {session_id}")
         return
@@ -4541,18 +4421,9 @@ def process_session_pdf_text(
     )
     process_extracted_statements_data(statements_data, session_obj, debug)
 
-
-def process_pdf_text_for_statements(full_text,
-                                    session_id,
-                                    session_obj,
-                                    bills_context_str,
-                                    bill_names_list_from_api,
-                                    debug=False):
+def process_pdf_text_for_statements(full_text, session_id, session_obj, bills_context_str, bill_names_list_from_api, debug=False):
     """Alias for process_session_pdf_text for future compatibility."""
-    return process_session_pdf_text(full_text, session_id, session_obj,
-                                    bills_context_str,
-                                    bill_names_list_from_api, debug)
-
+    return process_session_pdf_text(full_text, session_id, session_obj, bills_context_str, bill_names_list_from_api, debug)
 
 def clean_pdf_text(text: str) -> str:
     if not text:
@@ -4609,7 +4480,6 @@ def clean_pdf_text(text: str) -> str:
 
     logger.info(f"🧹 Text cleaning complete. Final length: {len(final_text)}")
     return final_text
-
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_additional_data_nepjpxkkabqiqpbvk(self=None,
