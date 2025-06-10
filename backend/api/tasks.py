@@ -252,11 +252,7 @@ def _call_gemini_api(prompt: str,
         return None
 
     # Construct generation configuration
-    config = types.GenerateContentConfig(
-        response_mime_type=response_mime_type,
-        temperature=
-        0.2,  # Lower temperature for more deterministic/factual output
-        max_output_tokens=8192)
+    config = types.GenerateContentConfig(response_mime_type=response_mime_type)
 
     # Add system instruction if provided
     if system_instruction:
@@ -2454,9 +2450,7 @@ def _execute_batch_analysis(prompt,
                 model="gemini-2.0-flash",
                 contents=[prompt],
                 config=types.GenerateContentConfig(
-                    response_mime_type="text/plain",
-                    temperature=0.2,
-                    max_output_tokens=8192))
+                    response_mime_type="text/plain"))
 
             processing_time = time.time() - start_time
             logger.info(
@@ -2558,8 +2552,9 @@ def _execute_batch_analysis(prompt,
                     ignored in speaker_name
                     for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
-                if (speaker_name and speech_start_idx is not None and speech_end_idx is not None 
-                        and is_valid_member and is_substantial and not should_ignore
+                if (speaker_name and speech_start_idx is not None
+                        and speech_end_idx is not None and is_valid_member
+                        and is_substantial and not should_ignore
                         and is_real_member):
 
                     results.append({
@@ -2778,13 +2773,7 @@ def extract_statements_with_llm_discovery(full_text,
                                           known_bill_names,
                                           session_obj,
                                           debug=False):
-    """
-    Uses a single, powerful LLM call to:
-    1. Find discussion segments for a list of known bills.
-    2. Discover and segment any additional bills/topics discussed in the text.
-    3. Creates placeholder bills for newly discovered items.
-    4. Analyzes policy content and maps to database categories.
-    """
+
     logger = logging.getLogger(__name__)
     logger.info(
         f"🤖 Starting LLM discovery and segmentation for session: {session_id}")
@@ -2912,51 +2901,72 @@ I already know about the following bills. You MUST find the discussion for these
         estimated_tokens = len(prompt) // 3
 
         if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
-            logger.error("Rate limit timeout for LLM discovery. Falling back to keyword extraction.")
-            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
+            logger.error(
+                "Rate limit timeout for LLM discovery. Falling back to keyword extraction."
+            )
+            return extract_statements_with_keyword_fallback(
+                full_text, session_id, debug)
 
         # Use new google.genai structure with more conservative settings
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[prompt],
-            config=types.GenerateContentConfig(response_mime_type="text/plain",
-                                               temperature=0.1,  # Lower temperature for more reliability
-                                               max_output_tokens=4096))  # Reduced tokens to prevent timeout
+            config=types.GenerateContentConfig(
+                response_mime_type="text/plain",
+                temperature=1))  # Reduced tokens to prevent timeout
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
         # Check if response exists and has text
         if not response or not hasattr(response, 'text') or not response.text:
-            logger.error("❌ No response or empty response from LLM discovery. Falling back to keyword extraction.")
-            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
+            logger.error(
+                "❌ No response or empty response from LLM discovery. Falling back to keyword extraction."
+            )
+            return extract_statements_with_keyword_fallback(
+                full_text, session_id, debug)
 
         # Strip markdown fences if present
         response_text = response.text.strip()
         if response_text.startswith("```json"):
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
+            response_text = response_text.replace("```json",
+                                                  "").replace("```",
+                                                              "").strip()
         elif response_text.startswith("```"):
             response_text = response_text.split("```", 2)[-1].strip()
 
         # Print/log the raw LLM response for debugging
-        logger.info(f"🐛 DEBUG: Raw LLM response length: {len(response_text)} chars")
-        logger.info(f"🐛 DEBUG: Raw LLM response (first 1000 chars): {response_text[:1000]}")
+        logger.info(
+            f"🐛 DEBUG: Raw LLM response length: {len(response_text)} chars")
+        logger.info(
+            f"🐛 DEBUG: Raw LLM response (first 1000 chars): {response_text[:1000]}"
+        )
         if len(response_text) > 1000:
-            logger.info(f"🐛 DEBUG: Raw LLM response (last 500 chars): {response_text[-500:]}")
+            logger.info(
+                f"🐛 DEBUG: Raw LLM response (last 500 chars): {response_text[-500:]}"
+            )
 
         # Check if response is empty or invalid
         if not response_text or len(response_text) < 10:
-            logger.error(f"❌ Empty or too short response from LLM discovery ({len(response_text)} chars). Falling back to keyword extraction.")
-            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
+            logger.error(
+                f"❌ Empty or too short response from LLM discovery ({len(response_text)} chars). Falling back to keyword extraction."
+            )
+            return extract_statements_with_keyword_fallback(
+                full_text, session_id, debug)
 
         try:
             data = json.loads(response_text)
         except json.JSONDecodeError as json_err:
             logger.error(f"❌ JSON decode error in LLM discovery: {json_err}")
-            logger.error(f"Raw response (first 500 chars): {response_text[:500]}...")
+            logger.error(
+                f"Raw response (first 500 chars): {response_text[:500]}...")
             logger.info("🔄 Falling back to keyword-based extraction.")
-            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
+            return extract_statements_with_keyword_fallback(
+                full_text, session_id, debug)
         if not isinstance(data, dict):
-            logger.error("LLM discovery did not return a JSON object. Falling back to keyword extraction.")
-            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
+            logger.error(
+                "LLM discovery did not return a JSON object. Falling back to keyword extraction."
+            )
+            return extract_statements_with_keyword_fallback(
+                full_text, session_id, debug)
 
         # Merge the two arrays into one flat list, tagging each entry
         all_segments = []
@@ -3031,8 +3041,10 @@ I already know about the following bills. You MUST find the discussion for these
         logger.error(
             f"❌ Critical error during LLM discovery and segmentation: {e}")
         logger.exception("Full traceback for LLM discovery:")
-        logger.info("🔄 Falling back to keyword-based extraction due to LLM error.")
-        return extract_statements_with_keyword_fallback(full_text, session_id, debug)
+        logger.info(
+            "🔄 Falling back to keyword-based extraction due to LLM error.")
+        return extract_statements_with_keyword_fallback(
+            full_text, session_id, debug)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -3192,17 +3204,19 @@ def process_extracted_statements_data(statements_data_list,
     for stmt_data in statements_data_list:
         try:
             speaker_name = stmt_data.get('speaker_name', '').strip()
-            
+
             # Extract text using start/end indices if provided, otherwise use 'text' field
             start_idx = stmt_data.get('start_idx')
             end_idx = stmt_data.get('end_idx')
-            
+
             if start_idx is not None and end_idx is not None and full_text:
                 # Extract text locally using indices
                 start_idx = max(0, min(start_idx, len(full_text)))
                 end_idx = max(start_idx, min(end_idx, len(full_text)))
                 statement_text = full_text[start_idx:end_idx].strip()
-                logger.debug(f"Extracted text from indices [{start_idx}:{end_idx}]: {len(statement_text)} chars")
+                logger.debug(
+                    f"Extracted text from indices [{start_idx}:{end_idx}]: {len(statement_text)} chars"
+                )
             else:
                 # Fallback to provided text field
                 statement_text = stmt_data.get('text', '').strip()
@@ -3309,8 +3323,8 @@ def process_extracted_statements_data(statements_data_list,
                 sentiment_score=stmt_data.get('sentiment_score', 0.0),
                 sentiment_reason=stmt_data.get('sentiment_reason',
                                                'Analysis not fully run'),
-                bill_relevance_score=stmt_data.get(
-                    'bill_relevance_score', 0.0))
+                bill_relevance_score=stmt_data.get('bill_relevance_score',
+                                                   0.0))
             new_statement = _save_statement(
                 new_statement
             )  # This also calculates and saves text_hash via pre_save signal
@@ -3381,16 +3395,17 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
             start_pos = match.start()
             bill_name = match.group(2).strip() if len(
                 match.groups()) > 1 else match.group(1).strip()
-            
+
             # Filter out procedural text and very short names
-            if (len(bill_name) > 15 and 
-                not is_procedural_text(bill_name) and
-                ('법률안' in bill_name or '특별검사' in bill_name or '특검' in bill_name)):
-                
+            if (len(bill_name) > 15 and not is_procedural_text(bill_name)
+                    and ('법률안' in bill_name or '특별검사' in bill_name
+                         or '특검' in bill_name)):
+
                 # Clean up the bill name
-                bill_name = re.sub(r'^[\d\.\s]+', '', bill_name)  # Remove leading numbers
+                bill_name = re.sub(r'^[\d\.\s]+', '',
+                                   bill_name)  # Remove leading numbers
                 bill_name = bill_name.strip()
-                
+
                 if len(bill_name) > 10:  # Final length check
                     bill_segments.append({
                         'start_pos': start_pos,
@@ -3404,7 +3419,8 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
     unique_segments = []
     seen_names = set()
     for segment in bill_segments:
-        bill_name_key = segment['bill_name'][:50].lower()  # Use first 50 chars for comparison
+        bill_name_key = segment['bill_name'][:50].lower(
+        )  # Use first 50 chars for comparison
         if bill_name_key not in seen_names:
             seen_names.add(bill_name_key)
             unique_segments.append(segment)
@@ -3434,8 +3450,10 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
             all_statements.extend(statements_in_segment)
     else:
         # Process entire text as one segment with improved splitting
-        logger.info("No valid bill patterns found, processing with general discussion approach")
-        
+        logger.info(
+            "No valid bill patterns found, processing with general discussion approach"
+        )
+
         # Try to find at least the discussion sections with ◯ markers
         if '◯' in text:
             statements_from_full = process_single_segment_for_statements_with_splitting(
@@ -3446,7 +3464,9 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
 
             all_statements.extend(statements_from_full)
         else:
-            logger.warning(f"No ◯ markers found in text for session {session_id}, cannot extract statements")
+            logger.warning(
+                f"No ◯ markers found in text for session {session_id}, cannot extract statements"
+            )
 
     logger.info(
         f"✅ Keyword-based extraction completed: {len(all_statements)} statements"
@@ -4165,7 +4185,8 @@ def process_session_pdf_text(
     logger.info(
         f"✅ Extracted {len(statements_data)} statements in total for session {session_id}"
     )
-    process_extracted_statements_data(statements_data, session_obj, full_text, debug)
+    process_extracted_statements_data(statements_data, session_obj, full_text,
+                                      debug)
 
 
 def process_pdf_text_for_statements(full_text,
