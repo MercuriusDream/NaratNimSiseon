@@ -1,0 +1,86 @@
+2025-06-11 01:16:53.23
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:16:53.24
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:16:53.29
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:16:53.30
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:16:53.43
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:16:53.43
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:16:53.55
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:16:53.55
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:16:53.71
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:16:53.72
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:16:54.21
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:16:54.22
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:16:55.70
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:16:55.70
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:17:00.23
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:17:00.24
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:17:00.86
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:17:00.86
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:17:03.28
+8f122eb0
+User
+python3: can't open file '/home/runner/workspace/manage.py': [Errno 2] No such file or directory
+2025-06-11 01:17:03.29
+8f122eb0
+System
+command finished with error [sh -c python3 manage.py runserver 0.0.0.0:3000]: exit status 2
+2025-06-11 01:17:12.12
+8f122eb0
+System
+crash loop detected
+
+Wrap
