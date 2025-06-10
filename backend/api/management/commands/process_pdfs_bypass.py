@@ -217,6 +217,23 @@ class Command(BaseCommand):
                 # Count speaker markers
                 speaker_count = full_text.count('◯')
                 self.stdout.write(f'🗣️ Found {speaker_count} speaker markers (◯)')
+                
+                # Get bill names from database to show what would be sent to LLM
+                bill_names = list(session.bills.values_list('bill_nm', flat=True))
+                bills_context_str = ", ".join(bill_names) if bill_names else "General Discussion"
+                
+                self.stdout.write(f'📋 Bills context: {len(bill_names)} bills found')
+                
+                # Show what would be sent to LLM by calling the text processing functions
+                from api.tasks import clean_pdf_text
+                cleaned_text = clean_pdf_text(full_text)
+                
+                self.stdout.write('🧹 CLEANED TEXT THAT WOULD BE SENT TO LLM:')
+                self.stdout.write('=' * 100)
+                self.stdout.write(cleaned_text)
+                self.stdout.write('=' * 100)
+                self.stdout.write(f'📏 Cleaned text length: {len(cleaned_text)} characters')
+                
                 return True
 
             # Process with LLM (bypass all API checks)
