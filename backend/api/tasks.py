@@ -15,10 +15,8 @@ from pathlib import Path
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import deque
-import google.genai as genai_module
-from google.genai import types as genai_types
-from google.genai.types import Content, Part, GenerateContentConfig, ThinkingConfig
 import re
+from google import genai
 
 logger = logging.getLogger(__name__)
 
@@ -288,108 +286,6 @@ if not logger.handlers or not any(
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    # print(
-    #     f"🐛 IMMEDIATE DEBUG: Logger reconfigured with handlers: {logger.handlers}"
-    # )
-
-
-# Configuration flags
-# Configure Gemini API with error handling
-
-def initialize_gemini():
-    """Initialize Gemini API with proper error handling using google.genai"""
-    try:
-        if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-            try:
-                from google.genai import Client
-                from google.genai.types import Content, Part, GenerateContentConfig, ThinkingConfig
-                client = Client(api_key=settings.GEMINI_API_KEY)
-                model_name = 'gemini-2.5-flash-preview-05-20'
-                # Minimal status check with a basic prompt
-                contents = [
-                    Content(
-                        role="user",
-                        parts=[Part.from_text(text="Hello")],
-                    ),
-                ]
-                generate_content_config = GenerateContentConfig(
-                    thinking_config=ThinkingConfig(thinking_budget=0),
-                    response_mime_type="text/plain",
-                    system_instruction=[Part.from_text(text="Status check")],
-                )
-                # Stream one chunk to verify connectivity
-                stream = client.models.generate_content_stream(
-                    model=model_name,
-                    contents=contents,
-                    config=generate_content_config,
-                )
-                preview = next(stream).text
-                logger.info(f"✅ Gemini API (google.genai.Client) configured successfully and status check succeeded. Preview: {preview[:100]}")
-                return client, model_name
-            except Exception as status_exc:
-                logger.warning(f"⚠️ Gemini API (google.genai.Client) configured but status check failed: {status_exc}")
-                return None, None
-        else:
-            logger.error(
-                "❌ GEMINI_API_KEY not found or empty in settings. LLM features will be disabled."
-            )
-            return None, None
-    except ImportError as e:
-        logger.error(
-            f"❌ google.genai library not available: {e}. LLM features will be disabled."
-        )
-        return None, None
-    except Exception as e:
-        logger.error(
-            f"❌ Error configuring Gemini API: {e}. LLM features will be disabled."
-        )
-        return None, None
-
-
-# Initialize Gemini (new google.genai.Client)
-client, model_name = initialize_gemini()
-
-
-def reinitialize_gemini():
-    """Reinitialize Gemini if it failed initially (new google.genai.Client)"""
-    global client, model_name
-    if not client or not model_name:
-        logger.info("🔄 Attempting to reinitialize Gemini API...")
-        client, model_name = initialize_gemini()
-    return client is not None and model_name is not None
-
-
-def check_gemini_api_status():
-    """
-    Check Gemini API status by sending a minimal prompt and returning the response or error.
-    Returns a tuple: (status: str, info: str)
-    """
-    if not client or not model_name:
-        return ("error", "Gemini API not initialized")
-    try:
-        from google.genai.types import Content, Part, GenerateContentConfig, ThinkingConfig
-        contents = [
-            Content(
-                role="user",
-                parts=[Part.from_text(text="Hello")],
-            ),
-        ]
-        generate_content_config = GenerateContentConfig(
-            thinking_config=ThinkingConfig(thinking_budget=0),
-            response_mime_type="text/plain",
-            system_instruction=[Part.from_text(text="Status check")],
-        )
-        stream = client.models.generate_content_stream(
-            model=model_name,
-            contents=contents,
-            config=generate_content_config,
-        )
-        preview = next(stream).text
-        logger.info(f"✅ Gemini API status check succeeded. Preview: {preview[:100]}")
-        return ("ok", preview[:200])
-    except Exception as e:
-        logger.error(f"❌ Gemini API status check failed: {e}")
-        return ("error", str(e))
 
 
 # Check if Celery/Redis is available
@@ -2245,7 +2141,8 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
     if len(text_segment) <= MAX_SEGMENTATION_LENGTH:
         # Single batch processing
         # Fallback: use extract_statements_for_bill_segment to get indices
-        segments = extract_statements_for_bill_segment(text_segment, None, bill_name, debug)
+        segments = extract_statements_for_bill_segment(text_segment, None,
+                                                       bill_name, debug)
         # Convert segments to indices if needed
         indices = []
         for seg in segments:
@@ -2317,9 +2214,6 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
         f"🎉 Batch processing complete: {len(deduplicated_indices)} total speech segments from {batch_count} batches"
     )
     return deduplicated_indices
-
-
-
 
 
 def process_session_pdf_direct(session_id=None, force=False, debug=False):
@@ -2538,9 +2432,8 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
     return sorted(results, key=lambda x: x.get('segment_index', 0))
 
 
-def analyze_batch_statements_single_request(batch_model, batch_segments,
-                                            bill_name, assembly_members,
-                                            estimated_tokens,
+def analyze_batch_statements_single_request(model, batch_segments, bill_name,
+                                            assembly_members, estimated_tokens,
                                             batch_start_index):
     """Analyze up to 20 statements in a single API request with improved batching."""
     if not batch_segments:
@@ -2600,7 +2493,7 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
     max_prompt_length = 15000  # Conservative limit
     if len(segments_text) > max_prompt_length:
         # Process in smaller sub-batches
-        return _process_large_batch_in_chunks(batch_model, cleaned_segments,
+        return _process_large_batch_in_chunks(model, cleaned_segments,
                                               bill_name, assembly_members,
                                               estimated_tokens,
                                               batch_start_index)
@@ -2634,12 +2527,12 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
 - 발언자명에서 직책 제거
 - JSON 배열만 응답"""
 
-    return _execute_batch_analysis(batch_model, prompt, cleaned_segments,
+    return _execute_batch_analysis(model, prompt, cleaned_segments,
                                    processed_segments, assembly_members,
                                    batch_start_index, bill_name)
 
 
-def _process_large_batch_in_chunks(batch_model, segments, bill_name,
+def _process_large_batch_in_chunks(model, segments, bill_name,
                                    assembly_members, estimated_tokens,
                                    batch_start_index):
     """Process large batches by splitting into smaller chunks."""
@@ -2651,7 +2544,7 @@ def _process_large_batch_in_chunks(batch_model, segments, bill_name,
         chunk_segments = segments[chunk_start:chunk_end]
 
         chunk_results = analyze_batch_statements_single_request(
-            batch_model, chunk_segments, bill_name, assembly_members,
+            model, chunk_segments, bill_name, assembly_members,
             estimated_tokens // (len(segments) // chunk_size + 1),
             batch_start_index + chunk_start)
 
@@ -2664,7 +2557,7 @@ def _process_large_batch_in_chunks(batch_model, segments, bill_name,
     return all_results
 
 
-def _execute_batch_analysis(batch_model,
+def _execute_batch_analysis(model,
                             prompt,
                             cleaned_segments,
                             original_segments,
@@ -2677,7 +2570,7 @@ def _execute_batch_analysis(batch_model,
     for attempt in range(max_retries + 1):
         start_time = time.time()
         try:
-            response = batch_model.generate_content(prompt)
+            response = model.generate_content(prompt)
 
             processing_time = time.time() - start_time
             logger.info(
@@ -2866,9 +2759,13 @@ def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name,
                                                     estimated_tokens):
     """Legacy function - now redirects to batch processing for consistency."""
     # For single segment, just use batch processing with 1 item
-    batch_model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
-    results = analyze_batch_statements_single_request(batch_model,
-                                                      [speech_segment],
+    from django.conf import settings
+    api_key = getattr(settings, 'GEMINI_API_KEY', None)
+    if not api_key:
+        return None
+    client = genai.Client(api_key=api_key)
+    model = client.get_model('gemini-2.5-flash-preview-05-20')
+    results = analyze_batch_statements_single_request(model, [speech_segment],
                                                       bill_name,
                                                       assembly_members,
                                                       estimated_tokens, 0)
@@ -3697,11 +3594,19 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
 
 
 def analyze_single_statement(statement_data_dict, session_id, debug=False):
-    global model
+    """
+    Analyze a single statement using Gemini GenAI (official google.genai client, no global model).
+    """
+    from django.conf import settings
+    import json
+    speaker_name = statement_data_dict.get('speaker_name', 'Unknown')
+    text_to_analyze = statement_data_dict.get('text', '')
 
-    if not model:  # Global 'model'
+    # Check for Gemini API key
+    api_key = getattr(settings, 'GEMINI_API_KEY', None)
+    if not api_key:
         logger.warning(
-            " Main LLM ('model') not available. Cannot analyze statement (generic)."
+            "GEMINI_API_KEY not available in settings. Cannot analyze statement."
         )
         statement_data_dict.update({
             'sentiment_score': 0.0,
@@ -3709,12 +3614,9 @@ def analyze_single_statement(statement_data_dict, session_id, debug=False):
         })
         return statement_data_dict
 
-    speaker_name = statement_data_dict.get('speaker_name', 'Unknown')
-    text_to_analyze = statement_data_dict.get('text', '')
-
     if not text_to_analyze:
         logger.warning(
-            f"No text to analyze for speaker '{speaker_name}' (generic analysis)."
+            f"No text to analyze for speaker '{speaker_name}' (Gemini analysis)."
         )
         return statement_data_dict
 
@@ -3738,14 +3640,16 @@ def analyze_single_statement(statement_data_dict, session_id, debug=False):
 응답은 반드시 유효한 JSON 형식이어야 합니다.
 """
     try:
+        # Use the official google.genai client and GenerativeModel inline
+        client = genai.Client(api_key=api_key)
+        model = client.get_model('gemini-2.5-flash-preview-05-20')
         response = model.generate_content(prompt)
         if not response or not response.text:
             logger.warning(
-                f"❌ No LLM generic analysis response for '{speaker_name}'.")
+                f"❌ No Gemini analysis response for '{speaker_name}'.")
             return statement_data_dict
         response_text_cleaned = response.text.strip().replace(
             "```json", "").replace("```", "").strip()
-        import json
         try:
             analysis_json = json.loads(response_text_cleaned)
             statement_data_dict.update({
@@ -3756,15 +3660,20 @@ def analyze_single_statement(statement_data_dict, session_id, debug=False):
             })
         except Exception as e:
             logger.warning(
-                f"❌ Error parsing LLM generic analysis response for '{speaker_name}': {e}"
+                f"❌ Error parsing Gemini analysis response for '{speaker_name}': {e}"
             )
         if debug:
             logger.debug(
-                f"🐛 DEBUG: Generic analysis for '{speaker_name}' - Sentiment: {statement_data_dict['sentiment_score']}"
+                f"🐛 DEBUG: Gemini analysis for '{speaker_name}' - Sentiment: {statement_data_dict['sentiment_score']}"
             )
         return statement_data_dict
-    except:
-        return NULL
+    except Exception as e:
+        logger.warning(f"❌ Gemini API error for '{speaker_name}': {e}")
+        statement_data_dict.update({
+            'sentiment_score': 0.0,
+            'sentiment_reason': 'Gemini API Error'
+        })
+        return statement_data_dict
 
 
 def get_bills_context(session_id):
