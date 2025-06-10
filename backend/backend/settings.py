@@ -77,7 +77,10 @@ ROOT_URLCONF = 'backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        'DIRS': [
+            os.path.join(BASE_DIR, 'templates'),
+            os.path.join(BASE_DIR, '../frontend/build'),
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -157,10 +160,15 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, '../frontend/build/static'),
-    os.path.join(BASE_DIR, '../frontend/build'),
-]
+# Check if frontend build exists before adding to STATICFILES_DIRS
+STATICFILES_DIRS = []
+frontend_build_static = os.path.join(BASE_DIR, '../frontend/build/static')
+frontend_build_root = os.path.join(BASE_DIR, '../frontend/build')
+
+if os.path.exists(frontend_build_static):
+    STATICFILES_DIRS.append(frontend_build_static)
+if os.path.exists(frontend_build_root):
+    STATICFILES_DIRS.append(frontend_build_root)
 
 # Media files
 MEDIA_URL = '/media/'
@@ -217,6 +225,28 @@ USE_TZ = True
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
 
 # Celery settings
 CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
