@@ -16,8 +16,21 @@ from collections import deque
 import re
 
 # Import the new Gemini SDK
-from google import genai
-from google.genai import types
+try:
+    from google import genai
+    from google.genai import types
+    GENAI_AVAILABLE = True
+except ImportError:
+    genai = None
+    types = None
+    GENAI_AVAILABLE = False
+    logger.warning("google.genai not available, falling back to google.generativeai")
+    try:
+        import google.generativeai as genai_legacy
+        GENAI_LEGACY_AVAILABLE = True
+    except ImportError:
+        genai_legacy = None
+        GENAI_LEGACY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +205,7 @@ model = None  # Deprecated - use client instead
 
 
 def initialize_gemini():
-    """Initializes the `google.genai` client without redundant status checks."""
+    """Initializes the Gemini client using new google.genai or fallback to legacy."""
     global client
     
     # Skip if already initialized
@@ -201,18 +214,32 @@ def initialize_gemini():
         
     try:
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-            # Use the new genai.Client structure
-            client = genai.Client(api_key=settings.GEMINI_API_KEY)
-            logger.info("✅ Gemini API client initialized successfully")
-            return True
+            if GENAI_AVAILABLE:
+                # Use the new genai.Client structure
+                client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                logger.info("✅ Gemini API client initialized successfully with google.genai")
+                
+                # Test the client with a simple call
+                test_response = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=["Hello"]
+                )
+                logger.info(f"✅ Gemini API test successful. Response: {test_response.text[:50]}...")
+                return True
+            elif GENAI_LEGACY_AVAILABLE:
+                # Fallback to legacy google.generativeai
+                genai_legacy.configure(api_key=settings.GEMINI_API_KEY)
+                client = genai_legacy
+                logger.info("✅ Gemini API configured with legacy google.generativeai")
+                return True
+            else:
+                logger.warning("⚠️ Neither google.genai nor google.generativeai available.")
+                client = None
+                return False
         else:
             logger.warning("⚠️ GEMINI_API_KEY not found. LLM features will be disabled.")
             client = None
             return False
-    except ImportError as e:
-        logger.warning(f"⚠️ google.genai library not available: {e}. LLM features will be disabled.")
-        client = None
-        return False
     except Exception as e:
         logger.error(f"❌ Error configuring Gemini API: {e}. LLM features will be disabled.")
         client = None
@@ -244,19 +271,34 @@ def _call_gemini_api(prompt: str,
         logger.error("Aborting API call due to rate limiting timeout.")
         return None
 
-    # Construct generation configuration
-    config = types.GenerateContentConfig(response_mime_type=response_mime_type)
-
-    # Add system instruction if provided
-    if system_instruction:
-        config.system_instruction = system_instruction
-
     for attempt in range(max_retries + 1):
         try:
-            # Make the API call using new structure
-            response = client.models.generate_content(model=model_name,
-                                                      contents=[prompt],
-                                                      config=config)
+            if GENAI_AVAILABLE and hasattr(client, 'models'):
+                # Use new google.genai structure
+                config = types.GenerateContentConfig(response_mime_type=response_mime_type)
+                
+                # Add system instruction if provided
+                if system_instruction:
+                    config.system_instruction = system_instruction
+
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[prompt],
+                    config=config
+                )
+                response_text = response.text
+                
+            elif GENAI_LEGACY_AVAILABLE:
+                # Use legacy google.generativeai
+                model = client.GenerativeModel(model_name)
+                if system_instruction:
+                    model = client.GenerativeModel(model_name, system_instruction=system_instruction)
+                
+                response = model.generate_content(prompt)
+                response_text = response.text
+            else:
+                logger.error("No available Gemini API client")
+                return None
 
             # Record successful request
             gemini_rate_limiter.record_request(estimated_tokens, success=True)
@@ -264,11 +306,11 @@ def _call_gemini_api(prompt: str,
             # Parse response based on mime type
             if response_mime_type == "application/json":
                 try:
-                    return json.loads(response.text)
+                    return json.loads(response_text)
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse JSON response: {e}")
                     return None
-            return response.text
+            return response_text
 
         except Exception as e:
             error_msg = str(e)
@@ -2570,25 +2612,35 @@ def _execute_batch_analysis(prompt,
     for attempt in range(max_retries + 1):
         start_time = time.time()
         try:
-            # Use new google.genai structure
-            response = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=[prompt],
-                config=types.GenerateContentConfig(
-                    response_mime_type="text/plain"))
+            if GENAI_AVAILABLE and hasattr(client, 'models'):
+                # Use new google.genai structure
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=[prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="text/plain"))
+                response_text_raw = response.text
+            elif GENAI_LEGACY_AVAILABLE:
+                # Use legacy google.generativeai
+                model = client.GenerativeModel("gemini-2.0-flash")
+                response = model.generate_content(prompt)
+                response_text_raw = response.text
+            else:
+                logger.error("No available Gemini API client for batch analysis")
+                return []
 
             processing_time = time.time() - start_time
             logger.info(
                 f"Batch processing took {processing_time:.1f}s for {len(cleaned_segments)} segments"
             )
 
-            if not response or not response.text:
+            if not response_text_raw:
                 logger.warning(
                     f"Empty batch response from LLM after {processing_time:.1f}s"
                 )
                 return []
 
-            response_text_cleaned = response.text.strip().replace(
+            response_text_cleaned = response_text_raw.strip().replace(
                 "```json", "").replace("```", "").strip()
 
             try:
