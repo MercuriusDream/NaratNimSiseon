@@ -101,38 +101,43 @@ class Command(BaseCommand):
                 # Since Celery is not available, run the core logic directly
                 self.stdout.write("📥 Fetching sessions from API...")
                 
-                # Import required functions and libraries directly
-                import requests
-                import json
-                from datetime import datetime, timedelta
+                # Import required functions and run the full collection process
+                from api.tasks import fetch_continuous_sessions_direct
                 
-                # This is a simplified version of what the Celery task would do
-                # You may need to adjust the API endpoint and parameters based on your actual implementation
-                
-                # For now, let's just trigger PDF processing for existing sessions
-                sessions_without_pdfs = Session.objects.filter(
-                    down_url__isnull=False
-                ).exclude(down_url__exact='')
-                
-                if start_date:
-                    sessions_without_pdfs = sessions_without_pdfs.filter(
-                        conf_dt__gte=start_date
-                    )
-                
-                sessions_without_pdfs = sessions_without_pdfs.order_by('-conf_dt')[:10]  # Limit to prevent overwhelming
-                
-                self.stdout.write(f"📄 Found {sessions_without_pdfs.count()} sessions to process PDFs for")
-                
-                # Process PDFs for these sessions
-                for session in sessions_without_pdfs:
-                    try:
-                        self.stdout.write(f"🔄 Processing PDF for session {session.conf_id}")
-                        from api.tasks import process_session_pdf_direct
-                        process_session_pdf_direct(session_id=session.conf_id, force=True, debug=debug)
-                        self.stdout.write(f"✅ Completed PDF processing for session {session.conf_id}")
-                    except Exception as pdf_error:
-                        self.stderr.write(f"❌ Error processing PDF for session {session.conf_id}: {pdf_error}")
-                        logger.exception(f"PDF processing error for session {session.conf_id}")
+                try:
+                    # Run the direct version of fetch_continuous_sessions
+                    self.stdout.write("🚀 Starting continuous session collection...")
+                    fetch_continuous_sessions_direct(force=True, debug=debug, start_date=start_date_iso)
+                    self.stdout.write("✅ Continuous session collection completed")
+                except Exception as fetch_error:
+                    self.stderr.write(f"❌ Error in continuous session collection: {fetch_error}")
+                    logger.exception("Error in fetch_continuous_sessions_direct")
+                    
+                    # Fallback: Process existing sessions with PDFs
+                    self.stdout.write("📄 Falling back to processing existing sessions...")
+                    sessions_without_pdfs = Session.objects.filter(
+                        down_url__isnull=False
+                    ).exclude(down_url__exact='')
+                    
+                    if start_date:
+                        sessions_without_pdfs = sessions_without_pdfs.filter(
+                            conf_dt__gte=start_date
+                        )
+                    
+                    sessions_without_pdfs = sessions_without_pdfs.order_by('-conf_dt')[:50]  # Increased limit
+                    
+                    self.stdout.write(f"📄 Found {sessions_without_pdfs.count()} sessions to process PDFs for")
+                    
+                    # Process PDFs for these sessions
+                    for i, session in enumerate(sessions_without_pdfs, 1):
+                        try:
+                            self.stdout.write(f"🔄 Processing PDF {i}/{sessions_without_pdfs.count()} for session {session.conf_id}")
+                            from api.tasks import process_session_pdf_direct
+                            process_session_pdf_direct(session_id=session.conf_id, force=True, debug=debug)
+                            self.stdout.write(f"✅ Completed PDF processing for session {session.conf_id}")
+                        except Exception as pdf_error:
+                            self.stderr.write(f"❌ Error processing PDF for session {session.conf_id}: {pdf_error}")
+                            logger.exception(f"PDF processing error for session {session.conf_id}")
 
             self.stdout.write(
                 self.style.SUCCESS(
