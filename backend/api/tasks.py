@@ -1356,16 +1356,10 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                                               force=force,
                                               debug=debug)
                 else:
-                    # Call the wrapped function directly to avoid Celery registration issues
-                    if hasattr(fetch_session_bills, '__wrapped__'):
-                        fetch_session_bills.__wrapped__(self=None,
-                                                        session_id=confer_num,
-                                                        force=force,
-                                                        debug=debug)
-                    else:
-                        fetch_session_bills(session_id=confer_num,
-                                            force=force,
-                                            debug=debug)
+                    # Use the direct wrapper function to avoid Celery issues
+                    fetch_session_bills_direct(session_id=confer_num,
+                                               force=force,
+                                               debug=debug)
             except Exception as bills_error:
                 logger.error(
                     f"Error fetching bills for session {confer_num}: {bills_error}"
@@ -1399,76 +1393,9 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             logger.exception("Full traceback for session processing error:")
             continue
 
-    try:
-        # Process each session item
-        for confer_num, items_for_session in sessions_by_confer_num.items():
-            connection.ensure_connection()
-            main_item = items_for_session[0]
-            try:
-                # ... [existing session processing code] ...
-
-                # 1. Fetch bills for this session.
-                if is_celery_available():
-                    fetch_session_bills.delay(session_id=confer_num,
-                                              force=force,
-                                              debug=debug)
-                else:
-                    fetch_session_bills(session_id=confer_num,
-                                        force=force,
-                                        debug=debug)
-
-                # 2. Process the PDF if a URL exists.
-                if session_obj.down_url:
-                    if is_celery_available():
-                        process_session_pdf.delay(session_id=confer_num,
-                                                  force=force,
-                                                  debug=debug)
-                    else:
-                        process_session_pdf(session_id=confer_num,
-                                            force=force,
-                                            debug=debug)
-                else:
-                    logger.info(
-                        f"No PDF URL for session {confer_num}, skipping PDF processing."
-                    )
-
-            except Exception as e:
-                logger.error(
-                    f"❌ Error processing session data for CONFER_NUM {confer_num}: {e}"
-                )
-                logger.exception(
-                    "Full traceback for session processing error:")
-                continue
-
-        logger.info(
-            f"🎉 Sessions processing complete: {created_count} created, {updated_count} updated."
-        )
-
-    except RequestException as re_exc:
-        error_msg = f"API request failed while processing sessions: {str(re_exc)}"
-        logger.error(error_msg)
-        try:
-            self.retry(exc=RequestException(error_msg))
-        except MaxRetriesExceededError:
-            logger.error(
-                "❌ Max retries (3) reached for session details API request")
-            raise
-
-    except json.JSONDecodeError as json_e:
-        error_msg = f"Failed to parse API response as JSON: {str(json_e)}"
-        logger.error(error_msg)
-        # Don't retry JSON decode errors as they indicate malformed response
-        raise ValueError(error_msg)
-
-    except Exception as e:
-        error_msg = f"Unexpected error in process_sessions_data: {str(e)}"
-        logger.error(f"❌ {error_msg}")
-        logger.exception("Stack trace for debugging:")
-        try:
-            self.retry(exc=Exception(error_msg))
-        except MaxRetriesExceededError:
-            logger.error("❌ Max retries (3) reached after unexpected error")
-            raise
+    logger.info(
+        f"🎉 Sessions processing complete: {created_count} created, {updated_count} updated."
+    )
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -2143,6 +2070,305 @@ def fetch_continuous_sessions_direct(force=False,
         logger.error(
             f"❌ Critical error in fetch_continuous_sessions_direct: {e}")
         logger.exception("Full traceback for critical error:")
+
+
+def fetch_session_bills_direct(session_id=None, force=False, debug=False):
+    """
+    Direct wrapper for fetch_session_bills that can be called without Celery.
+    """
+    if not session_id:
+        logger.error("session_id is required for fetch_session_bills.")
+        return
+
+    logger.info(
+        f"🔍 Fetching bills for session: {session_id} (force={force}, debug={debug}) [DIRECT CALL]"
+    )
+    
+    if debug:
+        logger.debug(
+            f"🐛 DEBUG: Fetching bills for session {session_id} in debug mode")
+        return
+
+    try:
+        if not hasattr(settings,
+                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error("ASSEMBLY_API_KEY not configured.")
+            return
+
+        formatted_conf_id = format_conf_id(session_id)
+        url = "https://open.assembly.go.kr/portal/openapi/VCONFBILLLIST"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "Type": "json",
+            "CONF_ID": formatted_conf_id,
+            "pSize": 500
+        }
+
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        bills_data_list = []
+        api_key_name = 'VCONFBILLLIST'
+        if data and api_key_name in data and isinstance(
+                data[api_key_name], list):
+            if len(data[api_key_name]) > 1 and isinstance(
+                    data[api_key_name][1], dict):
+                bills_data_list = data[api_key_name][1].get('row', [])
+            elif len(data[api_key_name]) > 0 and isinstance(
+                    data[api_key_name][0], dict):
+                head_info = data[api_key_name][0].get('head')
+                if head_info and head_info[0].get('RESULT', {}).get(
+                        'CODE', '').startswith("INFO-200"):
+                    logger.info(
+                        f"API result for VCONFBILLLIST ({session_id}) indicates no bill data (INFO-200)."
+                    )
+                elif 'row' in data[api_key_name][
+                        0]:  # Fallback for inconsistent structure
+                    bills_data_list = data[api_key_name][0].get('row', [])
+
+        if not bills_data_list:
+            logger.info(
+                f"ℹ️ No bills found from VCONFBILLLIST API for session {session_id}."
+            )
+            return
+
+        try:
+            session_obj = Session.objects.get(conf_id=session_id)
+        except Session.DoesNotExist:
+            logger.error(
+                f"❌ Session {session_id} not found in database when fetching bills. Cannot associate bills."
+            )
+            return
+
+        created_count = 0
+        updated_count = 0
+        
+        for bill_item in bills_data_list:
+            bill_id_api = bill_item.get('BILL_ID')
+            if not bill_id_api:
+                logger.warning(
+                    f"Skipping bill item due to missing BILL_ID in session {session_id}: {bill_item.get('BILL_NM', 'N/A')}"
+                )
+                continue
+
+            # Extract proposer information from multiple sources
+            proposer_info = "국회"  # Default fallback
+
+            # First try PROPOSER field from VCONFBILLLIST
+            bill_proposer = bill_item.get('PROPOSER', '').strip()
+
+            # If no PROPOSER, try to get from session's CMIT_NM (from VCONFDETAIL)
+            if not bill_proposer and hasattr(
+                    session_obj, 'cmit_nm') and session_obj.cmit_nm:
+                bill_proposer = session_obj.cmit_nm.strip()
+
+            # Always use generic proposer initially, then fetch detailed info from BILLINFODETAIL
+            proposer_info = bill_proposer if bill_proposer else "국회본회의"
+            logger.info(
+                f"📝 Bill {bill_id_api} initial proposer: {proposer_info} - will fetch detailed info from BILLINFODETAIL"
+            )
+
+            bill_defaults = {
+                'session': session_obj,
+                'bill_nm': bill_item.get('BILL_NM', ''),
+            }
+            if bill_item.get('BILL_NO'):
+                bill_defaults['bill_no'] = bill_item.get('BILL_NO')
+            if bill_item.get('PROPOSE_DT'):
+                bill_defaults['propose_dt'] = bill_item.get('PROPOSE_DT')
+
+            bill_obj, created = Bill.objects.update_or_create(
+                bill_id=
+                bill_id_api,  # BILL_ID from API is the primary key for bills
+                defaults=bill_defaults)
+
+            if created:
+                created_count += 1
+                logger.info(
+                    f"✨ Created new bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) initial proposer: {proposer_info} for session {session_id}"
+                )
+            else:  # Bill already existed, update_or_create updated it
+                updated_count += 1
+                logger.info(
+                    f"🔄 Updated existing bill: {bill_id_api} ({bill_obj.bill_nm[:30]}...) initial proposer: {proposer_info} for session {session_id}"
+                )
+
+            # ALWAYS fetch detailed information from BILLINFODETAIL to get real proposer data
+            logger.info(
+                f"🔍 Fetching detailed proposer info from BILLINFODETAIL for bill {bill_id_api}"
+            )
+            fetch_bill_detail_info_direct(bill_id_api, force=True, debug=debug)
+            
+        logger.info(
+            f"🎉 Bills processed for session {session_id}: {created_count} created, {updated_count} updated."
+        )
+
+    except RequestException as re_exc:
+        logger.error(
+            f"Request error fetching bills for session {session_id}: {re_exc}")
+    except json.JSONDecodeError as json_e:
+        logger.error(
+            f"JSON decode error for session {session_id} bills: {json_e}")
+    except Exception as e:
+        logger.error(
+            f"❌ Unexpected error fetching bills for session {session_id}: {e}")
+        logger.exception(
+            f"Full traceback for session {session_id} bill fetch:")
+
+
+def fetch_bill_detail_info_direct(bill_id, force=False, debug=False):
+    """
+    Direct wrapper for fetch_bill_detail_info that can be called without Celery.
+    """
+    logger.info(
+        f"📄 Fetching detailed info for bill: {bill_id} (force={force}, debug={debug}) [DIRECT CALL]"
+    )
+
+    if debug:
+        logger.debug(f"🐛 DEBUG: Skipping bill detail fetch for bill {bill_id}")
+        return
+
+    try:
+        if not hasattr(settings,
+                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error(
+                "ASSEMBLY_API_KEY not configured for bill detail fetch.")
+            return
+
+        # Get the bill object
+        try:
+            bill = Bill.objects.get(bill_id=bill_id)
+        except Bill.DoesNotExist:
+            logger.error(f"Bill {bill_id} not found in database.")
+            return
+
+        # Generate the bill link URL
+        bill_link_url = f"https://likms.assembly.go.kr/bill/billDetail.do?billId={bill_id}"
+
+        url = "https://open.assembly.go.kr/portal/openapi/BILLINFODETAIL"
+        params = {
+            "KEY": settings.ASSEMBLY_API_KEY,
+            "BILL_ID": bill_id,
+            "Type": "json"
+        }
+
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        bill_detail_data = None
+        api_key_name = 'BILLINFODETAIL'
+        if data and api_key_name in data and isinstance(
+                data[api_key_name], list):
+            if len(data[api_key_name]) > 1 and isinstance(
+                    data[api_key_name][1], dict):
+                rows = data[api_key_name][1].get('row', [])
+                if rows:
+                    bill_detail_data = rows[0]  # Take first row
+            elif len(data[api_key_name]) > 0 and isinstance(
+                    data[api_key_name][0], dict):
+                head_info = data[api_key_name][0].get('head')
+                if head_info and head_info[0].get('RESULT', {}).get(
+                        'CODE', '').startswith("INFO-200"):
+                    logger.info(
+                        f"API result for bill detail ({bill_id}) indicates no data."
+                    )
+                elif 'row' in data[api_key_name][0]:
+                    rows = data[api_key_name][0].get('row', [])
+                    if rows:
+                        bill_detail_data = rows[0]
+
+        if not bill_detail_data:
+            logger.info(f"No detailed information found for bill {bill_id}")
+            return
+
+        # Update bill with detailed information
+        updated_fields = []
+
+        # Update bill link URL
+        if bill.link_url != bill_link_url:
+            bill.link_url = bill_link_url
+            updated_fields.append('link_url')
+
+        # Update bill number if not set or different
+        if bill_detail_data.get(
+                'BILL_NO') and bill.bill_no != bill_detail_data.get('BILL_NO'):
+            bill.bill_no = bill_detail_data.get('BILL_NO')
+            updated_fields.append('bill_no')
+
+        # Always update proposer information with detailed data from BILLINFODETAIL
+        proposer_kind = bill_detail_data.get('PPSR_KIND', '').strip()
+        proposer_name = bill_detail_data.get('PPSR', '').strip()
+
+        if proposer_name:
+            # Replace generic proposers with real proposer data
+            current_proposer = bill.proposer
+            is_generic_proposer = current_proposer in [
+                '국회본회의', '국회', '본회의'
+            ] or any(generic in current_proposer
+                     for generic in ['국회본회의', '국회', '본회의'])
+
+            if proposer_kind == '의원' and proposer_name:
+                # Individual member proposer - get detailed info
+                detailed_proposer = f"{proposer_name}"
+                # Try to get party information
+                if '등' in proposer_name:
+                    # Multiple proposers (e.g., "박성민의원 등 11인")
+                    detailed_proposer = proposer_name
+                else:
+                    # Single proposer - try to get party info
+                    speaker_details = fetch_speaker_details(
+                        proposer_name.replace('의원', '').strip())
+                    if speaker_details and speaker_details.plpt_nm:
+                        party_info = speaker_details.plpt_nm.split(
+                            '/')[-1].strip()
+                        detailed_proposer = f"{proposer_name} ({party_info})"
+                    else:
+                        detailed_proposer = proposer_name
+            elif proposer_kind and proposer_name:
+                # Other types of proposers (정부, 위원회 등)
+                detailed_proposer = f"{proposer_name} ({proposer_kind})"
+            else:
+                detailed_proposer = proposer_name
+
+            # Always update if we have better proposer data or if current is generic
+            if is_generic_proposer or bill.proposer != detailed_proposer:
+                old_proposer = bill.proposer
+                bill.proposer = detailed_proposer
+                updated_fields.append('proposer')
+                if is_generic_proposer:
+                    logger.info(
+                        f"🔄 Replaced generic proposer '{old_proposer}' with real data: '{detailed_proposer}'"
+                    )
+                else:
+                    logger.info(
+                        f"🔄 Updated proposer from '{old_proposer}' to '{detailed_proposer}'"
+                    )
+
+        # Update proposal date if available
+        if bill_detail_data.get(
+                'PPSL_DT') and bill.propose_dt != bill_detail_data.get(
+                    'PPSL_DT'):
+            bill.propose_dt = bill_detail_data.get('PPSL_DT')
+            updated_fields.append('propose_dt')
+
+        # Save if any fields were updated
+        if updated_fields or force:
+            bill.save()
+            logger.info(
+                f"✅ Updated bill {bill_id} with detailed info. Fields updated: {', '.join(updated_fields) if updated_fields else 'forced update'}"
+            )
+
+    except RequestException as re_exc:
+        logger.error(
+            f"Request error fetching bill detail for {bill_id}: {re_exc}")
+    except json.JSONDecodeError as json_e:
+        logger.error(f"JSON decode error for bill detail {bill_id}: {json_e}")
+    except Exception as e:
+        logger.error(
+            f"❌ Unexpected error fetching bill detail for {bill_id}: {e}")
+        logger.exception(f"Full traceback for bill detail {bill_id}:")
 
 
 def process_session_pdf_direct(session_id=None, force=False, debug=False):
