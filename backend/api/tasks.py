@@ -2521,19 +2521,10 @@ def _execute_batch_analysis(prompt,
                 is_valid_member = analysis_json.get('is_valid_member', False)
                 is_substantial = analysis_json.get('is_substantial', False)
 
-                # Extract speech content
-                speech_content = ""
-                if i < len(original_segments
-                           ) and start_idx >= 0 and end_idx > start_idx:
-                    original_segment = original_segments[i]
-                    clean_original = original_segment.replace(
-                        '\n', ' ').replace('\r', '').strip()
-
-                    # Extract using indices with bounds checking
-                    actual_end = min(end_idx, len(clean_original))
-                    actual_start = min(start_idx, len(clean_original))
-                    speech_content = clean_original[
-                        actual_start:actual_end].strip()
+                # Store indices instead of extracting text here
+                # The text will be extracted later in process_extracted_statements_data
+                speech_start_idx = start_idx
+                speech_end_idx = end_idx
 
                 # Clean speaker name from titles
                 if speaker_name:
@@ -2550,7 +2541,8 @@ def _execute_batch_analysis(prompt,
                 result = {
                     **analysis_json,
                     'speaker_name': speaker_name,
-                    'speech_content': speech_content,
+                    'start_idx': speech_start_idx,
+                    'end_idx': speech_end_idx,
                     'segment_index': batch_start_index + i,
                 }
                 if main_policy_category is not None:
@@ -2566,15 +2558,17 @@ def _execute_batch_analysis(prompt,
                     ignored in speaker_name
                     for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
-                if (speaker_name and speech_content and is_valid_member
-                        and is_substantial and not should_ignore
+                if (speaker_name and speech_start_idx is not None and speech_end_idx is not None 
+                        and is_valid_member and is_substantial and not should_ignore
                         and is_real_member):
 
                     results.append({
                         'speaker_name':
                         speaker_name,
-                        'text':
-                        speech_content,
+                        'start_idx':
+                        speech_start_idx,
+                        'end_idx':
+                        speech_end_idx,
                         'sentiment_score':
                         analysis_json.get('sentiment_score', 0.0),
                         'sentiment_reason':
@@ -3169,8 +3163,10 @@ def process_session_pdf(self=None, session_id=None, force=False, debug=False):
 
 def process_extracted_statements_data(statements_data_list,
                                       session_obj,
+                                      full_text,
                                       debug=False):
-    """Saves a list of processed statement data (dictionaries) to the database."""
+    """Saves a list of processed statement data (dictionaries) to the database.
+    Now accepts start/end indices and extracts text locally."""
     if debug:
         logger.debug(
             f"🐛 DEBUG: Would process {len(statements_data_list)} statement data items. Not saving to DB."
@@ -3217,7 +3213,20 @@ def process_extracted_statements_data(statements_data_list,
     for stmt_data in statements_data_list:
         try:
             speaker_name = stmt_data.get('speaker_name', '').strip()
-            statement_text = stmt_data.get('text', '').strip()
+            
+            # Extract text using start/end indices if provided, otherwise use 'text' field
+            start_idx = stmt_data.get('start_idx')
+            end_idx = stmt_data.get('end_idx')
+            
+            if start_idx is not None and end_idx is not None and full_text:
+                # Extract text locally using indices
+                start_idx = max(0, min(start_idx, len(full_text)))
+                end_idx = max(start_idx, min(end_idx, len(full_text)))
+                statement_text = full_text[start_idx:end_idx].strip()
+                logger.debug(f"Extracted text from indices [{start_idx}:{end_idx}]: {len(statement_text)} chars")
+            else:
+                # Fallback to provided text field
+                statement_text = stmt_data.get('text', '').strip()
 
             if not speaker_name or not statement_text:
                 logger.warning(
@@ -4212,7 +4221,7 @@ def process_session_pdf_text(
     logger.info(
         f"✅ Extracted {len(statements_data)} statements in total for session {session_id}"
     )
-    process_extracted_statements_data(statements_data, session_obj, debug)
+    process_extracted_statements_data(statements_data, session_obj, full_text, debug)
 
 
 def process_pdf_text_for_statements(full_text,
