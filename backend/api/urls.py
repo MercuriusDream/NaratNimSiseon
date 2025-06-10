@@ -83,4 +83,5 @@ urlpatterns = [
     # Management commands via API
     path('start-collection/', views.start_collection, name='start_collection'),
     path('check-data-status/', views.check_data_status, name='check_data_status'),
+    path('update-template/', views.update_template, name='update_template'),
 ]

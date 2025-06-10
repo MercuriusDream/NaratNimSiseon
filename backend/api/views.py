@@ -2812,3 +2812,59 @@ def start_collection(request):
     except Exception as e:
         return JsonResponse({'error': f'Failed to start collection: {str(e)}'},
                             status=500)
+
+
+@api_view(['POST'])
+def update_template(request):
+    """Update Django template with latest React build file references"""
+    try:
+        import subprocess
+        import sys
+        import os
+        from pathlib import Path
+        
+        # Get the root directory (where update_template.py is located)
+        root_dir = Path(__file__).resolve().parent.parent.parent
+        update_script_path = root_dir / 'update_template.py'
+        
+        if not update_script_path.exists():
+            return JsonResponse({
+                'error': 'update_template.py not found',
+                'status': 'failed'
+            }, status=404)
+        
+        # Run the update_template.py script
+        result = subprocess.run(
+            [sys.executable, str(update_script_path)],
+            cwd=str(root_dir),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            return JsonResponse({
+                'message': 'Template updated successfully',
+                'status': 'completed',
+                'output': result.stdout,
+                'details': 'Static file references in Django template have been updated'
+            })
+        else:
+            return JsonResponse({
+                'message': 'Template update failed',
+                'status': 'failed',
+                'error': result.stderr,
+                'output': result.stdout
+            }, status=500)
+            
+    except subprocess.TimeoutExpired:
+        return JsonResponse({
+            'error': 'Template update timed out',
+            'status': 'failed'
+        }, status=500)
+    except Exception as e:
+        logger.error(f"Error updating template: {e}")
+        return JsonResponse({
+            'error': f'Failed to update template: {str(e)}',
+            'status': 'failed'
+        }, status=500)
