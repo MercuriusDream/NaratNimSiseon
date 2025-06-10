@@ -1315,25 +1315,40 @@ def process_sessions_data(sessions_data, force=False, debug=False):
             # This is the key fix. We no longer rely on fetch_session_details to do this.
 
             # 1. Fetch bills for this session.
-            if is_celery_available():
-                fetch_session_bills.delay(session_id=confer_num,
-                                          force=force,
-                                          debug=debug)
-            else:
-                fetch_session_bills(session_id=confer_num,
-                                    force=force,
-                                    debug=debug)
-
-            # 2. Process the PDF if a URL exists.
-            if session_obj.down_url:
+            try:
                 if is_celery_available():
-                    process_session_pdf.delay(session_id=confer_num,
+                    fetch_session_bills.delay(session_id=confer_num,
                                               force=force,
                                               debug=debug)
                 else:
-                    process_session_pdf(session_id=confer_num,
-                                        force=force,
-                                        debug=debug)
+                    # Call the wrapped function directly to avoid Celery registration issues
+                    if hasattr(fetch_session_bills, '__wrapped__'):
+                        fetch_session_bills.__wrapped__(
+                            self=None,
+                            session_id=confer_num,
+                            force=force,
+                            debug=debug)
+                    else:
+                        fetch_session_bills(session_id=confer_num,
+                                            force=force,
+                                            debug=debug)
+            except Exception as bills_error:
+                logger.error(f"Error fetching bills for session {confer_num}: {bills_error}")
+
+            # 2. Process the PDF if a URL exists.
+            if session_obj.down_url:
+                try:
+                    if is_celery_available():
+                        process_session_pdf.delay(session_id=confer_num,
+                                                  force=force,
+                                                  debug=debug)
+                    else:
+                        # Use the direct wrapper function to avoid Celery issues
+                        process_session_pdf_direct(session_id=confer_num,
+                                                   force=force,
+                                                   debug=debug)
+                except Exception as pdf_error:
+                    logger.error(f"Error processing PDF for session {confer_num}: {pdf_error}")
             else:
                 logger.info(
                     f"No PDF URL for session {confer_num}, skipping PDF processing."

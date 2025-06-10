@@ -80,37 +80,66 @@ class Command(BaseCommand):
             # Use a more robust approach to handle Celery tasks
             try:
                 if is_celery_available():
-                    self.stdout.write(
-                        self.style.SUCCESS(
-                            "🚀 Calling 'fetch_continuous_sessions' asynchronously via Celery."
-                        ))
-                    from api.tasks import fetch_continuous_sessions
-                    fetch_continuous_sessions.delay(
-                        force=True,
-                        debug=debug,
-                        start_date=start_date.isoformat() if start_date else None)
+                    try:
+                        self.stdout.write(
+                            self.style.SUCCESS(
+                                "🚀 Calling 'fetch_continuous_sessions' asynchronously via Celery."
+                            ))
+                        from api.tasks import fetch_continuous_sessions
+                        fetch_continuous_sessions.delay(
+                            force=True,
+                            debug=debug,
+                            start_date=start_date.isoformat() if start_date else None)
+                    except Exception as celery_error:
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"🔄 Celery call failed ({celery_error}), falling back to synchronous."
+                            ))
+                        # Import and call the function directly without Celery decorators
+                        import importlib
+                        tasks_module = importlib.import_module('api.tasks')
+                        
+                        # Get the raw function, avoiding Celery proxy objects
+                        if hasattr(tasks_module, 'fetch_continuous_sessions'):
+                            func = getattr(tasks_module, 'fetch_continuous_sessions')
+                            if hasattr(func, '__wrapped__'):
+                                # Call the wrapped function directly
+                                func.__wrapped__(
+                                    self=None,
+                                    force=True,
+                                    debug=debug,
+                                    start_date=start_date.isoformat() if start_date else None)
+                            else:
+                                # Call the function directly
+                                func(
+                                    force=True,
+                                    debug=debug,
+                                    start_date=start_date.isoformat() if start_date else None)
                 else:
                     self.stdout.write(
                         self.style.WARNING(
-                            "🔄 Calling 'fetch_continuous_sessions' synchronously.")
-                    )
-                    # Call the function directly - the task function can handle being called without self
-                    from api.tasks import fetch_continuous_sessions
+                            "🔄 Calling 'fetch_continuous_sessions' synchronously (Celery not available)."
+                        ))
+                    # Import and call the function directly without Celery decorators
+                    import importlib
+                    tasks_module = importlib.import_module('api.tasks')
                     
-                    # For bound tasks, we need to call with self=None when running synchronously
-                    if hasattr(fetch_continuous_sessions, '__wrapped__'):
-                        # This is a Celery task, call the wrapped function
-                        fetch_continuous_sessions.__wrapped__(
-                            self=None,  # Pass None for self since we're not running in Celery
-                            force=True,
-                            debug=debug,
-                            start_date=start_date.isoformat() if start_date else None)
-                    else:
-                        # Call directly
-                        fetch_continuous_sessions(
-                            force=True,
-                            debug=debug,
-                            start_date=start_date.isoformat() if start_date else None)
+                    # Get the raw function, avoiding Celery proxy objects
+                    if hasattr(tasks_module, 'fetch_continuous_sessions'):
+                        func = getattr(tasks_module, 'fetch_continuous_sessions')
+                        if hasattr(func, '__wrapped__'):
+                            # Call the wrapped function directly
+                            func.__wrapped__(
+                                self=None,
+                                force=True,
+                                debug=debug,
+                                start_date=start_date.isoformat() if start_date else None)
+                        else:
+                            # Call the function directly
+                            func(
+                                force=True,
+                                debug=debug,
+                                start_date=start_date.isoformat() if start_date else None)
 
             self.stdout.write(
                 self.style.SUCCESS(
