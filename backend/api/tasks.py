@@ -2782,20 +2782,65 @@ def extract_statements_with_llm_discovery(full_text,
         logger.error("❌ Gemini not available. Cannot perform LLM discovery.")
         return []
 
-    # Load policy categories from database for enhanced analysis
-    from .models import Category, Subcategory
-
+    # Load policy categories from code.txt file for enhanced analysis
     policy_categories_from_db = {}
     try:
-        for category in Category.objects.prefetch_related(
-                'subcategories').all():
-            subcats = [sub.name for sub in category.subcategories.all()]
-            policy_categories_from_db[category.name] = {
-                'description': category.description,
-                'subcategories': subcats
-            }
+        logger.info("📁 Loading policy categories from: ../Additional_Files/code.txt")
+        
+        code_file_path = Path("../Additional_Files/code.txt")
+        if not code_file_path.exists():
+            code_file_path = Path("Additional_Files/code.txt")
+        
+        if code_file_path.exists():
+            with open(code_file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # Skip header line
+            lines = lines[1:] if lines else []
+            
+            current_categories = {}
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                try:
+                    parts = line.split(',')
+                    if len(parts) >= 4:
+                        main_category = parts[0].strip()
+                        sub_category = parts[1].strip()
+                        main_description = parts[2].strip()
+                        
+                        if main_category not in current_categories:
+                            current_categories[main_category] = {
+                                'description': main_description,
+                                'subcategories': []
+                            }
+                        
+                        if sub_category and sub_category not in current_categories[main_category]['subcategories']:
+                            current_categories[main_category]['subcategories'].append(sub_category)
+                
+                except Exception as line_error:
+                    logger.warning(f"Error parsing line: {line[:50]}... - {line_error}")
+                    continue
+            
+            policy_categories_from_db = current_categories
+            
+            # Summary logging
+            total_categories = len(policy_categories_from_db)
+            total_subcategories = sum(len(cat['subcategories']) for cat in policy_categories_from_db.values())
+            
+            logger.info(f"📊 Category Summary:")
+            for cat_name, cat_data in policy_categories_from_db.items():
+                subcat_count = len(cat_data['subcategories'])
+                logger.info(f"  📂 {cat_name}: {subcat_count} subcategories")
+            
+        else:
+            logger.warning("❌ code.txt file not found, using fallback categories")
+            policy_categories_from_db = {}
+            
     except Exception as e:
-        logger.warning(f"Could not load policy categories from database: {e}")
+        logger.warning(f"Could not load policy categories from code.txt: {e}")
         policy_categories_from_db = {}
 
     # Prepare the list of known bills for the prompt
