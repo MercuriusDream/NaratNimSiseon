@@ -1,0 +1,65 @@
+--- Processing session 54810 (1/2) ---
+📄 Title: 제22대 제426회 제1차 국회본회의 (2025년 06월 05일)
+📥 Downloading PDF from: https://record.assembly.go.kr/assembly/viewer/minutes/download/pdf.do?id=54810
+✅ PDF downloaded: temp_files/session_54810_1749570655.pdf
+📄 Extracting text from PDF...
+📖 Processing 46 pages...
+📄 Processed 20/46 pages...
+📄 Processed 40/46 pages...
+✅ Extracted 54281 characters
+🤖 Processing with LLM...
+📋 Bills context: 95 bills found
+2025-06-10 15:51:06,244 - api.tasks - INFO - tasks - process_session_pdf_text - 4098 - 🔄 Processing PDF text for session 54810 (54281 chars)
+2025-06-10 15:51:06,245 - api.tasks - INFO - tasks - clean_pdf_text - 4164 - 📖 Isolated discussion block of 9043 chars (from original 54281).
+2025-06-10 15:51:06,246 - api.tasks - INFO - tasks - clean_pdf_text - 4189 - 🧹 Text cleaning complete. Final length: 8960
+2025-06-10 15:51:06,246 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 2789 - 🤖 Starting LLM discovery and segmentation for session: 54810
+2025-06-10 15:51:14,800 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 2933 - 🐛 DEBUG: Raw LLM response length: 0 chars
+2025-06-10 15:51:14,800 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 2934 - 🐛 DEBUG: Raw LLM response (first 1000 chars): 
+2025-06-10 15:51:14,801 - api.tasks - ERROR - tasks - extract_statements_with_llm_discovery - 2940 - ❌ Empty response from LLM discovery. Falling back to keyword extraction.
+2025-06-10 15:51:14,801 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 3344 - 🔍 Using keyword-based fallback extraction for session 54810
+2025-06-10 15:51:14,801 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 3373 - Found 4 potential bill sections using keywords
+2025-06-10 15:51:14,802 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1896 - 🔍 Stage 2 (◯ Splitting): For bill '2. 순직 해병 수사 방해 및 사건 은폐 등의 진상규명을 위한 특별검사의 임명 등에 관한' (session: 54810) - 95 chars
+2025-06-10 15:51:14,802 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1907 - No ◯ markers found, skipping segment
+2025-06-10 15:51:14,802 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1896 - 🔍 Stage 2 (◯ Splitting): For bill '3. 윤석열 전 대통령 등에 의한 내란·외환 행위의 진상규명을 위한 특별검사 임명 등에' (session: 54810) - 97 chars
+2025-06-10 15:51:14,802 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1907 - No ◯ markers found, skipping segment
+2025-06-10 15:51:14,802 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1896 - 🔍 Stage 2 (◯ Splitting): For bill '4. 김건희와 명태균·건진법사 관련 국정농단 및 불법 선거 개입 사건 등 진상규명을 위한' (session: 54810) - 109 chars
+2025-06-10 15:51:14,802 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1907 - No ◯ markers found, skipping segment
+2025-06-10 15:51:14,802 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1896 - 🔍 Stage 2 (◯ Splitting): For bill '◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희' (session: 54810) - 7147 chars
+2025-06-10 15:51:14,802 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1926 - Split text into 9 individual speech segments based on ◯ markers. Segment sizes: [161, 1263, 113, 1805, 54, 1777, 582, 555, 806] chars
+2025-06-10 15:51:14,803 - api.tasks - INFO - tasks - process_speech_segments_multithreaded - 1955 - 🚀 Processing 9 speech segments in parallel batch for bill '◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희'
+2025-06-10 15:51:14,803 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 2251 - 🚀 Batch analyzing 9 speech segments for bill '◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희...' using gemini-2.0-flash
+2025-06-10 15:51:15,014 - api.tasks - INFO - tasks - get_all_assembly_members - 1806 - ✅ Using 3022 assembly member names from local database
+2025-06-10 15:51:15,014 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 2266 - Processing batch 1/1: segments 0-8
+2025-06-10 15:51:17,611 - api.tasks - INFO - tasks - _execute_batch_analysis - 2462 - Batch processing took 2.6s for 9 segments
+2025-06-10 15:51:17,716 - api.tasks - INFO - tasks - _execute_batch_analysis - 2585 - ✅ Batch processed 8 valid statements from 9 segments
+2025-06-10 15:51:17,716 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 2304 - ✅ Batch analysis completed: 8 valid statements from 9 segments
+2025-06-10 15:51:17,716 - api.tasks - INFO - tasks - process_speech_segments_multithreaded - 1963 - 🎉 Parallel batch processing completed for '◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희': 8 valid statements from 9 segments
+2025-06-10 15:51:17,716 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1934 - ✅ ◯-based processing for '◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희' resulted in 8 statements from 9 speech segments
+2025-06-10 15:51:17,717 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 3404 - ✅ Keyword-based extraction completed: 8 statements
+2025-06-10 15:51:17,717 - api.tasks - INFO - tasks - process_session_pdf_text - 4118 - ✅ Extracted 8 statements in total for session 54810
+2025-06-10 15:51:17,717 - api.tasks - INFO - tasks - process_extracted_statements_data - 3182 - Attempting to save 8 statements for session 54810.
+2025-06-10 15:51:17,717 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1:1436]: 1435 chars
+2025-06-10 15:51:18,039 - api.tasks - INFO - tasks - process_extracted_statements_data - 3313 - ✨ Created statement (1) for 박범계 (Assoc. Bill Name: ◯의장 우원식 의사일정 제1항 검사징): 426회-제1차(2025년6월5일) 1
+국 회 본 회 의 회 의 록
+제4...
+2025-06-10 15:51:18,039 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1:1436]: 1435 chars
+2025-06-10 15:51:18,304 - api.tasks - INFO - tasks - process_extracted_statements_data - 3221 - ℹ️ Identical statement by 박범계 (hash match) already exists for session 54810. Skipping.
+2025-06-10 15:51:18,305 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1:1458]: 1457 chars
+2025-06-10 15:51:18,577 - api.tasks - INFO - tasks - process_extracted_statements_data - 3313 - ✨ Created statement (2) for 주진우 (Assoc. Bill Name: ◯의장 우원식 의사일정 제1항 검사징): 426회-제1차(2025년6월5일) 1
+국 회 본 회 의 회 의 록
+제4...
+2025-06-10 15:51:18,578 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1:1458]: 1457 chars
+2025-06-10 15:51:18,669 - api.tasks - INFO - tasks - process_extracted_statements_data - 3221 - ℹ️ Identical statement by 주진우 (hash match) already exists for session 54810. Skipping.
+2025-06-10 15:51:18,669 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1:1244]: 1243 chars
+2025-06-10 15:51:18,949 - api.tasks - INFO - tasks - process_extracted_statements_data - 3313 - ✨ Created statement (3) for 김용민 (Assoc. Bill Name: ◯의장 우원식 의사일정 제1항 검사징): 426회-제1차(2025년6월5일) 1
+국 회 본 회 의 회 의 록
+제4...
+2025-06-10 15:51:18,949 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1:1244]: 1243 chars
+2025-06-10 15:51:19,049 - api.tasks - INFO - tasks - process_extracted_statements_data - 3221 - ℹ️ Identical statement by 김용민 (hash match) already exists for session 54810. Skipping.
+2025-06-10 15:51:19,049 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1:675]: 674 chars
+2025-06-10 15:51:19,319 - api.tasks - INFO - tasks - process_extracted_statements_data - 3313 - ✨ Created statement (4) for 박성준 (Assoc. Bill Name: ◯의장 우원식 의사일정 제1항 검사징): 426회-제1차(2025년6월5일) 1
+국 회 본 회 의 회 의 록
+제4...
+2025-06-10 15:51:19,319 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1:675]: 674 chars
+2025-06-10 15:51:19,411 - api.tasks - INFO - tasks - process_extracted_statements_data - 3221 - ℹ️ Identical statement by 박성준 (hash match) already exists for session 54810. Skipping.
+2025-06-10 15:51:19,411 - api.tasks - INFO - tasks - process_extracted_statements_data - 3331 - 🎉 Saved 4 new statements for session 54810.
