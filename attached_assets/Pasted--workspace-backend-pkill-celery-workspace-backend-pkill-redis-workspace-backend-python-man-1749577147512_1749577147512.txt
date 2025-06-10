@@ -1,0 +1,71 @@
+~/workspace/backend$ pkill celery
+~/workspace/backend$ pkill redis
+~/workspace/backend$ python manage.py start_collection
+2025-06-10 17:38:47,253 - api.tasks - INFO - tasks - initialize_gemini - 205 - ✅ Gemini API configured successfully with 'gemini-2.0-flash'. Status check succeeded. Preview: Hello there! How can I help you today?
+
+Starting data collection...
+2025-06-10 17:38:47,664 - api.tasks - INFO - tasks - is_celery_available - 437 - Celery broker_url not configured.
+🔄 Celery not available, running synchronously
+2025-06-10 17:38:47,664 - api.tasks - INFO - tasks - is_celery_available - 437 - Celery broker_url not configured.
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/manage.py", line 22, in <module>
+    main()
+  File "/home/runner/workspace/backend/manage.py", line 18, in main
+    execute_from_command_line(sys.argv)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/core/management/__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/core/management/__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/core/management/base.py", line 413, in run_from_argv
+    self.execute(*args, **cmd_options)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/core/management/base.py", line 459, in execute
+    output = self.handle(*args, **options)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/backend/api/management/commands/start_collection.py", line 54, in handle
+    if hasattr(fetch_latest_sessions, '__wrapped__'):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 143, in __getattr__
+    return getattr(self._get_current_object(), name)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 105, in _get_current_object
+    return loc(*self.__args, **self.__kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/__init__.py", line 68, in task_by_cons
+    return app.tasks[
+           ^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/kombu/utils/objects.py", line 40, in __get__
+    return super().__get__(instance, owner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/nb21sc3npfc8gvazwnrjxpvb5d48jysx-python3-3.12.7/lib/python3.12/functools.py", line 993, in __get__
+    val = self.func(instance)
+          ^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/base.py", line 1347, in tasks
+    self.finalize(auto=True)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/base.py", line 529, in finalize
+    _announce_app_finalized(self)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/_state.py", line 52, in _announce_app_finalized
+    callback(app)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/__init__.py", line 55, in <lambda>
+    lambda app: app._task_from_fun(fun, **options)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/base.py", line 468, in _task_from_fun
+    name = name or self.gen_task_name(fun.__name__, fun.__module__)
+                                      ^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 33, in __get__
+    return self.__getter(obj) if obj is not None else self
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 70, in __name__
+    return self.__custom_name__
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 143, in __getattr__
+    return getattr(self._get_current_object(), name)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/local.py", line 105, in _get_current_object
+    return loc(*self.__args, **self.__kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/__init__.py", line 68, in task_by_cons
+    return app.tasks[
+           ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/celery/app/registry.py", line 18, in __missing__
+    raise self.NotRegistered(key)
+celery.exceptions.NotRegistered: 'api.tasks.process_session_pdf'
