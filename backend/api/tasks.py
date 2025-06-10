@@ -24,7 +24,8 @@ except ImportError:
     genai = None
     types = None
     GENAI_AVAILABLE = False
-    logger.warning("google.genai not available, falling back to google.generativeai")
+    logger.warning(
+        "google.genai not available, falling back to google.generativeai")
     try:
         import google.generativeai as genai_legacy
         GENAI_LEGACY_AVAILABLE = True
@@ -41,7 +42,7 @@ class GeminiRateLimiter:
     def __init__(
         self,
         max_tokens_per_minute=250000,
-        max_requests_per_minute=60,  # Standard Gemini 1.5 Flash limit
+        max_requests_per_minute=10,  # Standard Gemini 1.5 Flash limit
         max_tokens_per_day=2000000):  # Realistic free tier daily limit
         """
         Initialize rate limiter with updated limits.
@@ -207,41 +208,49 @@ model = None  # Deprecated - use client instead
 def initialize_gemini():
     """Initializes the Gemini client using new google.genai or fallback to legacy."""
     global client
-    
+
     # Skip if already initialized
     if client is not None:
         return True
-        
+
     try:
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
             if GENAI_AVAILABLE:
                 # Use the new genai.Client structure
                 client = genai.Client(api_key=settings.GEMINI_API_KEY)
-                logger.info("✅ Gemini API client initialized successfully with google.genai")
-                
+                logger.info(
+                    "✅ Gemini API client initialized successfully with google.genai"
+                )
+
                 # Test the client with a simple call
                 test_response = client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=["Hello"]
+                    model="gemini-2.0-flash-lite", contents=["Hello"])
+                logger.info(
+                    f"✅ Gemini API test successful. Response: {test_response.text[:50]}..."
                 )
-                logger.info(f"✅ Gemini API test successful. Response: {test_response.text[:50]}...")
                 return True
             elif GENAI_LEGACY_AVAILABLE:
                 # Fallback to legacy google.generativeai
                 genai_legacy.configure(api_key=settings.GEMINI_API_KEY)
                 client = genai_legacy
-                logger.info("✅ Gemini API configured with legacy google.generativeai")
+                logger.info(
+                    "✅ Gemini API configured with legacy google.generativeai")
                 return True
             else:
-                logger.warning("⚠️ Neither google.genai nor google.generativeai available.")
+                logger.warning(
+                    "⚠️ Neither google.genai nor google.generativeai available."
+                )
                 client = None
                 return False
         else:
-            logger.warning("⚠️ GEMINI_API_KEY not found. LLM features will be disabled.")
+            logger.warning(
+                "⚠️ GEMINI_API_KEY not found. LLM features will be disabled.")
             client = None
             return False
     except Exception as e:
-        logger.error(f"❌ Error configuring Gemini API: {e}. LLM features will be disabled.")
+        logger.error(
+            f"❌ Error configuring Gemini API: {e}. LLM features will be disabled."
+        )
         client = None
         return False
 
@@ -251,7 +260,7 @@ initialize_gemini()
 
 
 def _call_gemini_api(prompt: str,
-                     model_name: str = "gemini-2.0-flash",
+                     model_name: str = "gemini-2.0-flash-lite",
                      system_instruction: str = None,
                      response_mime_type: str = "text/plain",
                      max_retries: int = 2,
@@ -275,25 +284,25 @@ def _call_gemini_api(prompt: str,
         try:
             if GENAI_AVAILABLE and hasattr(client, 'models'):
                 # Use new google.genai structure
-                config = types.GenerateContentConfig(response_mime_type=response_mime_type)
-                
+                config = types.GenerateContentConfig(
+                    response_mime_type=response_mime_type)
+
                 # Add system instruction if provided
                 if system_instruction:
                     config.system_instruction = system_instruction
 
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=[prompt],
-                    config=config
-                )
+                response = client.models.generate_content(model=model_name,
+                                                          contents=[prompt],
+                                                          config=config)
                 response_text = response.text
-                
+
             elif GENAI_LEGACY_AVAILABLE:
                 # Use legacy google.generativeai
                 model = client.GenerativeModel(model_name)
                 if system_instruction:
-                    model = client.GenerativeModel(model_name, system_instruction=system_instruction)
-                
+                    model = client.GenerativeModel(
+                        model_name, system_instruction=system_instruction)
+
                 response = model.generate_content(prompt)
                 response_text = response.text
             else:
@@ -454,8 +463,8 @@ def check_gemini_api_status():
 
     try:
         # Test with a minimal prompt using new structure
-        response = client.models.generate_content(model="gemini-2.0-flash",
-                                                  contents=["Hello"])
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-lite", contents=["Hello"])
         return "success", f"API is responding. Response: {response.text[:50]}..."
     except Exception as e:
         return "error", f"API Error: {str(e)}"
@@ -1829,39 +1838,70 @@ def extract_statements_for_bill_segment(bill_text_segment,
 
 def process_single_segment_for_statements_with_splitting(
         bill_text_segment, session_id, bill_name, debug=False):
-    """Process a single text segment by splitting at ◯ markers and analyzing each speech individually with multithreading."""
+    """Process a single text segment by splitting at various speech markers and analyzing each speech."""
     if not bill_text_segment:
         return []
 
     logger.info(
-        f"🔍 Stage 2 (◯ Splitting): For bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
+        f"🔍 Processing speech segments for bill '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
     )
 
     # Find all ◯ markers to determine individual speeches
-    speaker_markers = []
-    for i, char in enumerate(bill_text_segment):
-        if char == '◯':
-            speaker_markers.append(i)
-
-    if len(speaker_markers) < 1:
-        logger.info(f"No ◯ markers found, skipping segment")
-        return []
-
-    # Split at each ◯ marker to create individual speech segments
+    speaker_markers = ['◯']
     speech_segments = []
+    total_chars = 0
+    min_segment_length = 30
 
-    # Create segments between each ◯ marker
+    # Create segments between each marker
     for i in range(len(speaker_markers)):
-        start_pos = speaker_markers[i]
+        start_pos, marker = speaker_markers[i]
         if i + 1 < len(speaker_markers):
-            end_pos = speaker_markers[i + 1]
+            end_pos = speaker_markers[i + 1][0]
         else:
             end_pos = len(bill_text_segment)
 
         segment = bill_text_segment[start_pos:end_pos].strip()
-        if segment and len(
-                segment) > 50:  # Only process segments with meaningful content
+
+        # Only process segments with meaningful content
+        if segment and len(segment) >= min_segment_length:
+            # Add marker back if it was part of the speech
+            if not segment.startswith(marker):
+                segment = marker + ' ' + segment
             speech_segments.append(segment)
+            total_chars += len(segment)
+
+    logger.info(
+        f"Split text into {len(speech_segments)} segments with {total_chars} total characters "
+        f"(avg {total_chars//max(1, len(speech_segments))} chars/segment)")
+
+    if len(speech_segments) == 0 and len(bill_text_segment) > 100:
+        logger.info("No valid segments found with markers, trying fallback")
+        return _fallback_segmentation(bill_text_segment, session_id, bill_name,
+                                      debug)
+
+    return speech_segments
+
+
+def _fallback_segmentation(text, session_id, bill_name, debug=False):
+    """Fallback segmentation when no markers are found."""
+    logger.info("Using fallback segmentation")
+
+    # Try to split by double newlines first
+    segments = [s.strip() for s in text.split('\n\n') if len(s.strip()) >= 30]
+
+    if len(segments) > 1:
+        logger.info(f"Split into {len(segments)} segments by double newlines")
+        return segments
+
+    # Try to split by single newlines if double newlines didn't work
+    segments = [s.strip() for s in text.split('\n') if len(s.strip()) >= 30]
+
+    if len(segments) > 1:
+        logger.info(f"Split into {len(segments)} segments by single newlines")
+    else:
+        logger.warning("Fallback segmentation found no valid segments")
+
+    return segments
 
     logger.info(
         f"Split text into {len(speech_segments)} individual speech segments based on ◯ markers. "
@@ -1917,8 +1957,10 @@ def process_single_segment_for_statements(bill_text_segment,
 
 def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
     """Deprecated - use extract_statements_with_llm_discovery instead."""
-    logger.warning(f"⚠️ get_speech_segment_indices_from_llm is deprecated. Use extract_statements_with_llm_discovery instead.")
-    
+    logger.warning(
+        f"⚠️ get_speech_segment_indices_from_llm is deprecated. Use extract_statements_with_llm_discovery instead."
+    )
+
     # Simple fallback to marker-based segmentation
     return _fallback_segmentation_with_markers(text_segment, 0)
 
@@ -1939,7 +1981,8 @@ def _fallback_segmentation_with_markers(text_segment, offset):
 
         # Look for next marker to determine end
         next_marker_pos = text_segment.find('◯', marker_pos + 1)
-        end_pos = next_marker_pos if next_marker_pos != -1 else len(text_segment)
+        end_pos = next_marker_pos if next_marker_pos != -1 else len(
+            text_segment)
 
         # Only include segments with meaningful content
         segment_length = end_pos - marker_pos
@@ -1951,7 +1994,9 @@ def _fallback_segmentation_with_markers(text_segment, offset):
 
         current_pos = marker_pos + 1
 
-    logger.info(f"Fallback segmentation found {len(speech_indices)} speech segments using ◯ markers")
+    logger.info(
+        f"Fallback segmentation found {len(speech_indices)} speech segments using ◯ markers"
+    )
     return speech_indices
 
 
@@ -2083,7 +2128,7 @@ def fetch_session_bills_direct(session_id=None, force=False, debug=False):
     logger.info(
         f"🔍 Fetching bills for session: {session_id} (force={force}, debug={debug}) [DIRECT CALL]"
     )
-    
+
     if debug:
         logger.debug(
             f"🐛 DEBUG: Fetching bills for session {session_id} in debug mode")
@@ -2143,7 +2188,7 @@ def fetch_session_bills_direct(session_id=None, force=False, debug=False):
 
         created_count = 0
         updated_count = 0
-        
+
         for bill_item in bills_data_list:
             bill_id_api = bill_item.get('BILL_ID')
             if not bill_id_api:
@@ -2199,7 +2244,7 @@ def fetch_session_bills_direct(session_id=None, force=False, debug=False):
                 f"🔍 Fetching detailed proposer info from BILLINFODETAIL for bill {bill_id_api}"
             )
             fetch_bill_detail_info_direct(bill_id_api, force=True, debug=debug)
-            
+
         logger.info(
             f"🎉 Bills processed for session {session_id}: {created_count} created, {updated_count} updated."
         )
@@ -2511,7 +2556,7 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
                                           session_id,
                                           bill_name,
                                           debug=False):
-    """Batch analyze multiple speech segments with LLM - 20 statements per request using new google.genai structure."""
+    """Batch analyze multiple speech segments with LLM using dynamic batching."""
     global client
 
     if not client:
@@ -2523,57 +2568,93 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
         return []
 
     logger.info(
-        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.0-flash"
+        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...'"
     )
 
     # Get assembly members once for the entire batch
     assembly_members = get_all_assembly_members()
-
     results = []
-    batch_size = 20  # Process 20 statements per request
 
-    # Split into batches of 20
-    for batch_start in range(0, len(speech_segments), batch_size):
-        batch_end = min(batch_start + batch_size, len(speech_segments))
-        batch_segments = speech_segments[batch_start:batch_end]
+    # Dynamic batch sizing based on content length
+    def calculate_batch_size(segments, start_idx, max_tokens=15000):
+        total_chars = 0
+        batch_size = 0
+
+        for i in range(start_idx, len(segments)):
+            segment_chars = len(segments[i])
+            if total_chars + segment_chars > max_tokens and batch_size > 0:
+                break
+            total_chars += segment_chars
+            batch_size += 1
+
+        return batch_size or 1  # Always process at least one segment
+
+    i = 0
+    while i < len(speech_segments):
+        # Calculate dynamic batch size based on content length
+        batch_size = calculate_batch_size(speech_segments, i)
+        batch_end = min(i + batch_size, len(speech_segments))
+        batch_segments = speech_segments[i:batch_end]
+
+        # Estimate tokens (4 chars ~= 1 token, plus overhead)
+        total_chars = sum(len(s) for s in batch_segments)
+        estimated_tokens = (total_chars // 4) + 1000
 
         logger.info(
-            f"Processing batch {batch_start//batch_size + 1}/{(len(speech_segments)-1)//batch_size + 1}: segments {batch_start}-{batch_end-1}"
-        )
-
-        # Estimate total tokens for the batch
-        total_chars = sum(len(segment) for segment in batch_segments)
-        estimated_tokens = total_chars // 4 + 1000  # Rough estimate with overhead
+            f"Processing batch {i+1}-{batch_end} of {len(speech_segments)} "
+            f"(segments: {batch_size}, ~{estimated_tokens} tokens)")
 
         # Wait if needed before submitting
         if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
-            logger.warning(
-                f"Skipping batch {batch_start//batch_size + 1} due to rate limiting timeout"
-            )
+            logger.warning("Rate limit timeout, pausing before retry...")
+            time.sleep(10)  # Longer pause before retry
             continue
 
-        # Create batch prompt for 20 statements
         try:
+            # Process the batch
             batch_results = analyze_batch_statements_single_request(
                 batch_segments, bill_name, assembly_members, estimated_tokens,
-                batch_start)
-            results.extend(batch_results)
+                i)
 
-            # Record successful API usage
-            gemini_rate_limiter.record_request(estimated_tokens, success=True)
+            if batch_results:
+                results.extend(batch_results)
+                # Record successful API usage
+                gemini_rate_limiter.record_request(estimated_tokens,
+                                                   success=True)
+
+                # Dynamic sleep based on batch size and content length
+                sleep_time = min(
+                    5, 1 + (total_chars / 10000))  # Up to 5s for large batches
+                if i + batch_size < len(speech_segments):
+                    logger.debug(
+                        f"Resting {sleep_time:.1f}s before next batch...")
+                    time.sleep(sleep_time)
+
+                i = batch_end  # Move to next batch on success
+
+            else:
+                # If no results, reduce batch size and retry
+                if batch_size > 1:
+                    batch_size = max(1, batch_size // 2)
+                    logger.warning(
+                        f"No results, reducing batch size to {batch_size}")
+                else:
+                    i += 1  # Skip problematic segment
 
         except Exception as e:
-            # Record failed API usage
             error_type = "timeout" if "timeout" in str(
                 e).lower() else "api_error"
             gemini_rate_limiter.record_error(error_type)
             logger.error(f"Batch analysis failed: {e}")
-            continue
 
-        # Brief pause between batches
-        if batch_end < len(speech_segments):
-            logger.info(f"Resting 3s before next batch...")
-            time.sleep(3)
+            # On error, reduce batch size and retry
+            if batch_size > 1:
+                batch_size = max(1, batch_size // 2)
+                logger.warning(f"Error, reducing batch size to {batch_size}")
+            else:
+                logger.error(
+                    f"Failed to process segment {i}, skipping: {str(e)}")
+                i += 1  # Skip problematic segment if we can't process it even with batch size 1
 
     logger.info(
         f"✅ Batch analysis completed: {len(results)} valid statements from {len(speech_segments)} segments"
@@ -2726,18 +2807,19 @@ def _execute_batch_analysis(prompt,
             if GENAI_AVAILABLE and hasattr(client, 'models'):
                 # Use new google.genai structure
                 response = client.models.generate_content(
-                    model="gemini-2.0-flash",
+                    model="gemini-2.0-flash-lite",
                     contents=[prompt],
                     config=types.GenerateContentConfig(
                         response_mime_type="text/plain"))
                 response_text_raw = response.text
             elif GENAI_LEGACY_AVAILABLE:
                 # Use legacy google.generativeai
-                model = client.GenerativeModel("gemini-2.0-flash")
+                model = client.GenerativeModel("gemini-2.0-flash-lite")
                 response = model.generate_content(prompt)
                 response_text_raw = response.text
             else:
-                logger.error("No available Gemini API client for batch analysis")
+                logger.error(
+                    "No available Gemini API client for batch analysis")
                 return []
 
             processing_time = time.time() - start_time
@@ -3321,13 +3403,11 @@ I already know about the following bills. You MUST find the discussion for these
 
         # Use new google.genai structure with more conservative settings
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.0-flash-lite",
             contents=[prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="text/plain",
-                temperature=0.1,  # Lower temperature for more consistent JSON
-                max_output_tokens=8000)
-        )  # Reduced since we're using compact format
+                temperature=0.1))  # Reduced since we're using compact format
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
         # Check if response exists and has text
@@ -3700,24 +3780,97 @@ def process_extracted_statements_data(statements_data_list,
 
     def _is_valid_statement_content(text):
         """Validate that extracted text is actual statement content, not headers/metadata."""
-        if not text or len(text) < 20:
+        if not text:
             return False
 
-        # Check for header patterns that indicate this is not actual speech
-        invalid_patterns = [
-            r'^제\d+회-제\d+차',  # Session headers
-            r'^국\s*회\s*본\s*회\s*의\s*회\s*의\s*록',  # Meeting record headers
-            r'^\d{1,4}\s*$',  # Just page numbers
-            r'^회의록\s*$',  # Just "record" label
-            r'^국회사무처',  # Administrative text
+        text_stripped = text.strip()
+
+        # Minimum length check (reduced from 20 to 10 characters)
+        if len(text_stripped) < 10:
+            logger.debug(
+                f"Skipping: Too short ({len(text_stripped)} chars): {text_stripped[:50]}..."
+            )
+            return False
+
+        # Check for common non-speech patterns
+        non_speech_patterns = [
+            # Page numbers and ranges
+            r'^\s*\d+\s*$',
+            r'^\s*\d+\s*[-~]\s*\d+\s*$',
+
+            # Common headers
+            r'^\s*국회\s*본회의\s*의사일정',
+            r'^\s*국회\s*본회의\s*회의록',
+            r'^\s*제\d+회\s*[-~]?\s*제?\d*[차회]?\s*$',
+
+            # Date patterns
+            r'^\s*\d{4}\s*[년/.-]\s*\d{1,2}\s*[월/.-]\s*\d{1,2}\s*일?\s*$',
+
+            # Number sequences
+            r'^[\s\d-]+$',
+            r'^[\s\d.]+$',
+
+            # Common administrative text
+            r'^\s*[\[\]()\d\s-]+$',
+            r'^\s*[\d\s:.-]+$',
+
+            # Too many symbols
+            r'^[^\w가-힣]{10,}$',  # More than 10 non-word/Korean characters
         ]
 
-        for pattern in invalid_patterns:
-            if re.match(pattern, text.strip(), re.IGNORECASE):
+        for pattern in non_speech_patterns:
+            if re.match(pattern, text_stripped, re.IGNORECASE):
+                logger.debug(
+                    f"Skipping non-speech pattern: {text_stripped[:50]}...")
                 return False
 
-        # Must contain speaker marker or be substantial content
-        if not ('◯' in text or len(text) > 100):
+        # Check for minimum Korean characters or speaker markers
+        korean_chars = len(re.findall(r'[가-힣]', text_stripped))
+        has_speaker_marker = any(marker in text_stripped
+                                 for marker in ['◯', '○', '●', '▶', '▷'])
+
+        if korean_chars < 5 and not has_speaker_marker:
+            logger.debug(
+                f"Skipping: Not enough Korean text ({korean_chars} chars): {text_stripped[:50]}..."
+            )
+            return False
+
+        # Check for common header patterns in first line
+        lines = [
+            line.strip() for line in text_stripped.split('\n') if line.strip()
+        ]
+        if lines:
+            first_line = lines[0]
+            header_indicators = [
+                r'^국회\s*본회의', r'^제\d+회',
+                r'\d{4}\s*[년/.-]\s*\d{1,2}\s*[월/.-]\s*\d{1,2}', r'^[\s\d:-]+$',
+                r'^[\s\d.]+$', r'^[\s\d\[\]()]+$'
+            ]
+
+            for indicator in header_indicators:
+                if re.search(indicator, first_line):
+                    # Only skip if the line is very short or matches exactly
+                    if len(first_line) < 50 or re.match(
+                            indicator + r'\s*$', first_line):
+                        logger.debug(
+                            f"Skipping header-like content: {first_line[:50]}..."
+                        )
+                        return False
+
+        # Check for valid content patterns
+        valid_patterns = [
+            r'[가-힣]{10,}',  # At least 10 Korean characters
+            r'[A-Za-z]{10,}',  # Or 10+ English letters
+            r'[0-9]{5,}',  # Or 5+ digits
+            r'[.,!?]{2,}',  # Or multiple punctuation marks
+            r'[\w가-힣]{3,}\s+[\w가-힣]{3,}'  # Or multiple words
+        ]
+
+        if not any(
+                re.search(pattern, text_stripped)
+                for pattern in valid_patterns):
+            logger.debug(
+                f"Skipping: No valid content pattern: {text_stripped[:50]}...")
             return False
 
         return True
@@ -3897,52 +4050,63 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
         return []
 
     logger.info(
-        f"🔍 Using enhanced bill name-based fallback extraction for session {session_id}")
+        f"🔍 Using enhanced bill name-based fallback extraction for session {session_id}"
+    )
 
     # Get known bills for this session from database
     known_bill_names = get_session_bill_names(session_id)
-    
+
     all_statements = []
     processed_bill_names = set()
-    
+
     # Method 1: Bill name-based content extraction (most accurate)
     if known_bill_names:
-        logger.info(f"📋 Attempting bill name-based extraction for {len(known_bill_names)} known bills")
-        
+        logger.info(
+            f"📋 Attempting bill name-based extraction for {len(known_bill_names)} known bills"
+        )
+
         for bill_name in known_bill_names:
             try:
                 # Use existing extract_bill_specific_content function
                 bill_content = extract_bill_specific_content(text, bill_name)
-                
-                if bill_content and len(bill_content) > 200:  # Ensure meaningful content
-                    logger.info(f"✅ Found content for bill: {bill_name[:50]}... ({len(bill_content)} chars)")
-                    
+
+                if bill_content and len(
+                        bill_content) > 200:  # Ensure meaningful content
+                    logger.info(
+                        f"✅ Found content for bill: {bill_name[:50]}... ({len(bill_content)} chars)"
+                    )
+
                     # Extract statements from this bill's content
                     statements_in_bill = process_single_segment_for_statements_with_splitting(
                         bill_content, session_id, bill_name, debug)
-                    
+
                     for stmt_data in statements_in_bill:
                         stmt_data['associated_bill_name'] = bill_name
-                    
+
                     all_statements.extend(statements_in_bill)
                     processed_bill_names.add(bill_name)
                 else:
-                    logger.info(f"⚠️ No meaningful content found for bill: {bill_name[:50]}...")
-                    
+                    logger.info(
+                        f"⚠️ No meaningful content found for bill: {bill_name[:50]}..."
+                    )
+
             except Exception as e:
-                logger.warning(f"Error extracting content for bill '{bill_name}': {e}")
+                logger.warning(
+                    f"Error extracting content for bill '{bill_name}': {e}")
                 continue
-    
+
     # Method 2: Enhanced keyword fallback for remaining bills
     if len(processed_bill_names) < len(known_bill_names):
         unprocessed_bills = set(known_bill_names) - processed_bill_names
-        logger.info(f"🔍 Using keyword-based search for {len(unprocessed_bills)} remaining bills")
-        
+        logger.info(
+            f"🔍 Using keyword-based search for {len(unprocessed_bills)} remaining bills"
+        )
+
         for bill_name in unprocessed_bills:
             try:
                 # Create search terms from bill name
                 search_terms = [bill_name.strip()]
-                
+
                 # Add variations
                 if "법률안" in bill_name:
                     search_terms.append(bill_name.replace("법률안", "").strip())
@@ -3951,7 +4115,7 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
                 if "(" in bill_name:
                     core_name = bill_name.split("(")[0].strip()
                     search_terms.append(core_name)
-                
+
                 # Find mentions and extract surrounding content
                 for search_term in search_terms:
                     if len(search_term) > 5:  # Only meaningful search terms
@@ -3960,10 +4124,10 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
                             # Extract content around the mention
                             start_pos = max(0, term_pos - 1000)
                             end_pos = min(len(text), term_pos + 8000)
-                            
+
                             # Look for natural break points
                             segment_text = text[start_pos:end_pos]
-                            
+
                             # Find next bill or section boundary
                             next_bill_patterns = ["○", "의안번호", "제*항"]
                             for pattern in next_bill_patterns:
@@ -3971,101 +4135,115 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
                                 if pattern_pos != -1:
                                     segment_text = segment_text[:pattern_pos]
                                     break
-                            
-                            if len(segment_text) > 500:  # Ensure meaningful content
-                                logger.info(f"✅ Found keyword-based content for: {bill_name[:50]}... ({len(segment_text)} chars)")
-                                
+
+                            if len(segment_text
+                                   ) > 500:  # Ensure meaningful content
+                                logger.info(
+                                    f"✅ Found keyword-based content for: {bill_name[:50]}... ({len(segment_text)} chars)"
+                                )
+
                                 statements_in_bill = process_single_segment_for_statements_with_splitting(
                                     segment_text, session_id, bill_name, debug)
-                                
+
                                 for stmt_data in statements_in_bill:
-                                    stmt_data['associated_bill_name'] = bill_name
-                                
+                                    stmt_data[
+                                        'associated_bill_name'] = bill_name
+
                                 all_statements.extend(statements_in_bill)
                                 processed_bill_names.add(bill_name)
                                 break  # Found content for this bill, move to next
-                            
+
             except Exception as e:
-                logger.warning(f"Error in keyword search for bill '{bill_name}': {e}")
+                logger.warning(
+                    f"Error in keyword search for bill '{bill_name}': {e}")
                 continue
-    
+
     # Method 3: Pattern-based discovery for additional bills
     logger.info("🔍 Searching for additional bills using pattern matching")
-    
+
     bill_patterns = [
         r'(?:^|\n)\s*(\d+)\.\s*([^○\n]{15,150}법률안[^○\n]*)',  # "번호. ...법률안" pattern
         r'의안번호\s*(\d+)[^○]*?([^○\n]{10,80}법률안[^○\n]*)',  # "의안번호 XXXX ...법률안" pattern
         r'(?:^|\n)\s*(\d+)\.\s*([^○\n]{15,150}(?:특별검사|특검)[^○\n]*)',  # Special prosecutor bills
     ]
-    
+
     discovered_bills = []
     for pattern in bill_patterns:
         matches = list(re.finditer(pattern, text, re.DOTALL | re.MULTILINE))
         for match in matches:
-            bill_name = match.group(2).strip() if len(match.groups()) > 1 else match.group(1).strip()
+            bill_name = match.group(2).strip() if len(
+                match.groups()) > 1 else match.group(1).strip()
             bill_name = re.sub(r'^[\d\.\s]+', '', bill_name).strip()
-            
-            if (len(bill_name) > 10 and 
-                bill_name not in processed_bill_names and
-                ('법률안' in bill_name or '특별검사' in bill_name or '특검' in bill_name)):
-                
+
+            if (len(bill_name) > 10 and bill_name not in processed_bill_names
+                    and ('법률안' in bill_name or '특별검사' in bill_name
+                         or '특검' in bill_name)):
+
                 discovered_bills.append({
                     'name': bill_name[:100],
                     'start_pos': match.start()
                 })
-    
+
     # Process discovered bills
     if discovered_bills:
-        logger.info(f"📋 Found {len(discovered_bills)} additional bills via pattern matching")
+        logger.info(
+            f"📋 Found {len(discovered_bills)} additional bills via pattern matching"
+        )
         discovered_bills.sort(key=lambda x: x['start_pos'])
-        
+
         for i, bill_info in enumerate(discovered_bills):
             start_pos = bill_info['start_pos']
-            end_pos = discovered_bills[i + 1]['start_pos'] if i + 1 < len(discovered_bills) else len(text)
-            
+            end_pos = discovered_bills[i + 1]['start_pos'] if i + 1 < len(
+                discovered_bills) else len(text)
+
             segment_text = text[start_pos:end_pos]
             bill_name = bill_info['name']
-            
+
             if len(segment_text) > 300:  # Ensure meaningful content
                 statements_in_segment = process_single_segment_for_statements_with_splitting(
                     segment_text, session_id, bill_name, debug)
-                
+
                 for stmt_data in statements_in_segment:
                     stmt_data['associated_bill_name'] = bill_name
-                
+
                 all_statements.extend(statements_in_segment)
                 processed_bill_names.add(bill_name)
-    
+
     # Method 4: Final fallback - discussion sections only if we found very little
     if len(all_statements) < 5:
-        logger.info("🔄 Using discussion section fallback due to low statement count")
-        
+        logger.info(
+            "🔄 Using discussion section fallback due to low statement count")
+
         # Find discussion start marker
         discussion_start = text.find("개의")
         if discussion_start == -1:
             discussion_start = 0
-        
+
         # Find first speaker marker
         first_speaker = text.find("◯", discussion_start)
         if first_speaker != -1:
             discussion_text = text[first_speaker:]
-            
+
             # Only process if we have meaningful discussion content
             if len(discussion_text) > 1000 and discussion_text.count("◯") > 3:
-                logger.info(f"📄 Processing discussion section ({len(discussion_text)} chars)")
-                
+                logger.info(
+                    f"📄 Processing discussion section ({len(discussion_text)} chars)"
+                )
+
                 fallback_statements = process_single_segment_for_statements_with_splitting(
                     discussion_text, session_id, "Session Discussion", debug)
-                
+
                 for stmt_data in fallback_statements:
                     stmt_data['associated_bill_name'] = "Session Discussion"
-                
+
                 all_statements.extend(fallback_statements)
             else:
-                logger.warning(f"No substantial discussion content found for session {session_id}")
+                logger.warning(
+                    f"No substantial discussion content found for session {session_id}"
+                )
         else:
             logger.warning(f"No speaker markers found in session {session_id}")
-    
+
     logger.info(
         f"✅ Enhanced fallback extraction completed: {len(all_statements)} statements from {len(processed_bill_names)} bills"
     )

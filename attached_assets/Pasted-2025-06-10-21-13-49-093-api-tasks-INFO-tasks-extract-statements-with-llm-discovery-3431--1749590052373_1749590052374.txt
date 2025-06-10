@@ -1,0 +1,122 @@
+2025-06-10 21:13:49,093 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3431 - 🐛 DEBUG: Raw LLM response length: 878 chars
+2025-06-10 21:13:49,093 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3433 - 🐛 DEBUG: Raw LLM response (first 1000 chars): {
+  "bills_found": [
+    {
+      "bill_name": "2025년도 제1회 추가경정예산안",
+      "start_index": 108,
+      "end_index": 1010,
+      "category_id": 1,
+      "subcategory_ids": [
+        1,
+        3
+      ],
+      "keywords": [
+        "추가경정예산",
+        "재해·재난 대응",
+        "통상 위기",
+        "민생 안정",
+        "국채 발행"
+      ],
+      "stance": "M",
+      "policy_analysis": "산불 피해 복구, AI 및 통상 지원, 민생 안정을 위한 12.2조원 규모의 추경안 편성. 재정 투입을 통한 경제 회복 도모."
+    },
+    {
+      "bill_name": "산불피해지원대책 특별위원회 구성",
+      "start_index": 1011,
+      "end_index": 1063,
+      "category_id": 1,
+      "subcategory_ids": [
+        1,
+        3
+      ],
+      "keywords": [
+        "산불 피해",
+        "특별위원회",
+        "재난안전관리",
+        "지원",
+        "극복"
+      ],
+      "stance": "M",
+      "policy_analysis": "영남권 산불 피해 지원 및 재난안전관리 대책 마련을 위한 특별위원회 구성. 피해 복구 및 재발 방지 위한 노력."
+    }
+  ],
+  "newly_discovered": []
+}
+2025-06-10 21:13:49,093 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3549 - ✅ LLM segmented 2 total discussion topics.
+2025-06-10 21:13:49,824 - api.tasks - INFO - tasks - update_bill_policy_data - 3129 - ✅ Updated policy data for bill: 2025년도 제1회 추가경정예산안...
+2025-06-10 21:13:49,824 - api.tasks - INFO - tasks - extract_statements_for_bill_segment - 1830 - 🔍 Processing bill segment: '2025년도 제1회 추가경정예산안' (session: 54598) - 902 chars
+2025-06-10 21:13:49,824 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1845 - 🔍 Processing speech segments for bill '2025년도 제1회 추가경정예산안' (session: 54598) - 902 chars
+2025-06-10 21:13:49,824 - api.tasks - WARNING - tasks - record_error - 143 - API error (llm_discovery_error). Consecutive errors: 1, backoff: 1s
+2025-06-10 21:13:49,825 - api.tasks - ERROR - tasks - extract_statements_with_llm_discovery - 3622 - ❌ Critical error during LLM discovery and segmentation: not enough values to unpack (expected 2, got 1)
+2025-06-10 21:13:49,825 - api.tasks - ERROR - tasks - extract_statements_with_llm_discovery - 3624 - Full traceback for LLM discovery:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3603, in extract_statements_with_llm_discovery
+    statements_in_segment = extract_statements_for_bill_segment(
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/backend/api/tasks.py", line 1835, in extract_statements_for_bill_segment
+    return process_single_segment_for_statements_with_splitting(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/backend/api/tasks.py", line 1857, in process_single_segment_for_statements_with_splitting
+    start_pos, marker = speaker_markers[i]
+    ^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 2, got 1)
+2025-06-10 21:13:49,827 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3625 - 🔄 Falling back to keyword-based extraction due to LLM error.
+2025-06-10 21:13:49,827 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4052 - 🔍 Using enhanced bill name-based fallback extraction for session 54598
+2025-06-10 21:13:49,914 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4064 - 📋 Attempting bill name-based extraction for 3 known bills
+2025-06-10 21:13:49,914 - api.tasks - INFO - tasks - extract_bill_specific_content - 1742 - No mentions found for bill: 1. 사립학교법 일부개정법률안(진선미 의원 대표발의)(의안번호 2205212)
+2025-06-10 21:13:49,915 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4089 - ⚠️ No meaningful content found for bill: 1. 사립학교법 일부개정법률안(진선미 의원 대표발의)(의안번호 2205212)...
+2025-06-10 21:13:49,915 - api.tasks - INFO - tasks - extract_bill_specific_content - 1769 - Extracted 1081 chars for bill: 산불피해지원대책 특별위원회 구성...
+2025-06-10 21:13:49,916 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4075 - ✅ Found content for bill: 산불피해지원대책 특별위원회 구성... (1081 chars)
+2025-06-10 21:13:49,916 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1845 - 🔍 Processing speech segments for bill '산불피해지원대책 특별위원회 구성' (session: 54598) - 1081 chars
+2025-06-10 21:13:49,916 - api.tasks - WARNING - tasks - extract_statements_with_keyword_fallback - 4094 - Error extracting content for bill '산불피해지원대책 특별위원회 구성': not enough values to unpack (expected 2, got 1)
+2025-06-10 21:13:49,917 - api.tasks - INFO - tasks - extract_bill_specific_content - 1769 - Extracted 7463 chars for bill: 2025년도 제1회 추가경정예산안...
+2025-06-10 21:13:49,918 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4075 - ✅ Found content for bill: 2025년도 제1회 추가경정예산안... (7463 chars)
+2025-06-10 21:13:49,918 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1845 - 🔍 Processing speech segments for bill '2025년도 제1회 추가경정예산안' (session: 54598) - 7463 chars
+2025-06-10 21:13:49,919 - api.tasks - WARNING - tasks - extract_statements_with_keyword_fallback - 4094 - Error extracting content for bill '2025년도 제1회 추가경정예산안': not enough values to unpack (expected 2, got 1)
+2025-06-10 21:13:49,919 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4101 - 🔍 Using keyword-based search for 3 remaining bills
+2025-06-10 21:13:49,921 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4141 - ✅ Found keyword-based content for: 2025년도 제1회 추가경정예산안... (7463 chars)
+2025-06-10 21:13:49,921 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1845 - 🔍 Processing speech segments for bill '2025년도 제1회 추가경정예산안' (session: 54598) - 7463 chars
+2025-06-10 21:13:49,922 - api.tasks - WARNING - tasks - extract_statements_with_keyword_fallback - 4157 - Error in keyword search for bill '2025년도 제1회 추가경정예산안': not enough values to unpack (expected 2, got 1)
+2025-06-10 21:13:49,922 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4141 - ✅ Found keyword-based content for: 산불피해지원대책 특별위원회 구성... (1028 chars)
+2025-06-10 21:13:49,923 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1845 - 🔍 Processing speech segments for bill '산불피해지원대책 특별위원회 구성' (session: 54598) - 1028 chars
+2025-06-10 21:13:49,923 - api.tasks - WARNING - tasks - extract_statements_with_keyword_fallback - 4157 - Error in keyword search for bill '산불피해지원대책 특별위원회 구성': not enough values to unpack (expected 2, got 1)
+2025-06-10 21:13:49,923 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4162 - 🔍 Searching for additional bills using pattern matching
+2025-06-10 21:13:49,924 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4189 - 📋 Found 1 additional bills via pattern matching
+2025-06-10 21:13:49,925 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1845 - 🔍 Processing speech segments for bill '특별위원회 위원 수는 13인으로 하고 법률안 심사권을 부여하며 활동기간은 2025년' (session: 54598) - 553 chars
+❌ Error in PDF processing: not enough values to unpack (expected 2, got 1)
+Error processing PDF for session 54598
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3603, in extract_statements_with_llm_discovery
+    statements_in_segment = extract_statements_for_bill_segment(
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/backend/api/tasks.py", line 1835, in extract_statements_for_bill_segment
+    return process_single_segment_for_statements_with_splitting(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/backend/api/tasks.py", line 1857, in process_single_segment_for_statements_with_splitting
+    start_pos, marker = speaker_markers[i]
+    ^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 2, got 1)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/management/commands/process_pdfs_bypass.py", line 276, in process_pdf_direct
+    process_pdf_text_for_statements(
+  File "/home/runner/workspace/backend/api/tasks.py", line 4975, in process_pdf_text_for_statements
+    return process_session_pdf_text(full_text, session_id, session_obj,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/backend/api/tasks.py", line 4952, in process_session_pdf_text
+    statements_data = extract_statements_with_llm_discovery(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/backend/api/tasks.py", line 3627, in extract_statements_with_llm_discovery
+    return extract_statements_with_keyword_fallback(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/backend/api/tasks.py", line 4203, in extract_statements_with_keyword_fallback
+    statements_in_segment = process_single_segment_for_statements_with_splitting(
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/backend/api/tasks.py", line 1857, in process_single_segment_for_statements_with_splitting
+    start_pos, marker = speaker_markers[i]
+    ^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 2, got 1)
+🗑️ Cleaned up temporary PDF file
+❌ Failed to process PDF
