@@ -1,0 +1,193 @@
+2025-06-10 15:48:00,333 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1926 - Split text into 9 individual speech segments based on ◯ markers. Segment sizes: [161, 1263, 113, 1805, 54, 1777, 582, 555, 806] chars
+2025-06-10 15:48:00,333 - api.tasks - INFO - tasks - process_speech_segments_multithreaded - 1955 - 🚀 Processing 9 speech segments in parallel batch for bill '◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희'
+2025-06-10 15:48:00,333 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 2251 - 🚀 Batch analyzing 9 speech segments for bill '◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희...' using gemini-2.0-flash
+2025-06-10 15:48:00,516 - api.tasks - INFO - tasks - get_all_assembly_members - 1806 - ✅ Using 3022 assembly member names from local database
+2025-06-10 15:48:00,516 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 2266 - Processing batch 1/1: segments 0-8
+2025-06-10 15:48:03,168 - api.tasks - INFO - tasks - _execute_batch_analysis - 2462 - Batch processing took 2.7s for 9 segments
+2025-06-10 15:48:03,216 - api.tasks - INFO - tasks - _execute_batch_analysis - 2585 - ✅ Batch processed 8 valid statements from 9 segments
+2025-06-10 15:48:03,217 - api.tasks - INFO - tasks - analyze_speech_segment_with_llm_batch - 2304 - ✅ Batch analysis completed: 8 valid statements from 9 segments
+2025-06-10 15:48:03,217 - api.tasks - INFO - tasks - process_speech_segments_multithreaded - 1963 - 🎉 Parallel batch processing completed for '◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희': 8 valid statements from 9 segments
+2025-06-10 15:48:03,217 - api.tasks - INFO - tasks - process_single_segment_for_statements_with_splitting - 1934 - ✅ ◯-based processing for '◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희' resulted in 8 statements from 9 speech segments
+2025-06-10 15:48:03,217 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 3412 - ✅ Keyword-based extraction completed: 8 statements
+2025-06-10 15:48:03,217 - api.tasks - INFO - tasks - process_session_pdf_text - 4126 - ✅ Extracted 8 statements in total for session 54810
+2025-06-10 15:48:03,217 - api.tasks - INFO - tasks - process_extracted_statements_data - 3182 - Attempting to save 8 statements for session 54810.
+2025-06-10 15:48:03,217 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [101:1446]: 1344 chars
+2025-06-10 15:48:03,443 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3330 - ❌ Error creating statement object in DB: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json' for speaker 박범계
+2025-06-10 15:48:03,443 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3333 - Failing statement data: {
+  "segment_index": 0,
+  "speaker_name": "박범계",
+  "start_idx": 101,
+  "end_idx": 1446,
+  "is_valid_member": true,
+  "is_substantial": true,
+  "sentiment_score": 0.0,
+  "bill_relevance_score": 0.9,
+  "associated_bill_name": "◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희"
+}
+2025-06-10 15:48:03,443 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3336 - Traceback for statement save error:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3297, in process_extracted_statements_data
+    new_statement = Statement(
+                    ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/db/models/base.py", line 567, in __init__
+    raise TypeError(
+TypeError: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json'
+2025-06-10 15:48:03,445 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [101:1446]: 1344 chars
+2025-06-10 15:48:03,662 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3330 - ❌ Error creating statement object in DB: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json' for speaker 박범계
+2025-06-10 15:48:03,662 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3333 - Failing statement data: {
+  "speaker_name": "박범계",
+  "start_idx": 101,
+  "end_idx": 1446,
+  "sentiment_score": 0.0,
+  "sentiment_reason": "LLM 배치 분석 완료",
+  "bill_relevance_score": 0.9,
+  "policy_categories": [],
+  "policy_keywords": [],
+  "bill_specific_keywords": [],
+  "segment_index": 0,
+  "associated_bill_name": "◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희"
+}
+2025-06-10 15:48:03,662 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3336 - Traceback for statement save error:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3297, in process_extracted_statements_data
+    new_statement = Statement(
+                    ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/db/models/base.py", line 567, in __init__
+    raise TypeError(
+TypeError: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json'
+2025-06-10 15:48:03,663 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1447:2681]: 1234 chars
+2025-06-10 15:48:03,880 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3330 - ❌ Error creating statement object in DB: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json' for speaker 주진우
+2025-06-10 15:48:03,880 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3333 - Failing statement data: {
+  "segment_index": 1,
+  "speaker_name": "주진우",
+  "start_idx": 1447,
+  "end_idx": 2681,
+  "is_valid_member": true,
+  "is_substantial": true,
+  "sentiment_score": -0.3,
+  "bill_relevance_score": 0.8,
+  "associated_bill_name": "◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희"
+}
+2025-06-10 15:48:03,880 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3336 - Traceback for statement save error:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3297, in process_extracted_statements_data
+    new_statement = Statement(
+                    ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/db/models/base.py", line 567, in __init__
+    raise TypeError(
+TypeError: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json'
+2025-06-10 15:48:03,880 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [1447:2681]: 1234 chars
+2025-06-10 15:48:04,097 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3330 - ❌ Error creating statement object in DB: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json' for speaker 주진우
+2025-06-10 15:48:04,097 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3333 - Failing statement data: {
+  "speaker_name": "주진우",
+  "start_idx": 1447,
+  "end_idx": 2681,
+  "sentiment_score": -0.3,
+  "sentiment_reason": "LLM 배치 분석 완료",
+  "bill_relevance_score": 0.8,
+  "policy_categories": [],
+  "policy_keywords": [],
+  "bill_specific_keywords": [],
+  "segment_index": 1,
+  "associated_bill_name": "◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희"
+}
+2025-06-10 15:48:04,097 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3336 - Traceback for statement save error:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3297, in process_extracted_statements_data
+    new_statement = Statement(
+                    ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/db/models/base.py", line 567, in __init__
+    raise TypeError(
+TypeError: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json'
+2025-06-10 15:48:04,098 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [2682:3695]: 1012 chars
+2025-06-10 15:48:04,315 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3330 - ❌ Error creating statement object in DB: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json' for speaker 김용민
+2025-06-10 15:48:04,315 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3333 - Failing statement data: {
+  "segment_index": 2,
+  "speaker_name": "김용민",
+  "start_idx": 2682,
+  "end_idx": 3695,
+  "is_valid_member": true,
+  "is_substantial": true,
+  "sentiment_score": 0.4,
+  "bill_relevance_score": 0.9,
+  "associated_bill_name": "◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희"
+}
+2025-06-10 15:48:04,315 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3336 - Traceback for statement save error:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3297, in process_extracted_statements_data
+    new_statement = Statement(
+                    ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/db/models/base.py", line 567, in __init__
+    raise TypeError(
+TypeError: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json'
+2025-06-10 15:48:04,315 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [2682:3695]: 1012 chars
+2025-06-10 15:48:04,532 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3330 - ❌ Error creating statement object in DB: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json' for speaker 김용민
+2025-06-10 15:48:04,532 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3333 - Failing statement data: {
+  "speaker_name": "김용민",
+  "start_idx": 2682,
+  "end_idx": 3695,
+  "sentiment_score": 0.4,
+  "sentiment_reason": "LLM 배치 분석 완료",
+  "bill_relevance_score": 0.9,
+  "policy_categories": [],
+  "policy_keywords": [],
+  "bill_specific_keywords": [],
+  "segment_index": 2,
+  "associated_bill_name": "◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희"
+}
+2025-06-10 15:48:04,532 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3336 - Traceback for statement save error:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3297, in process_extracted_statements_data
+    new_statement = Statement(
+                    ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/db/models/base.py", line 567, in __init__
+    raise TypeError(
+TypeError: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json'
+2025-06-10 15:48:04,533 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [3696:4184]: 488 chars
+2025-06-10 15:48:04,749 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3330 - ❌ Error creating statement object in DB: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json' for speaker 박성준
+2025-06-10 15:48:04,749 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3333 - Failing statement data: {
+  "segment_index": 3,
+  "speaker_name": "박성준",
+  "start_idx": 3696,
+  "end_idx": 4184,
+  "is_valid_member": true,
+  "is_substantial": true,
+  "sentiment_score": 0.2,
+  "bill_relevance_score": 0.9,
+  "associated_bill_name": "◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희"
+}
+2025-06-10 15:48:04,750 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3336 - Traceback for statement save error:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3297, in process_extracted_statements_data
+    new_statement = Statement(
+                    ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/db/models/base.py", line 567, in __init__
+    raise TypeError(
+TypeError: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json'
+2025-06-10 15:48:04,750 - api.tasks - DEBUG - tasks - process_extracted_statements_data - 3198 - Extracted text from indices [3696:4184]: 488 chars
+2025-06-10 15:48:04,968 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3330 - ❌ Error creating statement object in DB: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json' for speaker 박성준
+2025-06-10 15:48:04,968 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3333 - Failing statement data: {
+  "speaker_name": "박성준",
+  "start_idx": 3696,
+  "end_idx": 4184,
+  "sentiment_score": 0.2,
+  "sentiment_reason": "LLM 배치 분석 완료",
+  "bill_relevance_score": 0.9,
+  "policy_categories": [],
+  "policy_keywords": [],
+  "bill_specific_keywords": [],
+  "segment_index": 3,
+  "associated_bill_name": "◯의장 우원식 의사일정 제1항 검사징계법 일부개정법률안부터 의사일정 제4항 김건희"
+}
+2025-06-10 15:48:04,968 - api.tasks - ERROR - tasks - process_extracted_statements_data - 3336 - Traceback for statement save error:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3297, in process_extracted_statements_data
+    new_statement = Statement(
+                    ^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/django/db/models/base.py", line 567, in __init__
+    raise TypeError(
+TypeError: Statement() got unexpected keyword arguments: 'category_analysis', 'policy_keywords', 'bill_specific_keywords_json'
+2025-06-10 15:48:04,969 - api.tasks - INFO - tasks - process_extracted_statements_data - 3339 - 🎉 Saved 0 new statements for session 54810.
+✅ LLM processing completed
+🗑️ Cleaned up temporary PDF file
+✅ Success: 0 statements created
