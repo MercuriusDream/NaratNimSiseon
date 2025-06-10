@@ -3303,15 +3303,7 @@ def process_extracted_statements_data(statements_data_list,
                 sentiment_reason=stmt_data.get('sentiment_reason',
                                                'Analysis not fully run'),
                 bill_relevance_score=stmt_data.get(
-                    'bill_relevance_score', 0.0),  # Add bill relevance score
-                category_analysis=json.dumps(stmt_data.get(
-                    'policy_categories', []),
-                                             ensure_ascii=False),
-                policy_keywords=', '.join(stmt_data.get('policy_keywords',
-                                                        [])),
-                bill_specific_keywords_json=json.dumps(stmt_data.get(
-                    'bill_specific_keywords', []),
-                                                       ensure_ascii=False))
+                    'bill_relevance_score', 0.0))
             new_statement = _save_statement(
                 new_statement
             )  # This also calculates and saves text_hash via pre_save signal
