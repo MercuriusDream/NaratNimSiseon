@@ -1,80 +1,72 @@
+
 from django.core.management.base import BaseCommand
-from api.tasks import fetch_latest_sessions, is_celery_available
-from api.models import Session
-import time
+from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class Command(BaseCommand):
-    help = 'Start collecting data from the National Assembly API'
+    help = 'Start data collection from Assembly API'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--force',
             action='store_true',
-            help='Force re-collection of existing data')
-        parser.add_argument(
-            '--verbose',
-            action='store_true',
-            help='Verbose output')
+            help='Force collection even if recent data exists',
+        )
         parser.add_argument(
             '--debug',
             action='store_true',
-            help='Debug mode: print data instead of storing it')
+            help='Enable debug mode',
+        )
 
     def handle(self, *args, **options):
-        self.stdout.write('Starting data collection...')
-
         force = options['force']
-        verbose = options['verbose']
         debug = options['debug']
 
-        if verbose:
-            self.stdout.write('📊 Initial database status:')
-            self.stdout.write(f'   Sessions: {Session.objects.count()}')
+        self.stdout.write(
+            self.style.SUCCESS('Starting data collection...')
+        )
 
-        # Import tasks with fallback capability
-        from api.tasks import fetch_latest_sessions, is_celery_available
+        try:
+            # Import the utility function to check Celery availability
+            from api.tasks import is_celery_available
+            
+            use_celery = is_celery_available()
+            
+            if use_celery:
+                self.stdout.write("🚀 Running with Celery (asynchronous)")
+                try:
+                    from api.tasks import fetch_latest_sessions
+                    fetch_latest_sessions.delay(force=force, debug=debug)
+                    self.stdout.write(
+                        self.style.SUCCESS('✅ Data collection task queued successfully')
+                    )
+                except Exception as e:
+                    self.stderr.write(
+                        self.style.ERROR(f'❌ Error queuing Celery task: {e}')
+                    )
+                    self.stdout.write("🔄 Falling back to synchronous execution...")
+                    use_celery = False
+            
+            if not use_celery:
+                self.stdout.write("🔄 Celery not available, running synchronously")
+                try:
+                    # Import and run the direct version
+                    from api.tasks import fetch_continuous_sessions_direct
+                    fetch_continuous_sessions_direct(force=force, debug=debug)
+                    self.stdout.write(
+                        self.style.SUCCESS('✅ Data collection completed successfully')
+                    )
+                except Exception as e:
+                    self.stderr.write(
+                        self.style.ERROR(f'❌ Error in synchronous execution: {e}')
+                    )
+                    logger.exception("Error in start_collection command")
 
-        if is_celery_available():
-            self.stdout.write(self.style.SUCCESS('🚀 Using Celery for async processing'))
-            if verbose:
-                self.stdout.write('⏳ Tasks will run in background via Celery...')
-                self.stdout.write('   Use "python manage.py monitor_collection" to track progress')
-        else:
-            self.stdout.write(self.style.WARNING('🔄 Celery not available, running synchronously'))
-
-        # Start data collection (will automatically choose sync/async)
-        if verbose:
-            self.stdout.write('📡 Starting data collection...')
-
-        # Call the function directly since Celery is not available
-        if is_celery_available():
-            fetch_latest_sessions.delay(force=force, debug=debug)
-        else:
-            # Call the wrapped function directly without Celery
-            if hasattr(fetch_latest_sessions, '__wrapped__'):
-                fetch_latest_sessions.__wrapped__(self=None, force=force, debug=debug)
-            else:
-                # Fallback: try to import and call the function
-                from api.tasks import fetch_latest_sessions as fetch_func
-                fetch_func(force=force, debug=debug)
-
-        if not debug:
-            if verbose:
-                self.stdout.write('📄 Starting PDF processing...')
-
-            # Import the new tasks
-            from api.tasks import fetch_additional_data_nepjpxkkabqiqpbvk
-
-            # Start additional data collection
-            if is_celery_available():
-                fetch_additional_data_nepjpxkkabqiqpbvk.delay(force=force, debug=debug)
-            else:
-                fetch_additional_data_nepjpxkkabqiqpbvk(force=force, debug=debug)
-
-        if is_celery_available():
-            self.stdout.write(self.style.SUCCESS('✅ Data collection tasks queued'))
-        else:
-            self.stdout.write(self.style.SUCCESS('✅ Data collection completed synchronously'))
-            if verbose:
-                final_sessions = Session.objects.count()
-                self.stdout.write(f'📊 Final status: {final_sessions} sessions in database')
+        except Exception as e:
+            self.stderr.write(
+                self.style.ERROR(f'❌ Critical error in data collection: {e}')
+            )
+            logger.exception("Critical error in start_collection command")
