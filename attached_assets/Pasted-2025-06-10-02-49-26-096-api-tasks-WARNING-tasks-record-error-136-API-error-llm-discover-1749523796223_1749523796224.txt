@@ -1,0 +1,37 @@
+2025-06-10 02:49:26,096 - api.tasks - WARNING - tasks - record_error - 136 - API error (llm_discovery_error). Consecutive errors: 1, backoff: 1s
+2025-06-10 02:49:26,096 - api.tasks - ERROR - tasks - extract_statements_with_llm_discovery - 3268 - ❌ Critical error during LLM discovery and segmentation: 500 An internal error has occurred. Please retry or report in https://developers.generativeai.google/guide/troubleshooting
+2025-06-10 02:49:26,096 - api.tasks - ERROR - tasks - extract_statements_with_llm_discovery - 3270 - Full traceback for LLM discovery:
+Traceback (most recent call last):
+  File "/home/runner/workspace/backend/api/tasks.py", line 3185, in extract_statements_with_llm_discovery
+    gemini_rate_limiter.record_request(estimated_tokens, success=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/google/generativeai/generative_models.py", line 248, in generate_content
+    response = self._client.generate_content(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/google/ai/generativelanguage_v1beta/services/generative_service/client.py", line 566, in generate_content
+    response = rpc(
+               ^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/google/api_core/gapic_v1/method.py", line 131, in __call__
+    return wrapped_func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/google/api_core/retry/retry_unary.py", line 294, in retry_wrapped_func
+    return retry_target(
+           ^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/google/api_core/retry/retry_unary.py", line 156, in retry_target
+    next_sleep = _retry_error_helper(
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/google/api_core/retry/retry_base.py", line 214, in _retry_error_helper
+    raise final_exc from source_exc
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/google/api_core/retry/retry_unary.py", line 147, in retry_target
+    result = target()
+             ^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/google/api_core/timeout.py", line 130, in func_with_timeout
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.12/site-packages/google/api_core/grpc_helpers.py", line 78, in error_remapped_callable
+    raise exceptions.from_grpc_error(exc) from exc
+google.api_core.exceptions.InternalServerError: 500 An internal error has occurred. Please retry or report in https://developers.generativeai.google/guide/troubleshooting
+2025-06-10 02:49:26,099 - api.tasks - WARNING - tasks - process_session_pdf_text - 4415 - No statements were extracted by the LLM discovery process for session 54810
+✅ LLM processing completed
+🗑️ Cleaned up temporary PDF file
+✅ Success: 0 statements created
