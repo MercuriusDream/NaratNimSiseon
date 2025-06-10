@@ -305,9 +305,9 @@ def initialize_gemini():
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
             genai_module.configure(api_key=settings.GEMINI_API_KEY)
             model_instance = genai_module.GenerativeModel(
-                'gemini-2.5-flash-preview-05-20')
+                'gemini-2.0-flash-lite')
             logger.info(
-                "✅ Gemini API configured successfully with gemini-2.5-flash-preview-05-20 model"
+                "✅ Gemini API configured successfully with gemini-2.0-flash-lite model"
             )
             return genai_module, model_instance
         else:
@@ -2276,8 +2276,7 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
 def _process_single_segmentation_batch(text_segment, bill_name, offset):
     """Process a single text segment for speech segmentation indices."""
     try:
-        segmentation_llm = genai.GenerativeModel(
-            'gemini-2.5-flash-preview-05-20')
+        segmentation_llm = genai.GenerativeModel('gemini-2.0-flash-lite')
 
         # Create basic indices by splitting at ◯ markers as fallback
         speech_indices = []
@@ -2463,18 +2462,17 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
         return []
 
     logger.info(
-        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.5-flash-preview-05-20"
+        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.0-flash-lite"
     )
 
     # Get assembly members once for the entire batch
     assembly_members = get_all_assembly_members()
 
-    # Use gemini-2.5-flash-preview-05-20 for batch processing
+    # Use gemini-2.0-flash-lite for batch processing
     try:
-        batch_model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        batch_model = genai.GenerativeModel('gemini-2.0-flash-lite')
     except Exception as e:
-        logger.error(
-            f"Failed to initialize gemini-2.5-flash-preview-05-20: {e}")
+        logger.error(f"Failed to initialize gemini-2.0-flash-lite: {e}")
         return []
 
     results = []
@@ -2856,7 +2854,7 @@ def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name,
                                                     estimated_tokens):
     """Legacy function - now redirects to batch processing for consistency."""
     # For single segment, just use batch processing with 1 item
-    batch_model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+    batch_model = genai.GenerativeModel('gemini-2.0-flash-lite')
     results = analyze_batch_statements_single_request(batch_model,
                                                       [speech_segment],
                                                       bill_name,
@@ -3149,8 +3147,7 @@ I already know about the following bills. You MUST find the discussion for these
 }}
 """
     try:
-        segmentation_model = genai.GenerativeModel(
-            'gemini-2.5-flash-preview-05-20')
+        segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
         estimated_tokens = len(prompt) // 3
 
         if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
@@ -3164,7 +3161,7 @@ I already know about the following bills. You MUST find the discussion for these
         response_text = response.text.strip()
         if response_text.startswith("```"):
             response_text = response_text.split("```", 2)[-1].strip()
-
+        print(response_text)
         data = json.loads(response_text)
         if not isinstance(data, dict):
             logger.error("LLM discovery did not return a JSON object.")
