@@ -1,7 +1,7 @@
 
 from django.core.management.base import BaseCommand
 from api.models import Session, Statement
-from api.tasks import process_session_pdf, model, genai
+from api.tasks import process_session_pdf, client
 import requests
 import pdfplumber
 import tempfile
@@ -52,7 +52,7 @@ class Command(BaseCommand):
         limit = options.get('limit')
 
         # Check LLM availability
-        if not model or not genai:
+        if not client:
             self.stdout.write(
                 self.style.ERROR('❌ Gemini LLM not available. Please check GEMINI_API_KEY in settings.')
             )
