@@ -2998,24 +2998,44 @@ def extract_statements_with_llm_discovery(full_text,
     else:
         known_bills_str = "No known bills were provided."
 
-    # Enhanced policy categories section with database data
+    # Create indexed categories for more efficient LLM responses
     if policy_categories_from_db:
-        policy_categories_section = "**POLICY CATEGORIES (from database):**\n"
+        policy_categories_section = "**POLICY CATEGORIES (use index numbers):**\n"
+        category_index = 1
+        subcategory_index = 1
+        category_mapping = {}
+        subcategory_mapping = {}
+        
         for cat_name, cat_data in policy_categories_from_db.items():
-            policy_categories_section += f"- {cat_name}: {cat_data['description']}\n"
+            policy_categories_section += f"{category_index}. {cat_name}\n"
+            category_mapping[category_index] = cat_name
+            
             if cat_data['subcategories']:
-                policy_categories_section += f"  Subcategories: {', '.join(cat_data['subcategories'][:5])}{'...' if len(cat_data['subcategories']) > 5 else ''}\n"
+                for subcat in cat_data['subcategories'][:3]:  # Limit to 3 subcategories for brevity
+                    policy_categories_section += f"  {subcategory_index}. {subcat}\n"
+                    subcategory_mapping[subcategory_index] = (category_index, subcat)
+                    subcategory_index += 1
+            
+            category_index += 1
     else:
-        policy_categories_section = """**POLICY CATEGORIES:**
-- 경제정책: 국가의 재정, 산업, 무역, 조세 등을 통한 경제 운용 및 성장 전략
-- 사회정책: 복지, 보건, 교육, 노동 등 사회 전반의 정책
-- 외교안보정책: 외교관계, 국방, 통일, 안보 관련 정책
-- 법행정제도: 행정개혁, 사법제도, 인권, 법률 제도
-- 과학기술정책: 과학기술진흥, IT, 디지털전환, 연구개발
-- 문화체육정책: 문화예술, 체육, 관광, 미디어 정책
-- 인권소수자정책: 인권보호, 소수자 권익, 차별 방지
-- 지역균형정책: 지역개발, 균형발전, 지방자치
-- 정치정책: 선거제도, 정당, 정치개혁 관련 정책"""
+        policy_categories_section = """**POLICY CATEGORIES (use index numbers):**
+1. 경제정책
+2. 사회정책  
+3. 외교안보정책
+4. 법행정제도
+5. 과학기술정책
+6. 문화체육정책
+7. 인권소수자정책
+8. 지역균형정책
+9. 정치정책"""
+        
+        # Fallback mapping
+        category_mapping = {
+            1: "경제정책", 2: "사회정책", 3: "외교안보정책", 4: "법행정제도",
+            5: "과학기술정책", 6: "문화체육정책", 7: "인권소수자정책", 
+            8: "지역균형정책", 9: "정치정책"
+        }
+        subcategory_mapping = {}
 
     prompt = f"""You are a world-class legislative analyst AI. Your task is to read a parliamentary transcript
 and perfectly segment the entire discussion for all topics, while also analyzing policy content.
@@ -3056,35 +3076,37 @@ I already know about the following bills. You MUST find the discussion for these
 {full_text}
 ---
 
-**REQUIRED JSON OUTPUT FORMAT:**
+**REQUIRED JSON OUTPUT FORMAT (use category indices):**
 {{
   "bills_found": [
     {{
       "bill_name": "Exact name of a KNOWN bill",
       "start_index": 1234,
       "end_index": 5678,
-      "main_policy_category": "경제정책",
-      "policy_subcategories": ["확장재정", "중소기업 지원"],
-      "key_policy_phrases": ["중소기업 지원", "일자리 창출", "사회안전망"],
-      "bill_specific_keywords": ["법인세", "세율", "과세"],
-      "policy_stance": "progressive",
-      "bill_analysis": "중소기업 지원을 위한 세제 혜택 확대 법안"
+      "category_id": 1,
+      "subcategory_ids": [12, 15],
+      "keywords": ["키워드1", "키워드2"],
+      "stance": "P"
     }}
   ],
   "newly_discovered": [
     {{
-      "bill_name": "Name of a newly discovered topic",
+      "bill_name": "Name of newly discovered topic",
       "start_index": 2345,
       "end_index": 6789,
-      "main_policy_category": "환경/에너지",
-      "policy_subcategories": ["탄소세 도입"],
-      "key_policy_phrases": ["탄소중립", "재생에너지", "온실가스"],
-      "bill_specific_keywords": ["탄소세", "배출권", "그린뉴딜"],
-      "policy_stance": "progressive",
-      "bill_analysis": "탄소중립 실현을 위한 환경세 도입 법안"
+      "category_id": 5,
+      "subcategory_ids": [23],
+      "keywords": ["키워드1", "키워드2"],
+      "stance": "C"
     }}
   ]
 }}
+
+**FORMAT RULES:**
+- Use category_id numbers from the list above
+- Use subcategory_ids array (max 3 numbers)
+- Max 5 keywords per bill
+- stance: "P"=progressive, "C"=conservative, "M"=moderate
 """
     try:
         global client
@@ -3108,7 +3130,7 @@ I already know about the following bills. You MUST find the discussion for these
             config=types.GenerateContentConfig(
                 response_mime_type="text/plain",
                 temperature=0.1,  # Lower temperature for more consistent JSON
-                max_output_tokens=8000))  # Limit output to prevent truncation
+                max_output_tokens=3000))  # Reduced since we're using compact format
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
         # Check if response exists and has text
@@ -3190,15 +3212,45 @@ I already know about the following bills. You MUST find the discussion for these
         if 'newly_discovered' not in data:
             data['newly_discovered'] = []
 
-        # Merge the two arrays into one flat list, tagging each entry
+        # Resolve category indices back to names and merge segments
         all_segments = []
 
         for seg in data.get("bills_found", []):
             seg["is_newly_discovered"] = False
+            # Resolve category indices to names
+            if "category_id" in seg:
+                seg["main_policy_category"] = category_mapping.get(seg["category_id"], "기타")
+                seg["policy_subcategories"] = []
+                for sub_id in seg.get("subcategory_ids", []):
+                    if sub_id in subcategory_mapping:
+                        seg["policy_subcategories"].append(subcategory_mapping[sub_id][1])
+            
+            # Convert compact format to full format
+            seg["key_policy_phrases"] = seg.get("keywords", [])
+            seg["bill_specific_keywords"] = seg.get("keywords", [])[:3]  # First 3 as specific
+            stance_map = {"P": "progressive", "C": "conservative", "M": "moderate"}
+            seg["policy_stance"] = stance_map.get(seg.get("stance", "M"), "moderate")
+            seg["bill_analysis"] = f"{seg.get('bill_name', '')} 관련 정책"
+            
             all_segments.append(seg)
 
         for seg in data.get("newly_discovered", []):
             seg["is_newly_discovered"] = True
+            # Resolve category indices to names
+            if "category_id" in seg:
+                seg["main_policy_category"] = category_mapping.get(seg["category_id"], "기타")
+                seg["policy_subcategories"] = []
+                for sub_id in seg.get("subcategory_ids", []):
+                    if sub_id in subcategory_mapping:
+                        seg["policy_subcategories"].append(subcategory_mapping[sub_id][1])
+            
+            # Convert compact format to full format
+            seg["key_policy_phrases"] = seg.get("keywords", [])
+            seg["bill_specific_keywords"] = seg.get("keywords", [])[:3]
+            stance_map = {"P": "progressive", "C": "conservative", "M": "moderate"}
+            seg["policy_stance"] = stance_map.get(seg.get("stance", "M"), "moderate")
+            seg["bill_analysis"] = f"{seg.get('bill_name', '')} 관련 정책"
+            
             all_segments.append(seg)
 
         logger.info(
