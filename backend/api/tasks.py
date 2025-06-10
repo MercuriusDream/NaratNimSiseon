@@ -292,29 +292,30 @@ if not logger.handlers or not any(
     #     f"🐛 IMMEDIATE DEBUG: Logger reconfigured with handlers: {logger.handlers}"
     # )
 
+
 # Configuration flags
-ENABLE_VOTING_DATA_COLLECTION = getattr(settings,
-                                        'ENABLE_VOTING_DATA_COLLECTION', False)
-
-
 # Configure Gemini API with error handling
 def initialize_gemini():
-    """Initialize Gemini API with proper error handling"""
+    """Initialize Gemini API with proper error handling using google.genai"""
     try:
-        import google.generativeai as genai_module
+        import google.genai as genai_module
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-            genai_module.configure(api_key=settings.GEMINI_API_KEY)
             model_instance = genai_module.GenerativeModel(
-                'gemini-2.5-flash-preview-04-17')
+                model_name='gemini-2.5-flash-preview-04-17',
+                api_key=settings.GEMINI_API_KEY)
             # Check Gemini API status immediately after configuration
             try:
                 prompt = "Hello"
                 response = model_instance.generate_content(prompt)
                 preview = getattr(response, 'text', str(response))
-                logger.info(f"✅ Gemini API configured successfully and status check succeeded. Preview: {preview[:100]}")
+                logger.info(
+                    f"✅ Gemini API configured successfully and status check succeeded. Preview: {preview[:100]}"
+                )
                 return genai_module, model_instance
             except Exception as status_exc:
-                logger.warning(f"⚠️ Gemini API configured but status check failed: {status_exc}")
+                logger.warning(
+                    f"⚠️ Gemini API configured but status check failed: {status_exc}"
+                )
                 return None, None
         else:
             logger.error(
@@ -323,7 +324,7 @@ def initialize_gemini():
             return None, None
     except ImportError as e:
         logger.error(
-            f"❌ google.generativeai library not available: {e}. LLM features will be disabled."
+            f"❌ google.genai library not available: {e}. LLM features will be disabled."
         )
         return None, None
     except Exception as e:
@@ -362,7 +363,8 @@ def check_gemini_api_status():
         response = model.generate_content(prompt)
         # Try to extract a short preview of the response
         preview = getattr(response, 'text', str(response))
-        logger.info(f"✅ Gemini API status check succeeded. Preview: {preview[:100]}")
+        logger.info(
+            f"✅ Gemini API status check succeeded. Preview: {preview[:100]}")
         return ("ok", preview[:200])
     except Exception as e:
         logger.error(f"❌ Gemini API status check failed: {e}")
@@ -725,7 +727,7 @@ def fetch_additional_data_nepjpxkkabqiqpbvk(self=None,
                             logger.info(
                                 f"API result for {api_endpoint_name} (page {current_page}) indicates no more data."
                             )
-                            break  # End pagination
+                            break
                         elif 'row' in data[api_endpoint_name][0]:
                             items_on_page = data[api_endpoint_name][0].get(
                                 'row', [])
@@ -821,7 +823,6 @@ def fetch_continuous_sessions(
             raise ValueError("ASSEMBLY_API_KEY not configured")
 
         url = "https://open.assembly.go.kr/portal/openapi/nzbyfwhwaoanttzje"
-
         if start_date:
             try:
                 start_datetime = datetime.fromisoformat(start_date)
@@ -1119,29 +1120,20 @@ def extract_sessions_from_response(data, debug=False):
                 data[api_key_name][0], dict):
             # Check head for result code before assuming it's data
             head_info = data[api_key_name][0].get('head')
-            if head_info:
-                result_code_info = head_info[0].get('RESULT',
-                                                    {}).get('CODE', 'UNKNOWN')
-                if result_code_info.startswith(
-                        "INFO-") or result_code_info.startswith(
-                            "ERROR-"):  # Assuming "INFO-200" is no data
-                    logger.info(
-                        f"API result indicates no data or error: {result_code_info} in head."
-                    )
-                    # Check if 'row' exists in the first element anyway as some APIs are inconsistent
-                    if 'row' in data[api_key_name][0]:
-                        sessions_data_list = data[api_key_name][0].get(
-                            'row', [])
-                        if debug and sessions_data_list:
-                            logger.debug(
-                                "Extracted data from data['{api_key_name}'][0]['row'] despite head info code."
-                            )
+            if head_info and head_info[0].get('RESULT', {}).get(
+                    'CODE', '').startswith("INFO-200"):  # No more data
+                logger.info(
+                    f"API result indicates no data or error: {head_info[0].get('RESULT', {}).get('CODE', '')} in head."
+                )
+                # Check if 'row' exists in the first element anyway as some APIs are inconsistent
+                if 'row' in data[api_key_name][0]:
+                    sessions_data_list = data[api_key_name][0].get('row', [])
 
-        if not sessions_data_list and debug:  # if still no data and debug
-            logger.debug(
-                f"No 'row' found in expected paths data['{api_key_name}'][1] or data['{api_key_name}'][0]. API structure might have changed or no data."
-            )
-            # logger.debug(f"Full response for {api_key_name} if empty: {data[api_key_name]}")
+            if not sessions_data_list and debug:  # if still no data and debug
+                logger.debug(
+                    f"No 'row' found in expected paths data['{api_key_name}'][1] or data['{api_key_name}'][0]. API structure might have changed or no data."
+                )
+                # logger.debug(f"Full response for {api_key_name} if empty: {data[api_key_name]}")
 
     elif data and 'row' in data and isinstance(
             data['row'], list):  # Fallback for simpler structure
@@ -1481,7 +1473,7 @@ def fetch_session_details(self,
                 # Check head, similar to extract_sessions_from_response
                 head_info = data[api_key_name][0].get('head')
                 if head_info and head_info[0].get('RESULT', {}).get(
-                        'CODE', '').startswith("INFO-200"):  # No data
+                        'CODE', '').startswith("INFO-200"):
                     logger.info(
                         f"API result for VCONFDETAIL ({session_id}) indicates no detailed data (INFO-200)."
                     )
@@ -2733,18 +2725,24 @@ def _execute_batch_analysis(batch_model,
             if bill_name:
                 try:
                     from .models import Bill
-                    bill_obj = Bill.objects.filter(bill_nm__icontains=bill_name).order_by('-created_at').first()
+                    bill_obj = Bill.objects.filter(
+                        bill_nm__icontains=bill_name).order_by(
+                            '-created_at').first()
                     if bill_obj:
                         # Main policy category (list of names, highest confidence first)
                         main_policy_category = list(
-                            bill_obj.category_mappings.filter(is_primary=True).order_by('-confidence_score').values_list('category__name', flat=True)
-                        )
+                            bill_obj.category_mappings.filter(is_primary=True).
+                            order_by('-confidence_score').values_list(
+                                'category__name', flat=True))
                         # Policy subcategories (list of names, highest relevance first)
                         policy_subcategories = list(
-                            bill_obj.subcategory_mappings.order_by('-relevance_score').values_list('subcategory__name', flat=True)
-                        )
+                            bill_obj.subcategory_mappings.order_by(
+                                '-relevance_score').values_list(
+                                    'subcategory__name', flat=True))
                 except Exception as cat_exc:
-                    logger.warning(f"Could not fetch policy categories for bill '{bill_name}': {cat_exc}")
+                    logger.warning(
+                        f"Could not fetch policy categories for bill '{bill_name}': {cat_exc}"
+                    )
             # --- END: DB Policy Category Attachment ---
             for i, analysis_json in enumerate(analysis_array):
                 if not isinstance(analysis_json, dict):
@@ -2942,8 +2940,6 @@ def update_bill_policy_data(bill_obj, segment_data):
         policy_subcategories = segment_data.get('policy_subcategories', [])
         key_policy_phrases = segment_data.get('key_policy_phrases', [])
         bill_specific_keywords = segment_data.get('bill_specific_keywords', [])
-        policy_stance = segment_data.get('policy_stance', 'moderate')
-        bill_analysis = segment_data.get('bill_analysis', '')
 
         # Update bill fields
         bill_obj.policy_categories = [main_policy_category
@@ -4385,13 +4381,14 @@ def create_placeholder_bill(session_obj, title, bill_no=None):
         pass
         # Only log the rightmost party in the chain
 
+
 def process_session_pdf_text(
-    full_text,
-    session_id,
-    session_obj,
-    bills_context_str,  # Deprecated
-    bill_names_list_from_api,  # Now used as the "known_bill_names"
-    debug=False):
+        full_text,
+        session_id,
+        session_obj,
+        bills_context_str,  # Deprecated
+        bill_names_list_from_api,  # Now used as the "known_bill_names"
+        debug=False):
     if not full_text:
         logger.warning(f"No text provided for session {session_id}")
         return
@@ -4421,9 +4418,18 @@ def process_session_pdf_text(
     )
     process_extracted_statements_data(statements_data, session_obj, debug)
 
-def process_pdf_text_for_statements(full_text, session_id, session_obj, bills_context_str, bill_names_list_from_api, debug=False):
+
+def process_pdf_text_for_statements(full_text,
+                                    session_id,
+                                    session_obj,
+                                    bills_context_str,
+                                    bill_names_list_from_api,
+                                    debug=False):
     """Alias for process_session_pdf_text for future compatibility."""
-    return process_session_pdf_text(full_text, session_id, session_obj, bills_context_str, bill_names_list_from_api, debug)
+    return process_session_pdf_text(full_text, session_id, session_obj,
+                                    bills_context_str,
+                                    bill_names_list_from_api, debug)
+
 
 def clean_pdf_text(text: str) -> str:
     if not text:
@@ -4480,6 +4486,7 @@ def clean_pdf_text(text: str) -> str:
 
     logger.info(f"🧹 Text cleaning complete. Final length: {len(final_text)}")
     return final_text
+
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_additional_data_nepjpxkkabqiqpbvk(self=None,
