@@ -1,0 +1,68 @@
+      "stance": "P
+2025-06-10 21:46:33,417 - api.tasks - ERROR - tasks - extract_statements_with_llm_discovery - 3392 - ❌ JSON decode error in LLM discovery: Unterminated string starting at: line 955 column 17 (char 18329)
+❌ JSON decode error in LLM discovery: Unterminated string starting at: line 955 column 17 (char 18329)
+2025-06-10 21:46:33,417 - api.tasks - ERROR - tasks - extract_statements_with_llm_discovery - 3393 - Raw response (first 500 chars): {
+  "bills_found": [
+    {
+      "bill_name": "검사징계법 일부개정법률안",
+      "start_index": 287,
+      "end_index": 1002,
+      "category_id": 4,
+      "subcategory_ids": [
+        10,
+        11
+      ],
+      "keywords": [
+        "검사 징계",
+        "법무부장관",
+        "징계 청구",
+        "검찰 독립성",
+        "사법 테러"
+      ],
+      "stance": "P"
+    },
+    {
+      "bill_name": "순직 해병 수사 방해 및 사건 은폐 등 진상규명을 위한 특별검사법",
+      "start_index": 287,
+      "end_index": 1002,
+      "category_id": 4,
+      "subcategory_ids...
+Raw response (first 500 chars): {
+  "bills_found": [
+    {
+      "bill_name": "검사징계법 일부개정법률안",
+      "start_index": 287,
+      "end_index": 1002,
+      "category_id": 4,
+      "subcategory_ids": [
+        10,
+        11
+      ],
+      "keywords": [
+        "검사 징계",
+        "법무부장관",
+        "징계 청구",
+        "검찰 독립성",
+        "사법 테러"
+      ],
+      "stance": "P"
+    },
+    {
+      "bill_name": "순직 해병 수사 방해 및 사건 은폐 등 진상규명을 위한 특별검사법",
+      "start_index": 287,
+      "end_index": 1002,
+      "category_id": 4,
+      "subcategory_ids...
+2025-06-10 21:46:33,418 - api.tasks - DEBUG - tasks - _attempt_json_repair - 3118 - JSON repair attempt failed: Expecting ',' delimiter: line 954 column 9 (char 18312)
+JSON repair attempt failed: Expecting ',' delimiter: line 954 column 9 (char 18312)
+2025-06-10 21:46:33,418 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3409 - 🔄 Falling back to keyword-based extraction.
+🔄 Falling back to keyword-based extraction.
+2025-06-10 21:46:33,418 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 3992 - 🔍 Using enhanced bill name-based fallback extraction for session 54810
+🔍 Using enhanced bill name-based fallback extraction for session 54810
+2025-06-10 21:46:33,536 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4004 - 📋 Attempting bill name-based extraction for 107 known bills
+📋 Attempting bill name-based extraction for 107 known bills
+2025-06-10 21:46:33,537 - api.tasks - INFO - tasks - extract_bill_specific_content - 1742 - No mentions found for bill: 이화영 대북송금 사건
+No mentions found for bill: 이화영 대북송금 사건
+2025-06-10 21:46:33,537 - api.tasks - INFO - tasks - extract_statements_with_keyword_fallback - 4029 - ⚠️ No meaningful content found for bill: 이화영 대북송금 사건...
+⚠️ No meaningful content found for bill: 이화영 대북송금 사건...
+2025-06-10 21:46:33,537 - api.tasks - INFO - tasks - extract_bill
