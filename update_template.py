@@ -1,3 +1,4 @@
+
 import os
 import re
 from pathlib import Path
@@ -13,9 +14,6 @@ def update_template():
     if not build_dir.exists():
         print("❌ Build directory not found. Run 'npm run build' first.")
         return
-
-    # Read the original index.html from React build
-    original_html = (build_dir / 'index.html').read_text()
 
     # Find CSS and JS files
     css_files = list((static_dir / 'css').glob('main.*.css'))
@@ -41,15 +39,15 @@ def update_template():
 
     # Update CSS reference
     template_content = re.sub(
-        r'<link href="[^"]*main\.[^"]*\.css[^"]*" rel="stylesheet">',
-        f'<link href="{{% static \'static/css/{css_filename}\' %}}" rel="stylesheet">',
+        r'<link href="/static/css/main\.[^"]*\.css" rel="stylesheet">',
+        f'<link href="/static/css/{css_filename}" rel="stylesheet">',
         template_content
     )
 
     # Update JS reference
     template_content = re.sub(
-        r'<script src="[^"]*main\.[^"]*\.js[^"]*"></script>',
-        f'<script src="{{% static \'static/js/{js_filename}\' %}}"></script>',
+        r'<script src="/static/js/main\.[^"]*\.js"></script>',
+        f'<script src="/static/js/{js_filename}"></script>',
         template_content
     )
 
@@ -57,7 +55,7 @@ def update_template():
     with open(template_path, 'w') as f:
         f.write(template_content)
 
-    print(f"✅ Updated template with CSS: static/css/{css_filename}, JS: static/js/{js_filename}")
+    print(f"✅ Updated template with CSS: /static/css/{css_filename}, JS: /static/js/{js_filename}")
 
 if __name__ == '__main__':
     update_template()
