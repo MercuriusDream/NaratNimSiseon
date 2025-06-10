@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from api.tasks import fetch_latest_sessions, fetch_session_details
+from api.tasks import fetch_latest_sessions, is_celery_available
 from api.models import Session
 import time
 

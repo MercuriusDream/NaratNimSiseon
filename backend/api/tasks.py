@@ -2108,6 +2108,99 @@ def _process_single_segmentation_batch(text_segment, bill_name, offset):
         return []
 
 
+def fetch_continuous_sessions_direct(force=False, debug=False, start_date=None):
+    """
+    Direct (non-Celery) version of fetch_continuous_sessions for management commands.
+    """
+    logger.info(
+        f"🔍 Starting continuous session fetch (direct) (force={force}, debug={debug}, start_date={start_date})"
+    )
+
+    try:
+        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+            logger.error("❌ ASSEMBLY_API_KEY not configured")
+            raise ValueError("ASSEMBLY_API_KEY not configured")
+
+        url = "https://open.assembly.go.kr/portal/openapi/nzbyfwhwaoanttzje"
+
+        if start_date:
+            try:
+                start_datetime = datetime.fromisoformat(start_date)
+            except ValueError:
+                logger.error(f"Invalid start_date format: {start_date}. Expected ISO format (YYYY-MM-DD).")
+                return
+            logger.info(f"📅 Continuing from date: {start_datetime.strftime('%Y-%m')}")
+        else:
+            start_datetime = datetime.now()
+            logger.info(f"📅 Starting from current date: {start_datetime.strftime('%Y-%m')}")
+
+        current_date = start_datetime
+        sessions_found_in_period = False
+        DAE_NUM_TARGET = "22"
+
+        # Go back up to 36 months
+        for months_back in range(0, 36):
+            target_date = current_date - timedelta(days=months_back * 30.44)
+            conf_date_str = target_date.strftime('%Y-%m')
+
+            params = {
+                "KEY": settings.ASSEMBLY_API_KEY,
+                "Type": "json",
+                "DAE_NUM": DAE_NUM_TARGET,
+                "CONF_DATE": conf_date_str,
+                "pSize": 500
+            }
+
+            logger.info(f"📅 Fetching sessions for: {conf_date_str}")
+            if debug:
+                logger.debug(f"🐛 DEBUG: API URL: {url}, Params: {params}")
+
+            try:
+                response = requests.get(url, params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+
+                if debug:
+                    logger.debug(f"🐛 DEBUG: API Response status for {conf_date_str}: {response.status_code}")
+
+                sessions_data = extract_sessions_from_response(data, debug=debug)
+
+                if sessions_data:
+                    sessions_found_in_period = True
+                    logger.info(f"✅ Found {len(sessions_data)} session items for {conf_date_str}")
+                    process_sessions_data(sessions_data, force=force, debug=debug)
+                    if not debug: time.sleep(1)
+                else:
+                    logger.info(f"❌ No sessions found for {conf_date_str}")
+                    if months_back > 6 and not sessions_found_in_period:
+                        logger.info("🛑 No sessions found in recent ~6 months of search, stopping.")
+                        break
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"⚠️ Request error fetching {conf_date_str}: {e}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"⚠️ JSON parsing error for {conf_date_str}: {e}")
+            except Exception as e:
+                logger.warning(f"⚠️ Unexpected error fetching/processing {conf_date_str}: {e}")
+                if debug:
+                    logger.exception("Full traceback for error during loop:")
+            continue
+
+        if not debug and sessions_found_in_period:
+            logger.info("🔄 Triggering additional data collection...")
+            fetch_additional_data_nepjpxkkabqiqpbvk(force=force, debug=debug)
+
+        if sessions_found_in_period:
+            logger.info("🎉 Continuous session fetch attempt completed.")
+        else:
+            logger.info("ℹ️ No new sessions found during this continuous fetch period.")
+
+    except ValueError as ve:
+        logger.error(f"Configuration error: {ve}")
+    except Exception as e:
+        logger.error(f"❌ Critical error in fetch_continuous_sessions_direct: {e}")
+        logger.exception("Full traceback for critical error:")
+
+
 def process_session_pdf_direct(session_id=None, force=False, debug=False):
     """
     Direct wrapper for process_session_pdf that can be called without Celery.
