@@ -97,8 +97,7 @@ class Command(BaseCommand):
                 # Call the Celery task function directly without .delay()
                 from api.tasks import fetch_continuous_sessions
                 # For Celery tasks, we can call the function directly when not using Celery
-                fetch_continuous_sessions(self=None,
-                                         force=True,
+                fetch_continuous_sessions(force=True,
                                          debug=debug,
                                          start_date=start_date_iso)
 
