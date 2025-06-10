@@ -12,11 +12,11 @@ router.register(r'parties', views.PartyViewSet)
 urlpatterns = [
     # Include router URLs
     path('', include(router.urls)),
-    
+
     # Critical endpoints that frontend needs
     path('home-data/', views.home_data, name='home-data'),
     path('stats-overview/', views.stats_overview, name='stats-overview'),
-    
+
     # Data and analytics endpoints
     path('data/refresh/', views.refresh_all_data, name='refresh-all-data'),
     path('data/status/', views.data_status, name='data-status'),
@@ -24,7 +24,7 @@ urlpatterns = [
     # Additional view endpoints
     path('statements/', views.statement_list, name='statement-list'),
     path('bills/', views.bill_list, name='bill-list-func'),
-    
+
     # Session-specific endpoints
     path('sessions/<str:pk>/sentiment_by_party/',
          views.session_sentiment_by_party,
@@ -75,8 +75,12 @@ urlpatterns = [
     path('party-policy-comparison/',
          views.party_policy_comparison,
          name='party_policy_comparison'),
-         
+
     # Management endpoints
     path('management/force-collection/', views.trigger_force_collection, name='trigger_force_collection'),
     path('management/check-status/', views.check_data_status, name='check_data_status'),
+    # Management commands via API
+    path('start-collection/', views.start_collection, name='start_collection'),
+    path('check-data-status/', views.check_data_status, name='check_data_status'),
+    path('stats-overview/', views.stats_overview, name='stats_overview'),
 ]

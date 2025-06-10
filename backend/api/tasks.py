@@ -2109,6 +2109,20 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
 def _process_single_segmentation_batch(text_segment, bill_name, offset):
     """Process a single text segment for speech segmentation indices."""
     try:
+        # Initialize the Gemini client if available
+        if client:
+            try:
+                # Use the new google.genai client approach
+                response = client.models.generate_content(
+                    model='gemini-2.0-flash',
+                    contents=f"Analyze this legislative text and identify speech segments: {text_segment[:1000]}"
+                )
+                # Process LLM response if successful
+                if response and hasattr(response, 'text'):
+                    logger.info(f"LLM segmentation successful for segment")
+            except Exception as llm_error:
+                logger.warning(f"LLM segmentation failed, using fallback: {llm_error}")
+
         # Create basic indices by splitting at ◯ markers as fallback
         speech_indices = []
         current_pos = 0

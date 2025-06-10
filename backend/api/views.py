@@ -1052,7 +1052,7 @@ def category_analytics(request):
         logger.error(f"Error in category analytics: {e}")
         return Response({'error': 'Failed to fetch category analytics'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
 
 
 
