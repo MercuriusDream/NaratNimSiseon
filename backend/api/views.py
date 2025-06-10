@@ -18,8 +18,19 @@ from django.utils import timezone
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import generics
-from rest_framework.response import Response
 from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from django.db.models import Count, Q, Avg
+from datetime import datetime, timedelta
+from .models import Session, Bill, Speaker, Statement, Party, Category
+from .serializers import (
+    SessionSerializer, BillSerializer, SpeakerSerializer, 
+    StatementSerializer, PartySerializer
+)
+from .tasks import is_celery_available
 from django.db.models import Count, Avg
 from datetime import datetime, timedelta
 from django_filters.rest_framework import DjangoFilterBackend
@@ -1759,6 +1770,7 @@ def party_policy_comparison(request):
                         category_statements.count(),
                         'avg_sentiment':
                         round(
+                            ```python
                             category_statements.aggregate(
                                 avg=Avg('sentiment_score'))['avg'], 3),
                         'stance':
@@ -2614,7 +2626,8 @@ def home_data(request):
                 era = session.era_co or '22'
                 sess = session.sess or '1'
                 dgr = session.dgr or '1'
-                title = f'제{era}대 제{sess}회 제{dgr}차'
+                title```python
+ = f'제{era}대 제{sess}회 제{dgr}차'
 
             sessions_data.append({
                 'id':
@@ -2756,3 +2769,37 @@ def home_data(request):
                 'total_speakers': 0
             },
             status=200)
+
+
+@api_view(['POST'])
+def start_collection(request):
+    """Start data collection process"""
+    try:
+        use_celery = is_celery_available()
+
+        if use_celery:
+            from .tasks import fetch_continuous_sessions
+            task = fetch_continuous_sessions.delay(force=True, debug=False)
+            return JsonResponse({
+                'message': 'Collection started asynchronously',
+                'task_id': task.id,
+                'status': 'started'
+            })
+        else:
+            from .tasks import fetch_continuous_sessions_direct
+            try:
+                fetch_continuous_sessions_direct(force=True, debug=False)
+                return JsonResponse({
+                    'message': 'Collection completed successfully',
+                    'status': 'completed'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'message': f'Collection failed: {str(e)}',
+                    'status': 'failed'
+                }, status=500)
+
+    except Exception as e:
+        return JsonResponse({
+            'error': f'Failed to start collection: {str(e)}'
+        }, status=500)
