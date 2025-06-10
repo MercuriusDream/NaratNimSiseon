@@ -6,10 +6,10 @@ channel = "stable-24_05"
 packages = ["redis", "xcodebuild", "zlib"]
 
 [deployment]
-run = ["sh", "-c", "python3 manage.py runserver 0.0.0.0:3000"]
+run = ["sh", "-c", "cd backend && python manage.py runserver 0.0.0.0:3000"]
 
 [workflows]
-runButton = "Full Stack Server"
+runButton = "Django Production Server"
 
 [[workflows.workflow]]
 name = "Run Django Server"
@@ -57,6 +57,23 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd frontend && npm start"
+
+[[workflows.workflow]]
+name = "Django Production Server"
+author = 13787682
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python manage.py migrate"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python manage.py collectstatic --noinput"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python manage.py runserver 0.0.0.0:3000"
 
 [[ports]]
 localPort = 3000
