@@ -211,17 +211,6 @@ class StatementSerializer(serializers.ModelSerializer):
         return value
 
 
-class SessionListSerializer(serializers.ModelSerializer):
-    """Optimized serializer for session list view without expensive joins"""
-
-    class Meta:
-        model = Session
-        fields = [
-            'conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 'conf_knd',
-            'cmit_nm', 'title'
-        ]
-
-
 class SessionSerializer(serializers.ModelSerializer):
     bills = BillSerializer(many=True, read_only=True)
     statements = StatementSerializer(many=True, read_only=True)
@@ -230,22 +219,24 @@ class SessionSerializer(serializers.ModelSerializer):
         model = Session
         fields = [
             'conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 'conf_knd',
-            'cmit_nm', 'conf_plc', 'title', 'bg_ptm', 'ed_ptm', 'down_url',
-            'bills', 'statements'
+            'cmit_nm', 'title', 'bills', 'statements'
         ]
 
-    def validate_conf_dt(self, value):
-        if value > timezone.now().date():  # Compare date with date
-            raise serializers.ValidationError("회의 날짜는 현재 날짜보다 이후일 수 없습니다.")
-        return value
+class SessionListSerializer(serializers.ModelSerializer):
+    """Optimized serializer for list views without heavy relationships"""
+    bill_count = serializers.SerializerMethodField()
+    statement_count = serializers.SerializerMethodField()
 
-    def validate(self, data):
-        if 'bg_ptm' in data and 'ed_ptm' in data and data['bg_ptm'] and data[
-                'ed_ptm']:
-            if data['bg_ptm'] > data['ed_ptm']:
-                raise serializers.ValidationError(
-                    "회의 종료 시간은 시작 시간보다 이후여야 합니다 (bg_ptm, ed_ptm).")
-        return data
+    class Meta:
+        model = Session
+        fields = ['conf_id', 'era_co', 'sess', 'dgr', 'conf_dt', 'conf_knd', 
+                 'cmit_nm', 'title', 'bill_count', 'statement_count']
+
+    def get_bill_count(self, obj):
+        return getattr(obj, 'bill_count', 0)
+
+    def get_statement_count(self, obj):
+        return getattr(obj, 'statement_count', 0)
 
 
 class StatementCreateSerializer(serializers.ModelSerializer):

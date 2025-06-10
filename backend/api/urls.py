@@ -13,7 +13,7 @@ urlpatterns = [
     # Include router URLs
     path('', include(router.urls)),
 
-    # Critical endpoints that frontend needs
+    # Critical endpoints that frontend needs - MUST BE FIRST
     path('home-data/', views.home_data, name='home-data'),
     path('stats-overview/', views.stats_overview, name='stats-overview'),
 
@@ -82,6 +82,4 @@ urlpatterns = [
     # Management commands via API
     path('start-collection/', views.start_collection, name='start_collection'),
     path('check-data-status/', views.check_data_status, name='check_data_status'),
-    path('stats-overview/', views.stats_overview, name='stats_overview'),
-    path('home-data/', views.home_data, name='home_data'),
 ]

@@ -10,4 +10,6 @@ export const ENDPOINTS = {
   STATEMENTS: `${API_BASE_URL}/api/statements/`,
   PARTIES: `${API_BASE_URL}/api/parties/`,
   CATEGORIES: `${API_BASE_URL}/api/categories/`,
+  ANALYTICS_OVERALL: `${API_BASE_URL}/api/analytics/overall/`,
+  ANALYTICS_PARTIES: `${API_BASE_URL}/api/analytics/parties/`,
 };

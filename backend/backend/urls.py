@@ -24,6 +24,7 @@ import os
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # API routes MUST come first to avoid conflicts
     path('api/', include('api.urls')),
     # Serve static files for React build
     re_path(r'^static/(?P<path>.*)$', serve, {'document_root': settings.STATIC_ROOT}),

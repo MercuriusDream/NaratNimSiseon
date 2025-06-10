@@ -9,7 +9,7 @@ packages = ["redis", "xcodebuild", "zlib"]
 run = ["sh", "-c", "cd backend && python manage.py runserver 0.0.0.0:3000"]
 
 [workflows]
-runButton = "Django Production Server"
+runButton = "Restart Django Server"
 
 [[workflows.workflow]]
 name = "Run Django Server"
@@ -60,6 +60,23 @@ args = "cd frontend && npm start"
 
 [[workflows.workflow]]
 name = "Django Production Server"
+author = 13787682
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python manage.py migrate"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python manage.py collectstatic --noinput"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python manage.py runserver 0.0.0.0:3000"
+
+[[workflows.workflow]]
+name = "Restart Django Server"
 author = 13787682
 mode = "sequential"
 

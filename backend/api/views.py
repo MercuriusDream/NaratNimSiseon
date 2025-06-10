@@ -8,7 +8,7 @@ from django.http import Http404
 from rest_framework.exceptions import NotFound, PermissionDenied
 from .utils import api_action_wrapper
 from .models import Session, Bill, Speaker, Statement, Party, Category, Subcategory, StatementCategory, VotingRecord
-from .serializers import (SessionSerializer, BillSerializer, SpeakerSerializer,
+from .serializers import (SessionSerializer, SessionListSerializer, BillSerializer, SpeakerSerializer,
                           StatementSerializer, StatementCreateSerializer,
                           PartySerializer, CategorySerializer,
                           VotingRecordSerializer)
