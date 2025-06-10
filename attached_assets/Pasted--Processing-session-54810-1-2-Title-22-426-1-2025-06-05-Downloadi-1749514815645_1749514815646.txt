@@ -1,0 +1,36 @@
+--- Processing session 54810 (1/2) ---
+📄 Title: 제22대 제426회 제1차 국회본회의 (2025년 06월 05일)
+📥 Downloading PDF from: https://record.assembly.go.kr/assembly/viewer/minutes/download/pdf.do?id=54810
+✅ PDF downloaded: temp_files/session_54810_1749514752.pdf
+📄 Extracting text from PDF...
+📖 Processing 46 pages...
+📄 Processed 20/46 pages...
+📄 Processed 40/46 pages...
+✅ Extracted 54285 characters
+🤖 Processing with LLM...
+📋 Bills context: 94 bills found
+2025-06-10 00:19:24,047 - api.tasks - INFO - tasks - process_session_pdf_text - 4502 - 🔄 Processing PDF text for session 54810 (54285 chars)
+2025-06-10 00:19:24,048 - api.tasks - INFO - tasks - clean_pdf_text - 4568 - 📖 Isolated discussion block of 9043 chars (from original 54285).
+2025-06-10 00:19:24,048 - api.tasks - INFO - tasks - clean_pdf_text - 4593 - 🧹 Text cleaning complete. Final length: 8960
+2025-06-10 00:19:24,048 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3047 - 🤖 Starting LLM discovery and segmentation for session: 54810
+2025-06-10 00:19:24,048 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3062 - ✅ Gemini model creation test passed
+2025-06-10 00:19:24,200 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3183 - 🎯 LLM Discovery - Estimated tokens: 5981
+2025-06-10 00:19:24,201 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3184 - 🎯 LLM Discovery - Prompt length: 17945 chars
+2025-06-10 00:19:24,201 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3190 - 🎯 LLM Discovery - Sending request to Gemini...
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3192 - 🎯 LLM Discovery - Received response from Gemini
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3200 - 🎯 LLM Discovery - Response type: <class 'google.generativeai.types.generation_types.GenerateContentResponse'>
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3201 - 🎯 LLM Discovery - Response attributes: ['__class__', '__delattr__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getstate__', '__gt__', '__hash__', '__init__', '__init_subclass__', '__iter__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', '_chunks', '_done', '_error', '_iterator', '_result', 'candidates', 'from_iterator', 'from_response', 'parts', 'prompt_feedback', 'resolve', 'text']
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3209 - 🎯 LLM Discovery - Raw response text type: <class 'str'>
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3210 - 🎯 LLM Discovery - Raw response text length: 2511
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3218 - 🎯 LLM Discovery - Raw response preview: '```json\n{\n  "bills_found": [\n    {\n      "bill_name": "검사징계법 일부개정법률안",\n      "start_index": 164,\n      "end_index": 1132,\n      "main_policy_category": "법행정제도",\n      "policy_subcategories": [\n        "검찰 수사권 강화",\n        "검찰 수사권 축소",\n        "사법 개혁"\n      ],\n      "key_policy_phrases": [\n        "검사 징계 청구 권한 확대",\n        "법무부장관의 징계 청구 가능",\n        "검찰 독립성 침해",\n        "사법 테러"\n      ],\n      "bill_specific_keywords": [\n        "검사징계법",\n        "징계 청구",\n        "법무부장관",\n        "검찰총장"\n      ],\n  '
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3224 - 🎯 LLM Discovery - After strip length: 2511
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3227 - 🎯 LLM Discovery - Removing markdown fences
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3229 - 🎯 LLM Discovery - Split into 3 parts
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3234 - 🎯 LLM Discovery - After fence removal length: 0
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3242 - 🎯 LLM Discovery - Cleaned response preview: ''
+2025-06-10 00:19:30,457 - api.tasks - INFO - tasks - extract_statements_with_llm_discovery - 3243 - 🎯 LLM Discovery - Final response length: 0
+2025-06-10 00:19:30,457 - api.tasks - ERROR - tasks - extract_statements_with_llm_discovery - 3246 - ❌ LLM Discovery - Response text is empty after cleaning
+2025-06-10 00:19:30,458 - api.tasks - WARNING - tasks - process_session_pdf_text - 4517 - No statements were extracted by the LLM discovery process for session 54810
+✅ LLM processing completed
+🗑️ Cleaned up temporary PDF file
+✅ Success: 0 statements created
