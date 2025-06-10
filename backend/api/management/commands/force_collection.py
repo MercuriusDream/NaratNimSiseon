@@ -53,6 +53,9 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 '🚀 Starting FULL data collection (API + PDF)...'))
 
+        # Import Session model at the top of the function
+        from api.models import Session
+        
         start_date = None
         if start_date_str:
             try:
@@ -98,8 +101,7 @@ class Command(BaseCommand):
                 # Since Celery is not available, run the core logic directly
                 self.stdout.write("📥 Fetching sessions from API...")
                 
-                # Import required functions and models directly
-                from api.models import Session
+                # Import required functions and libraries directly
                 import requests
                 import json
                 from datetime import datetime, timedelta
