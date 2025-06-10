@@ -3664,120 +3664,184 @@ def process_extracted_statements_data(statements_data_list,
 
 def extract_statements_with_keyword_fallback(text, session_id, debug=False):
     """
-    Extract statements using keyword patterns when LLM fails.
-    Looks for common bill discussion markers and speaker patterns.
+    Enhanced fallback extraction using bill name-based content matching.
+    First tries bill name-based extraction, then keyword patterns, then discussion sections.
     """
     if not text:
         return []
 
     logger.info(
-        f"🔍 Using keyword-based fallback extraction for session {session_id}")
+        f"🔍 Using enhanced bill name-based fallback extraction for session {session_id}")
 
-    # Procedural text patterns to ignore (these are not bills)
-    procedural_patterns = [
-        r'의장\s+\w+',  # "의장 우원식" etc.
-        r'의사일정\s+제\d+항',  # "의사일정 제1항" etc.
-        r'국회본회의\s+회의록',  # Meeting records
-        r'제\d+회-제\d+차',  # Session numbers
-        r'개의|산회|폐회',  # Opening/closing session words
-    ]
-
-    def is_procedural_text(text_to_check):
-        """Check if text is procedural rather than a bill name"""
-        for pattern in procedural_patterns:
-            if re.search(pattern, text_to_check):
-                return True
-        return False
-
-    # Find bill discussion sections using improved patterns
+    # Get known bills for this session from database
+    known_bill_names = get_session_bill_names(session_id)
+    
+    all_statements = []
+    processed_bill_names = set()
+    
+    # Method 1: Bill name-based content extraction (most accurate)
+    if known_bill_names:
+        logger.info(f"📋 Attempting bill name-based extraction for {len(known_bill_names)} known bills")
+        
+        for bill_name in known_bill_names:
+            try:
+                # Use existing extract_bill_specific_content function
+                bill_content = extract_bill_specific_content(text, bill_name)
+                
+                if bill_content and len(bill_content) > 200:  # Ensure meaningful content
+                    logger.info(f"✅ Found content for bill: {bill_name[:50]}... ({len(bill_content)} chars)")
+                    
+                    # Extract statements from this bill's content
+                    statements_in_bill = process_single_segment_for_statements_with_splitting(
+                        bill_content, session_id, bill_name, debug)
+                    
+                    for stmt_data in statements_in_bill:
+                        stmt_data['associated_bill_name'] = bill_name
+                    
+                    all_statements.extend(statements_in_bill)
+                    processed_bill_names.add(bill_name)
+                else:
+                    logger.info(f"⚠️ No meaningful content found for bill: {bill_name[:50]}...")
+                    
+            except Exception as e:
+                logger.warning(f"Error extracting content for bill '{bill_name}': {e}")
+                continue
+    
+    # Method 2: Enhanced keyword fallback for remaining bills
+    if len(processed_bill_names) < len(known_bill_names):
+        unprocessed_bills = set(known_bill_names) - processed_bill_names
+        logger.info(f"🔍 Using keyword-based search for {len(unprocessed_bills)} remaining bills")
+        
+        for bill_name in unprocessed_bills:
+            try:
+                # Create search terms from bill name
+                search_terms = [bill_name.strip()]
+                
+                # Add variations
+                if "법률안" in bill_name:
+                    search_terms.append(bill_name.replace("법률안", "").strip())
+                if "일부개정" in bill_name:
+                    search_terms.append(bill_name.replace("일부개정", "").strip())
+                if "(" in bill_name:
+                    core_name = bill_name.split("(")[0].strip()
+                    search_terms.append(core_name)
+                
+                # Find mentions and extract surrounding content
+                for search_term in search_terms:
+                    if len(search_term) > 5:  # Only meaningful search terms
+                        term_pos = text.find(search_term)
+                        if term_pos != -1:
+                            # Extract content around the mention
+                            start_pos = max(0, term_pos - 1000)
+                            end_pos = min(len(text), term_pos + 8000)
+                            
+                            # Look for natural break points
+                            segment_text = text[start_pos:end_pos]
+                            
+                            # Find next bill or section boundary
+                            next_bill_patterns = ["○", "의안번호", "제*항"]
+                            for pattern in next_bill_patterns:
+                                pattern_pos = segment_text.find(pattern, 1000)
+                                if pattern_pos != -1:
+                                    segment_text = segment_text[:pattern_pos]
+                                    break
+                            
+                            if len(segment_text) > 500:  # Ensure meaningful content
+                                logger.info(f"✅ Found keyword-based content for: {bill_name[:50]}... ({len(segment_text)} chars)")
+                                
+                                statements_in_bill = process_single_segment_for_statements_with_splitting(
+                                    segment_text, session_id, bill_name, debug)
+                                
+                                for stmt_data in statements_in_bill:
+                                    stmt_data['associated_bill_name'] = bill_name
+                                
+                                all_statements.extend(statements_in_bill)
+                                processed_bill_names.add(bill_name)
+                                break  # Found content for this bill, move to next
+                            
+            except Exception as e:
+                logger.warning(f"Error in keyword search for bill '{bill_name}': {e}")
+                continue
+    
+    # Method 3: Pattern-based discovery for additional bills
+    logger.info("🔍 Searching for additional bills using pattern matching")
+    
     bill_patterns = [
         r'(?:^|\n)\s*(\d+)\.\s*([^○\n]{15,150}법률안[^○\n]*)',  # "번호. ...법률안" pattern
         r'의안번호\s*(\d+)[^○]*?([^○\n]{10,80}법률안[^○\n]*)',  # "의안번호 XXXX ...법률안" pattern
         r'(?:^|\n)\s*(\d+)\.\s*([^○\n]{15,150}(?:특별검사|특검)[^○\n]*)',  # Special prosecutor bills
     ]
-
-    bill_segments = []
+    
+    discovered_bills = []
     for pattern in bill_patterns:
         matches = list(re.finditer(pattern, text, re.DOTALL | re.MULTILINE))
         for match in matches:
-            start_pos = match.start()
-            bill_name = match.group(2).strip() if len(
-                match.groups()) > 1 else match.group(1).strip()
-
-            # Filter out procedural text and very short names
-            if (len(bill_name) > 15 and not is_procedural_text(bill_name)
-                    and ('법률안' in bill_name or '특별검사' in bill_name
-                         or '특검' in bill_name)):
-
-                # Clean up the bill name
-                bill_name = re.sub(r'^[\d\.\s]+', '',
-                                   bill_name)  # Remove leading numbers
-                bill_name = bill_name.strip()
-
-                if len(bill_name) > 10:  # Final length check
-                    bill_segments.append({
-                        'start_pos': start_pos,
-                        'bill_name': bill_name[:100]  # Limit length
-                    })
-
-    # Sort by position and remove overlaps
-    bill_segments.sort(key=lambda x: x['start_pos'])
-
-    # Remove duplicate or very similar bill names
-    unique_segments = []
-    seen_names = set()
-    for segment in bill_segments:
-        bill_name_key = segment['bill_name'][:50].lower(
-        )  # Use first 50 chars for comparison
-        if bill_name_key not in seen_names:
-            seen_names.add(bill_name_key)
-            unique_segments.append(segment)
-
-    all_statements = []
-
-    if unique_segments:
-        logger.info(
-            f"Found {len(unique_segments)} valid bill sections using keywords (filtered from {len(bill_segments)} candidates)"
-        )
-
-        for i, segment in enumerate(unique_segments):
-            start_pos = segment['start_pos']
-            end_pos = unique_segments[i + 1]['start_pos'] if i + 1 < len(
-                unique_segments) else len(text)
-
+            bill_name = match.group(2).strip() if len(match.groups()) > 1 else match.group(1).strip()
+            bill_name = re.sub(r'^[\d\.\s]+', '', bill_name).strip()
+            
+            if (len(bill_name) > 10 and 
+                bill_name not in processed_bill_names and
+                ('법률안' in bill_name or '특별검사' in bill_name or '특검' in bill_name)):
+                
+                discovered_bills.append({
+                    'name': bill_name[:100],
+                    'start_pos': match.start()
+                })
+    
+    # Process discovered bills
+    if discovered_bills:
+        logger.info(f"📋 Found {len(discovered_bills)} additional bills via pattern matching")
+        discovered_bills.sort(key=lambda x: x['start_pos'])
+        
+        for i, bill_info in enumerate(discovered_bills):
+            start_pos = bill_info['start_pos']
+            end_pos = discovered_bills[i + 1]['start_pos'] if i + 1 < len(discovered_bills) else len(text)
+            
             segment_text = text[start_pos:end_pos]
-            bill_name = segment['bill_name']
-
-            # Extract statements from this segment
-            statements_in_segment = process_single_segment_for_statements_with_splitting(
-                segment_text, session_id, bill_name, debug)
-
-            for stmt_data in statements_in_segment:
-                stmt_data['associated_bill_name'] = bill_name
-
-            all_statements.extend(statements_in_segment)
-    else:
-        # Process entire text as one segment with improved splitting
-        logger.info(
-            "No valid bill patterns found, processing with general discussion approach"
-        )
-
-        # Try to find at least the discussion sections with ◯ markers
-        if '◯' in text:
-            statements_from_full = process_single_segment_for_statements_with_splitting(
-                text, session_id, "General Discussion", debug)
-
-            for stmt_data in statements_from_full:
-                stmt_data['associated_bill_name'] = "General Discussion"
-
-            all_statements.extend(statements_from_full)
+            bill_name = bill_info['name']
+            
+            if len(segment_text) > 300:  # Ensure meaningful content
+                statements_in_segment = process_single_segment_for_statements_with_splitting(
+                    segment_text, session_id, bill_name, debug)
+                
+                for stmt_data in statements_in_segment:
+                    stmt_data['associated_bill_name'] = bill_name
+                
+                all_statements.extend(statements_in_segment)
+                processed_bill_names.add(bill_name)
+    
+    # Method 4: Final fallback - discussion sections only if we found very little
+    if len(all_statements) < 5:
+        logger.info("🔄 Using discussion section fallback due to low statement count")
+        
+        # Find discussion start marker
+        discussion_start = text.find("개의")
+        if discussion_start == -1:
+            discussion_start = 0
+        
+        # Find first speaker marker
+        first_speaker = text.find("◯", discussion_start)
+        if first_speaker != -1:
+            discussion_text = text[first_speaker:]
+            
+            # Only process if we have meaningful discussion content
+            if len(discussion_text) > 1000 and discussion_text.count("◯") > 3:
+                logger.info(f"📄 Processing discussion section ({len(discussion_text)} chars)")
+                
+                fallback_statements = process_single_segment_for_statements_with_splitting(
+                    discussion_text, session_id, "Session Discussion", debug)
+                
+                for stmt_data in fallback_statements:
+                    stmt_data['associated_bill_name'] = "Session Discussion"
+                
+                all_statements.extend(fallback_statements)
+            else:
+                logger.warning(f"No substantial discussion content found for session {session_id}")
         else:
-            logger.warning(
-                f"No ◯ markers found in text for session {session_id}, cannot extract statements"
-            )
-
+            logger.warning(f"No speaker markers found in session {session_id}")
+    
     logger.info(
-        f"✅ Keyword-based extraction completed: {len(all_statements)} statements"
+        f"✅ Enhanced fallback extraction completed: {len(all_statements)} statements from {len(processed_bill_names)} bills"
     )
     return all_statements
 
