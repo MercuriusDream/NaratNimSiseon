@@ -3225,12 +3225,29 @@ I already know about the following bills. You MUST find the discussion for these
 
         if response_text.startswith("```"):
             logger.info("🎯 LLM Discovery - Removing markdown fences")
-            parts = response_text.split("```", 2)
+            parts = response_text.split("```")
             logger.info(f"🎯 LLM Discovery - Split into {len(parts)} parts")
-            if len(parts) >= 3:
-                response_text = parts[2].strip()
-            elif len(parts) >= 2:
-                response_text = parts[1].strip()
+            
+            # Find the JSON content between fences
+            json_content = ""
+            for i, part in enumerate(parts):
+                part = part.strip()
+                if part and (part.startswith("{") or part.startswith("json\n{") or part.startswith("json {")):
+                    # Remove "json" prefix if present
+                    if part.startswith("json"):
+                        part = part[4:].strip()
+                    json_content = part
+                    break
+            
+            if json_content:
+                response_text = json_content
+            else:
+                # Fallback: take the middle part if we have 3+ parts
+                if len(parts) >= 3:
+                    response_text = parts[1].strip()
+                elif len(parts) >= 2:
+                    response_text = parts[1].strip()
+            
             logger.info(f"🎯 LLM Discovery - After fence removal length: {len(response_text)}")
 
         # Additional cleaning for common LLM response patterns
