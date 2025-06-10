@@ -994,8 +994,7 @@ def category_analytics(request):
     try:
         time_range = request.query_params.get('time_range', 'all')
         categories_param = request.query_params.get('categories')
-
-        # Base queryset for statements
+    
 
 
 
