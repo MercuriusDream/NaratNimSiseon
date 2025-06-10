@@ -2025,197 +2025,20 @@ def process_single_segment_for_statements(bill_text_segment,
 
 
 def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
-    """Use LLM to identify speech segment boundaries and return start/end indices with batch processing."""
-    if not genai or debug:
+    """Simple fallback to marker-based segmentation since LLM discovery handles everything now."""
+    if debug:
+        logger.debug(f"🐛 DEBUG: Would get speech indices for '{bill_name}' (skipping)")
         return []
-
+    
     logger.info(
-        f"🎯 Getting speech segment indices for bill '{bill_name[:50]}...' ({len(text_segment)} chars)"
+        f"🎯 Using marker-based segmentation for bill '{bill_name[:50]}...' ({len(text_segment)} chars)"
     )
-
-    # Batch processing configuration
-    MAX_SEGMENTATION_LENGTH = 50000  # 50k chars per batch
-    BATCH_OVERLAP = 5000  # 5k character overlap between batches
-
-    if len(text_segment) <= MAX_SEGMENTATION_LENGTH:
-        # Single batch processing
-        return _process_single_segmentation_batch(text_segment, bill_name, 0)
-
-    # Multi-batch processing for large texts
-    logger.info(
-        f"🔄 Processing large text in batches (max {MAX_SEGMENTATION_LENGTH} chars per batch)"
-    )
-
-    all_indices = []
-    batch_start = 0
-    batch_count = 0
-
-    while batch_start < len(text_segment):
-        batch_end = min(batch_start + MAX_SEGMENTATION_LENGTH,
-                        len(text_segment))
-        batch_text = text_segment[batch_start:batch_end]
-        batch_count += 1
-
-        logger.info(
-            f"📦 Processing batch {batch_count}: chars {batch_start}-{batch_end}"
-        )
-
-        # Process this batch
-        batch_indices = _process_single_segmentation_batch(
-            batch_text, bill_name, batch_start)
-
-        if batch_indices:
-            # Adjust indices to be relative to the full document
-            adjusted_indices = []
-            for idx_pair in batch_indices:
-                adjusted_start = idx_pair['start'] + batch_start
-                adjusted_end = idx_pair['end'] + batch_start
-
-                # Ensure indices don't exceed the full document length
-                if adjusted_start < len(text_segment) and adjusted_end <= len(
-                        text_segment):
-                    adjusted_indices.append({
-                        'start': adjusted_start,
-                        'end': adjusted_end
-                    })
-
-            all_indices.extend(adjusted_indices)
-            logger.info(
-                f"✅ Batch {batch_count}: Found {len(adjusted_indices)} speech segments"
-            )
-        else:
-            logger.info(f"⚠️ Batch {batch_count}: No speech segments found")
-
-        # Move to next batch with overlap
-        if batch_end >= len(text_segment):
-            break
-
-        batch_start = batch_end - BATCH_OVERLAP
-
-        # Rate limiting between batches
-        if batch_start < len(text_segment):
-            logger.info("⏳ Resting 3s before next batch...")
-            time.sleep(3)
-
-    # Remove overlapping segments and sort by start position
-    deduplicated_indices = _deduplicate_speech_segments(all_indices)
-
-    logger.info(
-        f"🎉 Batch processing complete: {len(deduplicated_indices)} total speech segments from {batch_count} batches"
-    )
-    return deduplicated_indices
-
-
-def _process_single_segmentation_batch(text_segment, bill_name, offset):
-    """Process a single text segment for speech segmentation indices using LLM."""
-    global client
     
-    if not client:
-        logger.warning("Gemini client not available, using fallback segmentation")
-        return _fallback_segmentation_with_markers(text_segment, offset)
-    
-    # Estimate tokens for rate limiting
-    estimated_tokens = len(text_segment) // 3 + 500  # Conservative estimate
-    
-    # Check rate limits before making the call
-    if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
-        logger.warning("Rate limit exceeded, using fallback segmentation")
-        return _fallback_segmentation_with_markers(text_segment, offset)
-    
-    try:
-        # Create a focused prompt for speech segmentation
-        prompt = f"""
-당신은 국회 회의록 전문가입니다. 다음 텍스트에서 개별 발언자의 발언 구간을 정확히 식별해주세요.
+    # Use the fallback marker-based approach directly
+    return _fallback_segmentation_with_markers(text_segment, 0)
 
-텍스트:
-{text_segment}
 
-각 발언 구간의 시작과 끝 위치(문자 인덱스)를 JSON 배열로 반환해주세요:
-[
-  {{"start": 시작_인덱스, "end": 끝_인덱스}},
-  {{"start": 시작_인덱스, "end": 끝_인덱스}}
-]
-
-규칙:
-- ◯로 시작하는 발언자 구간만 식별
-- 각 구간은 최소 50자 이상이어야 함
-- 의사진행 발언은 제외
-- JSON만 반환, 다른 설명 없음
-"""
-
-        # Make the API call
-        if GENAI_AVAILABLE and hasattr(client, 'models'):
-            response = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=[prompt],
-                config=types.GenerateContentConfig(
-                    response_mime_type="text/plain",
-                    temperature=0.1,
-                    max_output_tokens=2000
-                )
-            )
-            response_text = response.text
-        elif GENAI_LEGACY_AVAILABLE:
-            model = client.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(prompt)
-            response_text = response.text
-        else:
-            logger.error("No available Gemini API client")
-            return _fallback_segmentation_with_markers(text_segment, offset)
-
-        # Record successful API usage
-        gemini_rate_limiter.record_request(estimated_tokens, success=True)
-
-        # Parse the response
-        if not response_text:
-            logger.warning("Empty response from LLM, using fallback")
-            return _fallback_segmentation_with_markers(text_segment, offset)
-
-        # Clean JSON response
-        response_text = response_text.strip()
-        if response_text.startswith("```json"):
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
-        elif response_text.startswith("```"):
-            response_text = response_text.split("```", 2)[-1].strip()
-
-        try:
-            indices_data = json.loads(response_text)
-            
-            if not isinstance(indices_data, list):
-                logger.warning("LLM response is not a list, using fallback")
-                return _fallback_segmentation_with_markers(text_segment, offset)
-
-            # Process and validate indices
-            speech_indices = []
-            for item in indices_data:
-                if isinstance(item, dict) and 'start' in item and 'end' in item:
-                    start_idx = int(item['start']) + offset
-                    end_idx = int(item['end']) + offset
-                    
-                    # Validate indices
-                    if (0 <= start_idx < end_idx <= len(text_segment) + offset and 
-                        end_idx - start_idx >= 50):  # Minimum segment size
-                        speech_indices.append({
-                            'start': start_idx,
-                            'end': end_idx
-                        })
-
-            if speech_indices:
-                logger.info(f"✅ LLM found {len(speech_indices)} speech segments")
-                return speech_indices
-            else:
-                logger.warning("No valid segments from LLM, using fallback")
-                return _fallback_segmentation_with_markers(text_segment, offset)
-
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.warning(f"Failed to parse LLM response: {e}, using fallback")
-            return _fallback_segmentation_with_markers(text_segment, offset)
-
-    except Exception as e:
-        # Record failed API usage
-        gemini_rate_limiter.record_error("segmentation_error")
-        logger.error(f"LLM segmentation error: {e}, using fallback")
-        return _fallback_segmentation_with_markers(text_segment, offset)
+# Function removed - now using extract_statements_with_llm_discovery for comprehensive processing
 
 
 def _fallback_segmentation_with_markers(text_segment, offset):
