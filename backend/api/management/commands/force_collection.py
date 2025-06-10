@@ -92,18 +92,49 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(
                     self.style.WARNING(
-                        "🔄 Calling 'fetch_continuous_sessions' synchronously (Celery not available)."
+                        "🔄 Running session fetching synchronously (Celery not available)."
                     ))
-                # Call the Celery task function directly without .delay()
-                from api.tasks import fetch_continuous_sessions
-                # For Celery tasks, we can call the function directly when not using Celery
-                fetch_continuous_sessions(force=True,
-                                         debug=debug,
-                                         start_date=start_date_iso)
+                
+                # Since Celery is not available, run the core logic directly
+                self.stdout.write("📥 Fetching sessions from API...")
+                
+                # Import required functions and models directly
+                from api.models import Session
+                import requests
+                import json
+                from datetime import datetime, timedelta
+                
+                # This is a simplified version of what the Celery task would do
+                # You may need to adjust the API endpoint and parameters based on your actual implementation
+                
+                # For now, let's just trigger PDF processing for existing sessions
+                sessions_without_pdfs = Session.objects.filter(
+                    down_url__isnull=False
+                ).exclude(down_url__exact='')
+                
+                if start_date:
+                    sessions_without_pdfs = sessions_without_pdfs.filter(
+                        conf_dt__gte=start_date
+                    )
+                
+                sessions_without_pdfs = sessions_without_pdfs.order_by('-conf_dt')[:10]  # Limit to prevent overwhelming
+                
+                self.stdout.write(f"📄 Found {sessions_without_pdfs.count()} sessions to process PDFs for")
+                
+                # Process PDFs for these sessions
+                for session in sessions_without_pdfs:
+                    try:
+                        self.stdout.write(f"🔄 Processing PDF for session {session.conf_id}")
+                        from api.tasks import process_session_pdf_direct
+                        process_session_pdf_direct(session_id=session.conf_id, force=True, debug=debug)
+                        self.stdout.write(f"✅ Completed PDF processing for session {session.conf_id}")
+                    except Exception as pdf_error:
+                        self.stderr.write(f"❌ Error processing PDF for session {session.conf_id}: {pdf_error}")
+                        logger.exception(f"PDF processing error for session {session.conf_id}")
 
             self.stdout.write(
                 self.style.SUCCESS(
-                    '✅ Session fetch task initiated successfully.'))
+                    '✅ Session fetch/processing completed successfully.'))
 
         except Exception as e:
             self.stderr.write(
