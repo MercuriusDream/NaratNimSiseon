@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import deque
 import google.genai as genai_module
 from google.genai import types as genai_types
+from google.genai.types import Content, Part, GenerateContentConfig, ThinkingConfig
 import re
 
 logger = logging.getLogger(__name__)
@@ -300,6 +301,8 @@ def initialize_gemini():
     try:
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
             try:
+                from google.genai import Client
+                from google.genai.types import Content, Part, GenerateContentConfig, ThinkingConfig
                 client = Client(api_key=settings.GEMINI_API_KEY)
                 model_name = 'gemini-2.5-flash-preview-05-20'
                 # Minimal status check with a basic prompt
@@ -364,17 +367,17 @@ def check_gemini_api_status():
     if not client or not model_name:
         return ("error", "Gemini API not initialized")
     try:
-        from genai import types as genai_types
+        from google.genai.types import Content, Part, GenerateContentConfig, ThinkingConfig
         contents = [
-            genai_types.Content(
+            Content(
                 role="user",
-                parts=[genai_types.Part.from_text(text="Hello")],
+                parts=[Part.from_text(text="Hello")],
             ),
         ]
-        generate_content_config = genai_types.GenerateContentConfig(
-            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+        generate_content_config = GenerateContentConfig(
+            thinking_config=ThinkingConfig(thinking_budget=0),
             response_mime_type="text/plain",
-            system_instruction=[genai_types.Part.from_text(text="Status check")],
+            system_instruction=[Part.from_text(text="Status check")],
         )
         stream = client.models.generate_content_stream(
             model=model_name,
