@@ -38,8 +38,8 @@ class Command(BaseCommand):
             if use_celery:
                 self.stdout.write("🚀 Running with Celery (asynchronous)")
                 try:
-                    from api.tasks import fetch_latest_sessions
-                    fetch_latest_sessions.delay(force=force, debug=debug)
+                    from api.tasks import fetch_continuous_sessions
+                    fetch_continuous_sessions.delay(force=force, debug=debug)
                     self.stdout.write(
                         self.style.SUCCESS('✅ Data collection task queued successfully')
                     )
@@ -53,7 +53,7 @@ class Command(BaseCommand):
             if not use_celery:
                 self.stdout.write("🔄 Celery not available, running synchronously")
                 try:
-                    # Import and run the direct version
+                    # Import and run the direct version - same approach as force_collection
                     from api.tasks import fetch_continuous_sessions_direct
                     fetch_continuous_sessions_direct(force=force, debug=debug)
                     self.stdout.write(
