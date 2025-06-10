@@ -3,7 +3,6 @@
 import logging
 from datetime import datetime
 from django.core.management.base import BaseCommand
-import importlib
 
 # Import the utility function to check Celery availability
 from api.tasks import is_celery_available
@@ -12,27 +11,7 @@ from api.models import Session
 logger = logging.getLogger(__name__)
 
 
-def get_raw_task_function(module_name, function_name):
-    """
-    Safely imports a module and retrieves a function object,
-    bypassing Celery's proxy to get the original function.
-    """
-    try:
-        tasks_module = importlib.import_module(module_name)
-        func_proxy = getattr(tasks_module, function_name)
 
-        # If the function is a Celery task, it might be wrapped.
-        # The __wrapped__ attribute holds the original function.
-        if hasattr(func_proxy, '__wrapped__'):
-            return func_proxy.__wrapped__
-
-        # If not wrapped, return the object itself (it might be a regular function)
-        return func_proxy
-    except (ImportError, AttributeError) as e:
-        logger.error(
-            f"Could not load function '{function_name}' from '{module_name}': {e}"
-        )
-        return None
 
 
 class Command(BaseCommand):
@@ -118,19 +97,19 @@ class Command(BaseCommand):
                     self.style.WARNING(
                         "🔄 Calling 'fetch_continuous_sessions' synchronously (Celery not available)."
                     ))
-                # **FIX: Directly get and call the raw function**
-                raw_func = get_raw_task_function('api.tasks',
-                                                 'fetch_continuous_sessions')
-                if raw_func:
-                    # The raw function is unbound, so the first argument 'self' must be None
-                    raw_func(self=None,
-                             force=True,
-                             debug=debug,
-                             start_date=start_date_iso)
+                # **FIX: Import and call the function directly**
+                from api.tasks import fetch_continuous_sessions
+                # Get the actual function, not the Celery wrapper
+                if hasattr(fetch_continuous_sessions, '__wrapped__'):
+                    actual_func = fetch_continuous_sessions.__wrapped__
                 else:
-                    raise RuntimeError(
-                        "Could not find the synchronous version of 'fetch_continuous_sessions'."
-                    )
+                    actual_func = fetch_continuous_sessions
+                
+                # Call the function directly with self=None for unbound method
+                actual_func(self=None,
+                           force=True,
+                           debug=debug,
+                           start_date=start_date_iso)
 
             self.stdout.write(
                 self.style.SUCCESS(
@@ -185,15 +164,12 @@ class Command(BaseCommand):
         else:
             self.stdout.write(
                 self.style.WARNING("🔄 Running tasks synchronously."))
-            # **FIX: Pre-load the raw function to avoid repeated lookups**
-            raw_pdf_processor = get_raw_task_function('api.tasks',
-                                                      'process_session_pdf')
-            if not raw_pdf_processor:
-                self.stderr.write(
-                    self.style.ERROR(
-                        "❌ Could not load the PDF processing function. Aborting."
-                    ))
-                return
+            # **FIX: Import the function directly and get the unwrapped version**
+            from api.tasks import process_session_pdf
+            if hasattr(process_session_pdf, '__wrapped__'):
+                raw_pdf_processor = process_session_pdf.__wrapped__
+            else:
+                raw_pdf_processor = process_session_pdf
 
         for i, session in enumerate(sessions_to_process):
             self.stdout.write(
@@ -209,7 +185,7 @@ class Command(BaseCommand):
                         f"✅ Queued PDF processing task for session {session.conf_id}"
                     )
                 else:
-                    # **FIX: Call the pre-loaded raw function**
+                    # **FIX: Call the unwrapped function directly**
                     raw_pdf_processor(self=None,
                                       session_id=session.conf_id,
                                       force=True,
