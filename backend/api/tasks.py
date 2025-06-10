@@ -2,7 +2,7 @@ import requests
 import pdfplumber
 from celery import shared_task
 from django.conf import settings
-from .models import Session, Bill, Speaker, Statement, VotingRecord, Party  # Added Party import to fix NameError
+from .models import Session, Bill, Speaker, Statement, VotingRecord, Party, Category, Subcategory, BillCategoryMapping, BillSubcategoryMapping
 from celery.exceptions import MaxRetriesExceededError
 from requests.exceptions import RequestException
 import logging
@@ -2388,7 +2388,7 @@ def process_session_pdf_direct(session_id=None, force=False, debug=False):
         bills_for_session = get_session_bill_names(session_id)
 
         # Process the PDF text for statements
-        process_pdf_text_for_statements(
+        process_session_pdf_text(
             full_text,
             session_id,
             session,
@@ -2695,6 +2695,33 @@ def _execute_batch_analysis(batch_model,
                 return []
 
             results = []
+            # --- BEGIN: DB Policy Category Attachment ---
+            # Try to fetch the Bill object for bill_name (if available)
+            bill_obj = None
+            main_policy_category = None
+            policy_subcategories = []
+            if bill_name:
+                try:
+                    from .models import Bill
+                    bill_obj = Bill.objects.filter(
+                        bill_nm__icontains=bill_name).order_by(
+                            '-created_at').first()
+                    if bill_obj:
+                        # Main policy category (list of names, highest confidence first)
+                        main_policy_category = list(
+                            bill_obj.category_mappings.filter(is_primary=True).
+                            order_by('-confidence_score').values_list(
+                                'category__name', flat=True))
+                        # Policy subcategories (list of names, highest relevance first)
+                        policy_subcategories = list(
+                            bill_obj.subcategory_mappings.order_by(
+                                '-relevance_score').values_list(
+                                    'subcategory__name', flat=True))
+                except Exception as cat_exc:
+                    logger.warning(
+                        f"Could not fetch policy categories for bill '{bill_name}': {cat_exc}"
+                    )
+            # --- END: DB Policy Category Attachment ---
             for i, analysis_json in enumerate(analysis_array):
                 if not isinstance(analysis_json, dict):
                     continue
@@ -2729,6 +2756,19 @@ def _execute_batch_analysis(batch_model,
 
                     for title in titles_to_remove:
                         speaker_name = speaker_name.replace(title, '').strip()
+
+                # --- Attach DB categories/subcategories to result ---
+                result = {
+                    **analysis_json,
+                    'speaker_name': speaker_name,
+                    'speech_content': speech_content,
+                    'segment_index': batch_start_index + i,
+                }
+                if main_policy_category is not None:
+                    result['main_policy_category'] = main_policy_category
+                if policy_subcategories:
+                    result['policy_subcategories'] = policy_subcategories
+                results.append(result)
 
                 # Validate speaker
                 is_real_member = speaker_name in assembly_members if assembly_members and speaker_name else is_valid_member
@@ -3175,14 +3215,11 @@ I already know about the following bills. You MUST find the discussion for these
                     if existing_bill:
                         update_bill_policy_data(existing_bill, segment)
                 except Exception as e:
-                    logger.warning(
+                    logger.error(
                         f"Could not update policy data for known bill '{bill_name}': {e}"
                     )
 
             segment_text = full_text[start:end]
-            logger.info(
-                f"--- Processing segment for: '{bill_name}' (Chars {start}-{end}) ---"
-            )
 
             statements_in_segment = extract_statements_for_bill_segment(
                 segment_text, session_id, bill_name, debug)
@@ -4321,15 +4358,12 @@ def create_placeholder_bill(session_obj, title, bill_no=None):
             'proposer': None,  # Proposer is unknown from PDF agenda
         })
     if created:
+        pass
         # Only log the rightmost party in the chain
-        rightmost_party = title.split('/')[-1]
-        logger.info(
-            f"✨ Created placeholder bill for: '{rightmost_party[:60]}...'")
-
-    return bill
 
 
 def process_session_pdf_text(
+        full_text,
         session_id,
         session_obj,
         bills_context_str,  # Deprecated
@@ -4363,6 +4397,18 @@ def process_session_pdf_text(
         f"✅ Extracted {len(statements_data)} statements in total for session {session_id}"
     )
     process_extracted_statements_data(statements_data, session_obj, debug)
+
+
+def process_pdf_text_for_statements(full_text,
+                                    session_id,
+                                    session_obj,
+                                    bills_context_str,
+                                    bill_names_list_from_api,
+                                    debug=False):
+    """Alias for process_session_pdf_text for future compatibility."""
+    return process_session_pdf_text(full_text, session_id, session_obj,
+                                    bills_context_str,
+                                    bill_names_list_from_api, debug)
 
 
 def clean_pdf_text(text: str) -> str:
