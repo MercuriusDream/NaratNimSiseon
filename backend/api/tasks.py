@@ -1323,17 +1323,18 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                 else:
                     # Call the wrapped function directly to avoid Celery registration issues
                     if hasattr(fetch_session_bills, '__wrapped__'):
-                        fetch_session_bills.__wrapped__(
-                            self=None,
-                            session_id=confer_num,
-                            force=force,
-                            debug=debug)
+                        fetch_session_bills.__wrapped__(self=None,
+                                                        session_id=confer_num,
+                                                        force=force,
+                                                        debug=debug)
                     else:
                         fetch_session_bills(session_id=confer_num,
                                             force=force,
                                             debug=debug)
             except Exception as bills_error:
-                logger.error(f"Error fetching bills for session {confer_num}: {bills_error}")
+                logger.error(
+                    f"Error fetching bills for session {confer_num}: {bills_error}"
+                )
 
             # 2. Process the PDF if a URL exists.
             if session_obj.down_url:
@@ -1348,7 +1349,9 @@ def process_sessions_data(sessions_data, force=False, debug=False):
                                                    force=force,
                                                    debug=debug)
                 except Exception as pdf_error:
-                    logger.error(f"Error processing PDF for session {confer_num}: {pdf_error}")
+                    logger.error(
+                        f"Error processing PDF for session {confer_num}: {pdf_error}"
+                    )
             else:
                 logger.info(
                     f"No PDF URL for session {confer_num}, skipping PDF processing."
@@ -2108,7 +2111,9 @@ def _process_single_segmentation_batch(text_segment, bill_name, offset):
         return []
 
 
-def fetch_continuous_sessions_direct(force=False, debug=False, start_date=None):
+def fetch_continuous_sessions_direct(force=False,
+                                     debug=False,
+                                     start_date=None):
     """
     Direct (non-Celery) version of fetch_continuous_sessions for management commands.
     """
@@ -2117,7 +2122,8 @@ def fetch_continuous_sessions_direct(force=False, debug=False, start_date=None):
     )
 
     try:
-        if not hasattr(settings, 'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
+        if not hasattr(settings,
+                       'ASSEMBLY_API_KEY') or not settings.ASSEMBLY_API_KEY:
             logger.error("❌ ASSEMBLY_API_KEY not configured")
             raise ValueError("ASSEMBLY_API_KEY not configured")
 
@@ -2127,12 +2133,17 @@ def fetch_continuous_sessions_direct(force=False, debug=False, start_date=None):
             try:
                 start_datetime = datetime.fromisoformat(start_date)
             except ValueError:
-                logger.error(f"Invalid start_date format: {start_date}. Expected ISO format (YYYY-MM-DD).")
+                logger.error(
+                    f"Invalid start_date format: {start_date}. Expected ISO format (YYYY-MM-DD)."
+                )
                 return
-            logger.info(f"📅 Continuing from date: {start_datetime.strftime('%Y-%m')}")
+            logger.info(
+                f"📅 Continuing from date: {start_datetime.strftime('%Y-%m')}")
         else:
             start_datetime = datetime.now()
-            logger.info(f"📅 Starting from current date: {start_datetime.strftime('%Y-%m')}")
+            logger.info(
+                f"📅 Starting from current date: {start_datetime.strftime('%Y-%m')}"
+            )
 
         current_date = start_datetime
         sessions_found_in_period = False
@@ -2161,26 +2172,39 @@ def fetch_continuous_sessions_direct(force=False, debug=False, start_date=None):
                 data = response.json()
 
                 if debug:
-                    logger.debug(f"🐛 DEBUG: API Response status for {conf_date_str}: {response.status_code}")
+                    logger.debug(
+                        f"🐛 DEBUG: API Response status for {conf_date_str}: {response.status_code}"
+                    )
 
-                sessions_data = extract_sessions_from_response(data, debug=debug)
+                sessions_data = extract_sessions_from_response(data,
+                                                               debug=debug)
 
                 if sessions_data:
                     sessions_found_in_period = True
-                    logger.info(f"✅ Found {len(sessions_data)} session items for {conf_date_str}")
-                    process_sessions_data(sessions_data, force=force, debug=debug)
+                    logger.info(
+                        f"✅ Found {len(sessions_data)} session items for {conf_date_str}"
+                    )
+                    process_sessions_data(sessions_data,
+                                          force=force,
+                                          debug=debug)
                     if not debug: time.sleep(1)
                 else:
                     logger.info(f"❌ No sessions found for {conf_date_str}")
                     if months_back > 6 and not sessions_found_in_period:
-                        logger.info("🛑 No sessions found in recent ~6 months of search, stopping.")
+                        logger.info(
+                            "🛑 No sessions found in recent ~6 months of search, stopping."
+                        )
                         break
             except requests.exceptions.RequestException as e:
-                logger.warning(f"⚠️ Request error fetching {conf_date_str}: {e}")
+                logger.warning(
+                    f"⚠️ Request error fetching {conf_date_str}: {e}")
             except json.JSONDecodeError as e:
-                logger.warning(f"⚠️ JSON parsing error for {conf_date_str}: {e}")
+                logger.warning(
+                    f"⚠️ JSON parsing error for {conf_date_str}: {e}")
             except Exception as e:
-                logger.warning(f"⚠️ Unexpected error fetching/processing {conf_date_str}: {e}")
+                logger.warning(
+                    f"⚠️ Unexpected error fetching/processing {conf_date_str}: {e}"
+                )
                 if debug:
                     logger.exception("Full traceback for error during loop:")
             continue
@@ -2192,12 +2216,15 @@ def fetch_continuous_sessions_direct(force=False, debug=False, start_date=None):
         if sessions_found_in_period:
             logger.info("🎉 Continuous session fetch attempt completed.")
         else:
-            logger.info("ℹ️ No new sessions found during this continuous fetch period.")
+            logger.info(
+                "ℹ️ No new sessions found during this continuous fetch period."
+            )
 
     except ValueError as ve:
         logger.error(f"Configuration error: {ve}")
     except Exception as e:
-        logger.error(f"❌ Critical error in fetch_continuous_sessions_direct: {e}")
+        logger.error(
+            f"❌ Critical error in fetch_continuous_sessions_direct: {e}")
         logger.exception("Full traceback for critical error:")
 
 
@@ -2881,12 +2908,12 @@ def _attempt_json_repair(response_text):
     try:
         # Remove any trailing incomplete content after the last complete object
         response_text = response_text.strip()
-        
+
         # Find the last complete closing brace
         last_brace = response_text.rfind('}')
         if last_brace == -1:
             return None
-            
+
         # Check if we have proper array closing
         remaining = response_text[last_brace + 1:].strip()
         if remaining and not remaining.startswith(']'):
@@ -2894,24 +2921,24 @@ def _attempt_json_repair(response_text):
             last_bracket = response_text.rfind(']')
             if last_bracket > last_brace:
                 last_brace = last_bracket
-        
+
         # Truncate to last complete structure
         truncated = response_text[:last_brace + 1]
-        
+
         # Try to close any unclosed arrays or objects
         open_braces = truncated.count('{') - truncated.count('}')
         open_brackets = truncated.count('[') - truncated.count(']')
-        
+
         # Add missing closing characters
         for _ in range(open_braces):
             truncated += '}'
         for _ in range(open_brackets):
             truncated += ']'
-            
+
         # Validate the structure
         json.loads(truncated)
         return truncated
-        
+
     except Exception as e:
         logger.debug(f"JSON repair attempt failed: {e}")
         return None
@@ -2934,60 +2961,67 @@ def extract_statements_with_llm_discovery(full_text,
     # Load policy categories from code.txt file for enhanced analysis
     policy_categories_from_db = {}
     try:
-        logger.info("📁 Loading policy categories from: ../Additional_Files/code.txt")
-        
+        logger.info(
+            "📁 Loading policy categories from: ../Additional_Files/code.txt")
+
         code_file_path = Path("../Additional_Files/code.txt")
         if not code_file_path.exists():
             code_file_path = Path("Additional_Files/code.txt")
-        
+
         if code_file_path.exists():
             with open(code_file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
-            
+
             # Skip header line
             lines = lines[1:] if lines else []
-            
+
             current_categories = {}
             for line in lines:
                 line = line.strip()
                 if not line:
                     continue
-                
+
                 try:
                     parts = line.split(',')
                     if len(parts) >= 4:
                         main_category = parts[0].strip()
                         sub_category = parts[1].strip()
                         main_description = parts[2].strip()
-                        
+
                         if main_category not in current_categories:
                             current_categories[main_category] = {
                                 'description': main_description,
                                 'subcategories': []
                             }
-                        
-                        if sub_category and sub_category not in current_categories[main_category]['subcategories']:
-                            current_categories[main_category]['subcategories'].append(sub_category)
-                
+
+                        if sub_category and sub_category not in current_categories[
+                                main_category]['subcategories']:
+                            current_categories[main_category][
+                                'subcategories'].append(sub_category)
+
                 except Exception as line_error:
-                    logger.warning(f"Error parsing line: {line[:50]}... - {line_error}")
+                    logger.warning(
+                        f"Error parsing line: {line[:50]}... - {line_error}")
                     continue
-            
+
             policy_categories_from_db = current_categories
-            
+
             # Summary logging
             total_categories = len(policy_categories_from_db)
-            total_subcategories = sum(len(cat['subcategories']) for cat in policy_categories_from_db.values())
-            
+            total_subcategories = sum(
+                len(cat['subcategories'])
+                for cat in policy_categories_from_db.values())
+
             logger.info(f"📊 Category Summary:")
             for cat_name, cat_data in policy_categories_from_db.items():
                 subcat_count = len(cat_data['subcategories'])
                 logger.info(f"  📂 {cat_name}: {subcat_count} subcategories")
-            
+
         else:
-            logger.warning("❌ code.txt file not found, using fallback categories")
+            logger.warning(
+                "❌ code.txt file not found, using fallback categories")
             policy_categories_from_db = {}
-            
+
     except Exception as e:
         logger.warning(f"Could not load policy categories from code.txt: {e}")
         policy_categories_from_db = {}
@@ -3005,17 +3039,20 @@ def extract_statements_with_llm_discovery(full_text,
         subcategory_index = 1
         category_mapping = {}
         subcategory_mapping = {}
-        
+
         for cat_name, cat_data in policy_categories_from_db.items():
             policy_categories_section += f"{category_index}. {cat_name}\n"
             category_mapping[category_index] = cat_name
-            
+
             if cat_data['subcategories']:
-                for subcat in cat_data['subcategories'][:3]:  # Limit to 3 subcategories for brevity
+                for subcat in cat_data[
+                        'subcategories'][:
+                                         3]:  # Limit to 3 subcategories for brevity
                     policy_categories_section += f"  {subcategory_index}. {subcat}\n"
-                    subcategory_mapping[subcategory_index] = (category_index, subcat)
+                    subcategory_mapping[subcategory_index] = (category_index,
+                                                              subcat)
                     subcategory_index += 1
-            
+
             category_index += 1
     else:
         policy_categories_section = """**POLICY CATEGORIES (use index numbers):**
@@ -3028,12 +3065,18 @@ def extract_statements_with_llm_discovery(full_text,
 7. 인권소수자정책
 8. 지역균형정책
 9. 정치정책"""
-        
+
         # Fallback mapping
         category_mapping = {
-            1: "경제정책", 2: "사회정책", 3: "외교안보정책", 4: "법행정제도",
-            5: "과학기술정책", 6: "문화체육정책", 7: "인권소수자정책", 
-            8: "지역균형정책", 9: "정치정책"
+            1: "경제정책",
+            2: "사회정책",
+            3: "외교안보정책",
+            4: "법행정제도",
+            5: "과학기술정책",
+            6: "문화체육정책",
+            7: "인권소수자정책",
+            8: "지역균형정책",
+            9: "정치정책"
         }
         subcategory_mapping = {}
 
@@ -3130,7 +3173,8 @@ I already know about the following bills. You MUST find the discussion for these
             config=types.GenerateContentConfig(
                 response_mime_type="text/plain",
                 temperature=0.1,  # Lower temperature for more consistent JSON
-                max_output_tokens=3000))  # Reduced since we're using compact format
+                max_output_tokens=8000)
+        )  # Reduced since we're using compact format
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
         # Check if response exists and has text
@@ -3175,13 +3219,14 @@ I already know about the following bills. You MUST find the discussion for these
             logger.error(f"❌ JSON decode error in LLM discovery: {json_err}")
             logger.error(
                 f"Raw response (first 500 chars): {response_text[:500]}...")
-            
+
             # Try to fix common JSON issues
             fixed_response = _attempt_json_repair(response_text)
             if fixed_response:
                 try:
                     data = json.loads(fixed_response)
-                    logger.info("✅ Successfully repaired and parsed JSON response")
+                    logger.info(
+                        "✅ Successfully repaired and parsed JSON response")
                 except json.JSONDecodeError:
                     logger.error("❌ JSON repair attempt failed")
                     logger.info("🔄 Falling back to keyword-based extraction.")
@@ -3197,7 +3242,7 @@ I already know about the following bills. You MUST find the discussion for these
             )
             return extract_statements_with_keyword_fallback(
                 full_text, session_id, debug)
-        
+
         # Validate required structure
         if 'bills_found' not in data and 'newly_discovered' not in data:
             logger.error(
@@ -3205,7 +3250,7 @@ I already know about the following bills. You MUST find the discussion for these
             )
             return extract_statements_with_keyword_fallback(
                 full_text, session_id, debug)
-        
+
         # Ensure arrays exist
         if 'bills_found' not in data:
             data['bills_found'] = []
@@ -3219,38 +3264,53 @@ I already know about the following bills. You MUST find the discussion for these
             seg["is_newly_discovered"] = False
             # Resolve category indices to names
             if "category_id" in seg:
-                seg["main_policy_category"] = category_mapping.get(seg["category_id"], "기타")
+                seg["main_policy_category"] = category_mapping.get(
+                    seg["category_id"], "기타")
                 seg["policy_subcategories"] = []
                 for sub_id in seg.get("subcategory_ids", []):
                     if sub_id in subcategory_mapping:
-                        seg["policy_subcategories"].append(subcategory_mapping[sub_id][1])
-            
+                        seg["policy_subcategories"].append(
+                            subcategory_mapping[sub_id][1])
+
             # Convert compact format to full format
             seg["key_policy_phrases"] = seg.get("keywords", [])
-            seg["bill_specific_keywords"] = seg.get("keywords", [])[:3]  # First 3 as specific
-            stance_map = {"P": "progressive", "C": "conservative", "M": "moderate"}
-            seg["policy_stance"] = stance_map.get(seg.get("stance", "M"), "moderate")
+            seg["bill_specific_keywords"] = seg.get(
+                "keywords", [])[:3]  # First 3 as specific
+            stance_map = {
+                "P": "progressive",
+                "C": "conservative",
+                "M": "moderate"
+            }
+            seg["policy_stance"] = stance_map.get(seg.get("stance", "M"),
+                                                  "moderate")
             seg["bill_analysis"] = f"{seg.get('bill_name', '')} 관련 정책"
-            
+
             all_segments.append(seg)
 
         for seg in data.get("newly_discovered", []):
             seg["is_newly_discovered"] = True
             # Resolve category indices to names
             if "category_id" in seg:
-                seg["main_policy_category"] = category_mapping.get(seg["category_id"], "기타")
+                seg["main_policy_category"] = category_mapping.get(
+                    seg["category_id"], "기타")
                 seg["policy_subcategories"] = []
                 for sub_id in seg.get("subcategory_ids", []):
                     if sub_id in subcategory_mapping:
-                        seg["policy_subcategories"].append(subcategory_mapping[sub_id][1])
-            
+                        seg["policy_subcategories"].append(
+                            subcategory_mapping[sub_id][1])
+
             # Convert compact format to full format
             seg["key_policy_phrases"] = seg.get("keywords", [])
             seg["bill_specific_keywords"] = seg.get("keywords", [])[:3]
-            stance_map = {"P": "progressive", "C": "conservative", "M": "moderate"}
-            seg["policy_stance"] = stance_map.get(seg.get("stance", "M"), "moderate")
+            stance_map = {
+                "P": "progressive",
+                "C": "conservative",
+                "M": "moderate"
+            }
+            seg["policy_stance"] = stance_map.get(seg.get("stance", "M"),
+                                                  "moderate")
             seg["bill_analysis"] = f"{seg.get('bill_name', '')} 관련 정책"
-            
+
             all_segments.append(seg)
 
         logger.info(
@@ -3276,15 +3336,19 @@ I already know about the following bills. You MUST find the discussion for these
 
             # Validate segment data
             if not bill_name or end <= start:
-                logger.warning(f"Invalid segment data: bill_name='{bill_name}', start={start}, end={end}")
+                logger.warning(
+                    f"Invalid segment data: bill_name='{bill_name}', start={start}, end={end}"
+                )
                 continue
-                
+
             # Ensure indices are within text bounds
             start = max(0, min(start, len(full_text)))
             end = max(start, min(end, len(full_text)))
-            
+
             if end - start < 50:  # Skip very short segments
-                logger.warning(f"Skipping very short segment for bill '{bill_name}': {end - start} chars")
+                logger.warning(
+                    f"Skipping very short segment for bill '{bill_name}': {end - start} chars"
+                )
                 continue
 
             # Update policy data for known bills as well
@@ -3485,7 +3549,7 @@ def process_extracted_statements_data(statements_data_list,
         """Validate that extracted text is actual statement content, not headers/metadata."""
         if not text or len(text) < 20:
             return False
-            
+
         # Check for header patterns that indicate this is not actual speech
         invalid_patterns = [
             r'^제\d+회-제\d+차',  # Session headers
@@ -3494,15 +3558,15 @@ def process_extracted_statements_data(statements_data_list,
             r'^회의록\s*$',  # Just "record" label
             r'^국회사무처',  # Administrative text
         ]
-        
+
         for pattern in invalid_patterns:
             if re.match(pattern, text.strip(), re.IGNORECASE):
                 return False
-                
+
         # Must contain speaker marker or be substantial content
         if not ('◯' in text or len(text) > 100):
             return False
-            
+
         return True
 
     created_count = 0
@@ -4523,7 +4587,7 @@ def clean_pdf_text(text: str) -> str:
         return ""
 
     original_len = len(text)
-    
+
     # Find meeting start marker
     start_marker_match = re.search(r'\(\d{1,2}시\s*\d{1,2}분\s+개의\)', text)
     if not start_marker_match:
@@ -4533,7 +4597,7 @@ def clean_pdf_text(text: str) -> str:
         start_pos = 0
     else:
         start_pos = start_marker_match.end()  # Start AFTER the opening marker
-    
+
     # Find meeting end markers
     end_marker_patterns = [
         r'\(\d{1,2}시\s*\d{1,2}분\s+산회\)',
@@ -4544,11 +4608,14 @@ def clean_pdf_text(text: str) -> str:
     for pattern in end_marker_patterns:
         end_marker_match = re.search(pattern, text[start_pos:])
         if end_marker_match:
-            end_pos = start_pos + end_marker_match.start()  # End BEFORE the closing marker
+            end_pos = start_pos + end_marker_match.start(
+            )  # End BEFORE the closing marker
             break
 
     discussion_block = text[start_pos:end_pos]
-    logger.info(f"📖 Isolated discussion block of {len(discussion_block)} chars (from original {original_len}).")
+    logger.info(
+        f"📖 Isolated discussion block of {len(discussion_block)} chars (from original {original_len})."
+    )
 
     # Enhanced cleaning patterns
     patterns_to_remove = [
@@ -4562,60 +4629,65 @@ def clean_pdf_text(text: str) -> str:
         r'^국회사무처\s*$',  # Administrative notes
         r'^회의록\s*$',  # Record labels
     ]
-    
+
     cleaned_lines = []
     lines = discussion_block.split('\n')
-    
+
     # Skip initial header/metadata section until we find first speaker
     found_first_speaker = False
-    
+
     for line in lines:
         stripped_line = line.strip()
-        
+
         # Skip empty lines
         if not stripped_line:
             continue
-            
+
         # Remove patterns
         skip_line = False
         for pattern in patterns_to_remove:
             if re.match(pattern, stripped_line, re.IGNORECASE):
                 skip_line = True
                 break
-                
+
         if skip_line:
             continue
-            
+
         # Look for first speaker marker (◯) to start actual content
         if not found_first_speaker:
             if stripped_line.startswith('◯'):
                 found_first_speaker = True
             else:
                 continue  # Skip everything before first speaker
-        
+
         cleaned_lines.append(stripped_line)
-    
+
     final_text = "\n".join(cleaned_lines)
-    final_text = re.sub(r'\n{2,}', '\n', final_text)  # Collapse multiple newlines
-    
-    logger.info(f"🧹 Text cleaning complete. Final length: {len(final_text)} chars. Found first speaker: {found_first_speaker}")
-    
+    final_text = re.sub(r'\n{2,}', '\n',
+                        final_text)  # Collapse multiple newlines
+
+    logger.info(
+        f"🧹 Text cleaning complete. Final length: {len(final_text)} chars. Found first speaker: {found_first_speaker}"
+    )
+
     # Additional validation - ensure we have actual content
     if not found_first_speaker or len(final_text) < 100:
-        logger.warning("⚠️ Cleaned text appears to have no valid speaker content. Using less aggressive cleaning.")
+        logger.warning(
+            "⚠️ Cleaned text appears to have no valid speaker content. Using less aggressive cleaning."
+        )
         # Fallback: just remove obvious headers but keep more content
         fallback_lines = []
         for line in discussion_block.split('\n'):
             stripped = line.strip()
-            if (stripped and 
-                not re.match(r'^제\d+회-제\d+차', stripped) and
-                not re.match(r'^국\s*회\s*본\s*회\s*의', stripped) and
-                not re.match(r'^\d{1,4}\s*$', stripped)):
+            if (stripped and not re.match(r'^제\d+회-제\d+차', stripped)
+                    and not re.match(r'^국\s*회\s*본\s*회\s*의', stripped)
+                    and not re.match(r'^\d{1,4}\s*$', stripped)):
                 fallback_lines.append(stripped)
         final_text = "\n".join(fallback_lines)
         final_text = re.sub(r'\n{2,}', '\n', final_text)
-        logger.info(f"🔄 Using fallback cleaning. Length: {len(final_text)} chars")
-    
+        logger.info(
+            f"🔄 Using fallback cleaning. Length: {len(final_text)} chars")
+
     return final_text
 
 
