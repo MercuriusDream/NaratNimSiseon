@@ -188,6 +188,7 @@ class GeminiRateLimiter:
 # Global instances
 gemini_rate_limiter = GeminiRateLimiter()
 client = None  # Will be initialized by initialize_gemini()
+model = None  # Deprecated - use client instead
 
 
 def initialize_gemini():
@@ -195,12 +196,14 @@ def initialize_gemini():
     global client
     try:
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-            # Use the new genai.Client
+            # Use the new genai.Client structure
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
             # Perform a simple status check
-            model_name = "gemini-1.5-flash-latest"
-            response = client.models.generate_content(model=model_name,
-                                                      contents=["Hello"])
+            model_name = "gemini-2.0-flash"
+            response = client.models.generate_content(
+                model=model_name,
+                contents=["Hello"]
+            )
             logger.info(
                 f"✅ Gemini API configured successfully with '{model_name}'. Status check succeeded. Preview: {response.text[:100]}"
             )
@@ -230,13 +233,13 @@ initialize_gemini()
 
 
 def _call_gemini_api(prompt: str,
-                     model_name: str = "gemini-1.5-flash-latest",
+                     model_name: str = "gemini-2.0-flash",
                      system_instruction: str = None,
                      response_mime_type: str = "text/plain",
                      max_retries: int = 2,
                      timeout: int = 180) -> str | dict | None:
     """
-    A unified, robust function to call the Gemini API.
+    A unified, robust function to call the Gemini API using new google.genai structure.
     Handles rate limiting, error handling, retries, and JSON parsing.
     """
     global client
@@ -251,21 +254,24 @@ def _call_gemini_api(prompt: str,
         return None
 
     # Construct generation configuration
-    gen_config = types.GenerateContentConfig(
+    config = types.GenerateContentConfig(
         response_mime_type=response_mime_type,
-        temperature=
-        0.2,  # Lower temperature for more deterministic/factual output
-        top_p=0.8,
-        top_k=40,
-        max_output_tokens=8192)
+        temperature=0.2,  # Lower temperature for more deterministic/factual output
+        max_output_tokens=8192
+    )
+
+    # Add system instruction if provided
+    if system_instruction:
+        config.system_instruction = system_instruction
 
     for attempt in range(max_retries + 1):
         try:
-            # Make the API call
-            response = client.models.generate_content(model=model_name,
-                                                      contents=[prompt],
-                                                      config=gen_config,
-                                                      timeout=timeout)
+            # Make the API call using new structure
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[prompt],
+                config=config
+            )
 
             # Record successful request
             gemini_rate_limiter.record_request(estimated_tokens, success=True)
@@ -478,10 +484,12 @@ def check_gemini_api_status():
         return "error", "Gemini API client not initialized"
 
     try:
-        # Test with a minimal prompt
+        # Test with a minimal prompt using new structure
         response = client.models.generate_content(
-            model="gemini-1.5-flash-latest", contents=["Hello"])
-        return "success", f"API is responding. Model: {response.model}"
+            model="gemini-2.0-flash", 
+            contents=["Hello"]
+        )
+        return "success", f"API is responding. Response: {response.text[:50]}..."
     except Exception as e:
         return "error", f"API Error: {str(e)}"
 
@@ -2293,8 +2301,10 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
                                           session_id,
                                           bill_name,
                                           debug=False):
-    """Batch analyze multiple speech segments with LLM - 20 statements per request."""
-    if not genai:
+    """Batch analyze multiple speech segments with LLM - 20 statements per request using new google.genai structure."""
+    global client
+    
+    if not client:
         logger.warning(
             "❌ Gemini not available. Cannot analyze speech segments.")
         return []
@@ -2303,19 +2313,11 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
         return []
 
     logger.info(
-        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.5-flash-preview-04-17"
+        f"🚀 Batch analyzing {len(speech_segments)} speech segments for bill '{bill_name[:50]}...' using gemini-2.0-flash"
     )
 
     # Get assembly members once for the entire batch
     assembly_members = get_all_assembly_members()
-
-    # Use gemini-2.5-flash-preview-04-17 for batch processing
-    try:
-        batch_model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
-    except Exception as e:
-        logger.error(
-            f"Failed to initialize gemini-2.5-flash-preview-04-17: {e}")
-        return []
 
     results = []
     batch_size = 20  # Process 20 statements per request
@@ -2343,7 +2345,7 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
         # Create batch prompt for 20 statements
         try:
             batch_results = analyze_batch_statements_single_request(
-                batch_model, batch_segments, bill_name, assembly_members,
+                batch_segments, bill_name, assembly_members,
                 estimated_tokens, batch_start)
             results.extend(batch_results)
 
@@ -2369,11 +2371,11 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
     return sorted(results, key=lambda x: x.get('segment_index', 0))
 
 
-def analyze_batch_statements_single_request(batch_model, batch_segments,
+def analyze_batch_statements_single_request(batch_segments,
                                             bill_name, assembly_members,
                                             estimated_tokens,
                                             batch_start_index):
-    """Analyze up to 20 statements in a single API request with improved batching."""
+    """Analyze up to 20 statements in a single API request with improved batching using new google.genai structure."""
     if not batch_segments:
         return []
 
@@ -2431,7 +2433,7 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
     max_prompt_length = 15000  # Conservative limit
     if len(segments_text) > max_prompt_length:
         # Process in smaller sub-batches
-        return _process_large_batch_in_chunks(batch_model, cleaned_segments,
+        return _process_large_batch_in_chunks(cleaned_segments,
                                               bill_name, assembly_members,
                                               estimated_tokens,
                                               batch_start_index)
@@ -2465,7 +2467,7 @@ def analyze_batch_statements_single_request(batch_model, batch_segments,
 - 발언자명에서 직책 제거
 - JSON 배열만 응답"""
 
-    return _execute_batch_analysis(batch_model, prompt, cleaned_segments,
+    return _execute_batch_analysis(prompt, cleaned_segments,
                                    processed_segments, assembly_members,
                                    batch_start_index, bill_name)
 
@@ -2495,20 +2497,33 @@ def _process_large_batch_in_chunks(batch_model, segments, bill_name,
     return all_results
 
 
-def _execute_batch_analysis(batch_model,
-                            prompt,
+def _execute_batch_analysis(prompt,
                             cleaned_segments,
                             original_segments,
                             assembly_members,
                             batch_start_index,
                             bill_name,
                             max_retries=3):
-    """Execute the actual batch analysis request with retry logic for API errors."""
+    """Execute the actual batch analysis request with retry logic for API errors using new google.genai structure."""
+    global client
+    
+    if not client:
+        logger.error("Gemini client not initialized for batch analysis.")
+        return []
 
     for attempt in range(max_retries + 1):
         start_time = time.time()
         try:
-            response = batch_model.generate_content(prompt)
+            # Use new google.genai structure
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=[prompt],
+                config=types.GenerateContentConfig(
+                    response_mime_type="text/plain",
+                    temperature=0.2,
+                    max_output_tokens=8192
+                )
+            )
 
             processing_time = time.time() - start_time
             logger.info(
@@ -2990,15 +3005,27 @@ I already know about the following bills. You MUST find the discussion for these
 }}
 """
     try:
-        segmentation_model = genai.GenerativeModel(
-            'gemini-2.5-flash-preview-04-17')
+        global client
+        if not client:
+            logger.error("Gemini client not initialized for LLM discovery.")
+            return []
+            
         estimated_tokens = len(prompt) // 3
 
         if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
             logger.error("Rate limit timeout for LLM discovery. Aborting.")
             return []
 
-        response = segmentation_model.generate_content(prompt)
+        # Use new google.genai structure
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[prompt],
+            config=types.GenerateContentConfig(
+                response_mime_type="text/plain",
+                temperature=0.2,
+                max_output_tokens=8192
+            )
+        )
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
         # Strip markdown fences if present
