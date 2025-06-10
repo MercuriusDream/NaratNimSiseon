@@ -105,8 +105,8 @@ class Command(BaseCommand):
                 else:
                     actual_func = fetch_continuous_sessions
                 
-                # Call the function directly with self=None for unbound method
-                actual_func(self=None,
+                # Call the function directly - pass None as first positional argument for 'self'
+                actual_func(None,
                            force=True,
                            debug=debug,
                            start_date=start_date_iso)
@@ -186,7 +186,7 @@ class Command(BaseCommand):
                     )
                 else:
                     # **FIX: Call the unwrapped function directly**
-                    raw_pdf_processor(self=None,
+                    raw_pdf_processor(None,
                                       session_id=session.conf_id,
                                       force=True,
                                       debug=debug)
