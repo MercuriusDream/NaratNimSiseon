@@ -2947,7 +2947,7 @@ I already know about the following bills. You MUST find the discussion for these
 
         if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
             logger.error("Rate limit timeout for LLM discovery. Falling back to keyword extraction.")
-            return extract_statements_with_keyword_fallback(cleaned_text, session_id, debug)
+            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
 
         # Use new google.genai structure
         response = client.models.generate_content(
@@ -2963,10 +2963,16 @@ I already know about the following bills. You MUST find the discussion for these
         if response_text.startswith("```"):
             response_text = response_text.split("```", 2)[-1].strip()
 
+        # Print/log the raw LLM response for debugging
+        logger.info(f"🐛 DEBUG: Raw LLM response length: {len(response_text)} chars")
+        logger.info(f"🐛 DEBUG: Raw LLM response (first 1000 chars): {response_text[:1000]}")
+        if len(response_text) > 1000:
+            logger.info(f"🐛 DEBUG: Raw LLM response (last 500 chars): {response_text[-500:]}")
+
         # Check if response is empty or invalid
         if not response_text:
             logger.error("❌ Empty response from LLM discovery. Falling back to keyword extraction.")
-            return extract_statements_with_keyword_fallback(cleaned_text, session_id, debug)
+            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
 
         try:
             data = json.loads(response_text)
@@ -2974,10 +2980,10 @@ I already know about the following bills. You MUST find the discussion for these
             logger.error(f"❌ JSON decode error in LLM discovery: {json_err}")
             logger.error(f"Raw response (first 500 chars): {response_text[:500]}...")
             logger.info("🔄 Falling back to keyword-based extraction.")
-            return extract_statements_with_keyword_fallback(cleaned_text, session_id, debug)
+            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
         if not isinstance(data, dict):
             logger.error("LLM discovery did not return a JSON object. Falling back to keyword extraction.")
-            return extract_statements_with_keyword_fallback(cleaned_text, session_id, debug)
+            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
 
         # Merge the two arrays into one flat list, tagging each entry
         all_segments = []
@@ -3053,7 +3059,7 @@ I already know about the following bills. You MUST find the discussion for these
             f"❌ Critical error during LLM discovery and segmentation: {e}")
         logger.exception("Full traceback for LLM discovery:")
         logger.info("🔄 Falling back to keyword-based extraction due to LLM error.")
-        return extract_statements_with_keyword_fallback(cleaned_text, session_id, debug)
+        return extract_statements_with_keyword_fallback(full_text, session_id, debug)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
