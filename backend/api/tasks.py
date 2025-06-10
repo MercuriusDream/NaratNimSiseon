@@ -403,11 +403,12 @@ initialize_gemini()
 
 def reinitialize_gemini():
     """Reinitialize Gemini if it failed initially"""
-    global genai, model
-    if not genai or not model:
+    global client
+    if not client:
         logger.info("🔄 Attempting to reinitialize Gemini API...")
-        genai, model = initialize_gemini()
-    return genai is not None and model is not None
+        success = initialize_gemini()
+        return success
+    return True
 
 
 def check_gemini_api_status():
