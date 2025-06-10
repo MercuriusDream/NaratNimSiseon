@@ -6,7 +6,7 @@ channel = "stable-24_05"
 packages = ["redis", "xcodebuild", "zlib"]
 
 [deployment]
-run = ["sh", "-c", "cd backend && python manage.py runserver 0.0.0.0:3000"]
+run = ["sh", "-c", "cd backend && python manage.py migrate && python manage.py collectstatic --noinput && python manage.py parse_parties_and_members --force && python manage.py force_collection && python manage.py runserver 0.0.0.0:3000"]
 
 [workflows]
 runButton = "Django Production Server"
