@@ -2634,36 +2634,8 @@ def _execute_batch_analysis(prompt,
     return []
 
 
-def analyze_single_segment_llm_only_with_rate_limit(speech_segment, bill_name,
-                                                    assembly_members,
-                                                    estimated_tokens):
-    """Legacy function - now redirects to batch processing for consistency."""
-    # For single segment, just use batch processing with 1 item
-    batch_model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
-    results = analyze_batch_statements_single_request(batch_model,
-                                                      [speech_segment],
-                                                      bill_name,
-                                                      assembly_members,
-                                                      estimated_tokens, 0)
-    return results[0] if results else None
-
-
-def analyze_single_segment_llm_only(speech_segment, bill_name,
-                                    assembly_members):
-    """Legacy function - calls rate-limited version with estimated tokens."""
-    estimated_tokens = len(speech_segment) // 4 + 500
-    return analyze_single_segment_llm_only_with_rate_limit(
-        speech_segment, bill_name, assembly_members, estimated_tokens)
-
-
-def analyze_speech_segment_with_llm(speech_segment,
-                                    session_id,
-                                    bill_name,
-                                    debug=False):
-    """Legacy single segment analysis - kept for compatibility."""
-    assembly_members = get_all_assembly_members()
-    return analyze_single_segment_llm_only(speech_segment, bill_name,
-                                           assembly_members)
+# Legacy single statement analysis functions removed - all processing now goes through batch analysis
+# to handle rate limits efficiently. Use analyze_speech_segment_with_llm_batch instead.
 
 
 @with_db_retry
@@ -3513,75 +3485,8 @@ def extract_statements_with_regex_fallback(text, session_id, debug=False):
     return statements
 
 
-def analyze_single_statement(statement_data_dict, session_id, debug=False):
-    global model
-
-    if not model:  # Global 'model'
-        logger.warning(
-            " Main LLM ('model') not available. Cannot analyze statement (generic)."
-        )
-        statement_data_dict.update({
-            'sentiment_score': 0.0,
-            'sentiment_reason': 'LLM N/A'
-        })
-        return statement_data_dict
-
-    speaker_name = statement_data_dict.get('speaker_name', 'Unknown')
-    text_to_analyze = statement_data_dict.get('text', '')
-
-    if not text_to_analyze:
-        logger.warning(
-            f"No text to analyze for speaker '{speaker_name}' (generic analysis)."
-        )
-        return statement_data_dict
-
-    text_for_prompt = text_to_analyze
-    prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-
-국회 발언 분석 요청:
-발언자: {speaker_name}
-발언 내용:
----
-{text_for_prompt}
----
-
-위 발언 내용을 분석하여 다음 JSON 형식으로 결과를 제공해주세요.
-{{
-  "sentiment_score": -1.0 부터 1.0 사이의 감성 점수 (숫자),
-  "sentiment_reason": "감성 판단의 주요 근거 (간략히)"
-}}
-(가이드라인은 이전 분석 함수들과 유사하게 적용)
-응답은 반드시 유효한 JSON 형식이어야 합니다.
-"""
-    try:
-        response = model.generate_content(prompt)
-        if not response or not response.text:
-            logger.warning(
-                f"❌ No LLM generic analysis response for '{speaker_name}'.")
-            return statement_data_dict
-        response_text_cleaned = response.text.strip().replace(
-            "```json", "").replace("```", "").strip()
-        import json
-        try:
-            analysis_json = json.loads(response_text_cleaned)
-            statement_data_dict.update({
-                'sentiment_score':
-                analysis_json.get('sentiment_score', 0.0),
-                'sentiment_reason':
-                analysis_json.get('sentiment_reason', 'LLM 분석 완료')
-            })
-        except Exception as e:
-            logger.warning(
-                f"❌ Error parsing LLM generic analysis response for '{speaker_name}': {e}"
-            )
-        if debug:
-            logger.debug(
-                f"🐛 DEBUG: Generic analysis for '{speaker_name}' - Sentiment: {statement_data_dict['sentiment_score']}"
-            )
-        return statement_data_dict
-    except:
-        return NULL
+# analyze_single_statement function removed - all analysis now goes through batch processing
+# to efficiently handle rate limits and improve performance
 
 
 def get_bills_context(session_id):
