@@ -77,69 +77,71 @@ class Command(BaseCommand):
                         'No previous sessions found. Starting from today.'))
 
         try:
-            # Use a more robust approach to handle Celery tasks
-            try:
-                if is_celery_available():
-                    try:
-                        self.stdout.write(
-                            self.style.SUCCESS(
-                                "🚀 Calling 'fetch_continuous_sessions' asynchronously via Celery."
-                            ))
-                        from api.tasks import fetch_continuous_sessions
-                        fetch_continuous_sessions.delay(
-                            force=True,
-                            debug=debug,
-                            start_date=start_date.isoformat() if start_date else None)
-                    except Exception as celery_error:
-                        self.stdout.write(
-                            self.style.WARNING(
-                                f"🔄 Celery call failed ({celery_error}), falling back to synchronous."
-                            ))
-                        # Import and call the function directly without Celery decorators
-                        import importlib
-                        tasks_module = importlib.import_module('api.tasks')
-                        
-                        # Get the raw function, avoiding Celery proxy objects
-                        if hasattr(tasks_module, 'fetch_continuous_sessions'):
-                            func = getattr(tasks_module, 'fetch_continuous_sessions')
-                            if hasattr(func, '__wrapped__'):
-                                # Call the wrapped function directly
-                                func.__wrapped__(
-                                    self=None,
-                                    force=True,
-                                    debug=debug,
-                                    start_date=start_date.isoformat() if start_date else None)
-                            else:
-                                # Call the function directly
-                                func(
-                                    force=True,
-                                    debug=debug,
-                                    start_date=start_date.isoformat() if start_date else None)
-                else:
+            # FIX: Removed the redundant 'try:' that caused the SyntaxError.
+            # The logic is now correctly contained within a single try/except block.
+            if is_celery_available():
+                try:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            "🚀 Calling 'fetch_continuous_sessions' asynchronously via Celery."
+                        ))
+                    from api.tasks import fetch_continuous_sessions
+                    fetch_continuous_sessions.delay(
+                        force=True,
+                        debug=debug,
+                        start_date=start_date.isoformat()
+                        if start_date else None)
+                except Exception as celery_error:
                     self.stdout.write(
                         self.style.WARNING(
-                            "🔄 Calling 'fetch_continuous_sessions' synchronously (Celery not available)."
+                            f"🔄 Celery call failed ({celery_error}), falling back to synchronous."
                         ))
                     # Import and call the function directly without Celery decorators
                     import importlib
                     tasks_module = importlib.import_module('api.tasks')
-                    
+
                     # Get the raw function, avoiding Celery proxy objects
                     if hasattr(tasks_module, 'fetch_continuous_sessions'):
-                        func = getattr(tasks_module, 'fetch_continuous_sessions')
+                        func = getattr(tasks_module,
+                                       'fetch_continuous_sessions')
                         if hasattr(func, '__wrapped__'):
                             # Call the wrapped function directly
-                            func.__wrapped__(
-                                self=None,
-                                force=True,
-                                debug=debug,
-                                start_date=start_date.isoformat() if start_date else None)
+                            func.__wrapped__(self=None,
+                                             force=True,
+                                             debug=debug,
+                                             start_date=start_date.isoformat()
+                                             if start_date else None)
                         else:
                             # Call the function directly
-                            func(
-                                force=True,
-                                debug=debug,
-                                start_date=start_date.isoformat() if start_date else None)
+                            func(force=True,
+                                 debug=debug,
+                                 start_date=start_date.isoformat()
+                                 if start_date else None)
+            else:
+                self.stdout.write(
+                    self.style.WARNING(
+                        "🔄 Calling 'fetch_continuous_sessions' synchronously (Celery not available)."
+                    ))
+                # Import and call the function directly without Celery decorators
+                import importlib
+                tasks_module = importlib.import_module('api.tasks')
+
+                # Get the raw function, avoiding Celery proxy objects
+                if hasattr(tasks_module, 'fetch_continuous_sessions'):
+                    func = getattr(tasks_module, 'fetch_continuous_sessions')
+                    if hasattr(func, '__wrapped__'):
+                        # Call the wrapped function directly
+                        func.__wrapped__(self=None,
+                                         force=True,
+                                         debug=debug,
+                                         start_date=start_date.isoformat()
+                                         if start_date else None)
+                    else:
+                        # Call the function directly
+                        func(force=True,
+                             debug=debug,
+                             start_date=start_date.isoformat()
+                             if start_date else None)
 
             self.stdout.write(
                 self.style.SUCCESS(
@@ -185,7 +187,6 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Found {total_sessions} sessions to re-process PDFs for.")
 
-        # Determine if we're running async or sync once at the start
         use_celery = is_celery_available()
         if use_celery:
             self.stdout.write(
@@ -199,24 +200,25 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"  -> Processing {i+1}/{total_sessions}: Session {session.conf_id}"
             )
+            # FIX: Simplified the nested try/except blocks into a single, clearer one.
+            # The outer block was unreachable and has been removed.
             try:
-                # Use the direct wrapper function for non-Celery calls
-                try:
-                    if use_celery:
-                        from api.tasks import process_session_pdf
-                        process_session_pdf.delay(session_id=session.conf_id,
-                                                  force=True,
-                                                  debug=debug)
-                        logger.info(f"✅ Queued PDF processing task for session {session.conf_id}")
-                    else:
-                        # Use the direct wrapper function
-                        from api.tasks import process_session_pdf_direct
-                        process_session_pdf_direct(session_id=session.conf_id, force=True, debug=debug)
-                        logger.info(f"✅ Successfully processed PDF for session {session.conf_id} synchronously")
-                        
-                except Exception as e:
-                    logger.error(f"Failed to process PDF for session {session.conf_id}: {e}")
-                    continue
+                if use_celery:
+                    from api.tasks import process_session_pdf
+                    process_session_pdf.delay(session_id=session.conf_id,
+                                              force=True,
+                                              debug=debug)
+                    logger.info(
+                        f"✅ Queued PDF processing task for session {session.conf_id}"
+                    )
+                else:
+                    from api.tasks import process_session_pdf_direct
+                    process_session_pdf_direct(session_id=session.conf_id,
+                                               force=True,
+                                               debug=debug)
+                    logger.info(
+                        f"✅ Successfully processed PDF for session {session.conf_id} synchronously"
+                    )
             except Exception as e:
                 self.stderr.write(
                     self.style.ERROR(
