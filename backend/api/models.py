@@ -109,6 +109,11 @@ class Bill(models.Model):
         blank=True,
         help_text=_("의안별 특화 키워드 목록"),
         verbose_name=_("의안별 특화 키워드"))
+    bill_specific_keywords_json = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("의안별 특화 키워드 (JSON 형태)"),
+        verbose_name=_("의안별 특화 키워드 JSON"))
     category_analysis = models.TextField(blank=True,
                                          help_text=_("카테고리 분석 결과"),
                                          verbose_name=_("카테고리 분석 결과"))
