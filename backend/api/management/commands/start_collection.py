@@ -46,7 +46,17 @@ class Command(BaseCommand):
         if verbose:
             self.stdout.write('📡 Starting data collection...')
 
-        fetch_latest_sessions(force=force, debug=debug)
+        # Call the function directly since Celery is not available
+        if is_celery_available():
+            fetch_latest_sessions.delay(force=force, debug=debug)
+        else:
+            # Call the wrapped function directly without Celery
+            if hasattr(fetch_latest_sessions, '__wrapped__'):
+                fetch_latest_sessions.__wrapped__(self=None, force=force, debug=debug)
+            else:
+                # Fallback: try to import and call the function
+                from api.tasks import fetch_latest_sessions as fetch_func
+                fetch_func(force=force, debug=debug)
 
         if not debug:
             if verbose:
