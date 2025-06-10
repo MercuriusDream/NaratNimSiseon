@@ -2876,6 +2876,47 @@ import json
 import logging
 
 
+def _attempt_json_repair(response_text):
+    """Attempt to repair common JSON issues in LLM responses."""
+    try:
+        # Remove any trailing incomplete content after the last complete object
+        response_text = response_text.strip()
+        
+        # Find the last complete closing brace
+        last_brace = response_text.rfind('}')
+        if last_brace == -1:
+            return None
+            
+        # Check if we have proper array closing
+        remaining = response_text[last_brace + 1:].strip()
+        if remaining and not remaining.startswith(']'):
+            # Try to find the last complete array closing
+            last_bracket = response_text.rfind(']')
+            if last_bracket > last_brace:
+                last_brace = last_bracket
+        
+        # Truncate to last complete structure
+        truncated = response_text[:last_brace + 1]
+        
+        # Try to close any unclosed arrays or objects
+        open_braces = truncated.count('{') - truncated.count('}')
+        open_brackets = truncated.count('[') - truncated.count(']')
+        
+        # Add missing closing characters
+        for _ in range(open_braces):
+            truncated += '}'
+        for _ in range(open_brackets):
+            truncated += ']'
+            
+        # Validate the structure
+        json.loads(truncated)
+        return truncated
+        
+    except Exception as e:
+        logger.debug(f"JSON repair attempt failed: {e}")
+        return None
+
+
 def extract_statements_with_llm_discovery(full_text,
                                           session_id,
                                           known_bill_names,
@@ -3066,7 +3107,8 @@ I already know about the following bills. You MUST find the discussion for these
             contents=[prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="text/plain",
-                temperature=1))  # Reduced tokens to prevent timeout
+                temperature=0.1,  # Lower temperature for more consistent JSON
+                max_output_tokens=8000))  # Limit output to prevent truncation
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
         # Check if response exists and has text
@@ -3111,15 +3153,42 @@ I already know about the following bills. You MUST find the discussion for these
             logger.error(f"❌ JSON decode error in LLM discovery: {json_err}")
             logger.error(
                 f"Raw response (first 500 chars): {response_text[:500]}...")
-            logger.info("🔄 Falling back to keyword-based extraction.")
-            return extract_statements_with_keyword_fallback(
-                full_text, session_id, debug)
+            
+            # Try to fix common JSON issues
+            fixed_response = _attempt_json_repair(response_text)
+            if fixed_response:
+                try:
+                    data = json.loads(fixed_response)
+                    logger.info("✅ Successfully repaired and parsed JSON response")
+                except json.JSONDecodeError:
+                    logger.error("❌ JSON repair attempt failed")
+                    logger.info("🔄 Falling back to keyword-based extraction.")
+                    return extract_statements_with_keyword_fallback(
+                        full_text, session_id, debug)
+            else:
+                logger.info("🔄 Falling back to keyword-based extraction.")
+                return extract_statements_with_keyword_fallback(
+                    full_text, session_id, debug)
         if not isinstance(data, dict):
             logger.error(
                 "LLM discovery did not return a JSON object. Falling back to keyword extraction."
             )
             return extract_statements_with_keyword_fallback(
                 full_text, session_id, debug)
+        
+        # Validate required structure
+        if 'bills_found' not in data and 'newly_discovered' not in data:
+            logger.error(
+                "LLM discovery response missing required fields. Falling back to keyword extraction."
+            )
+            return extract_statements_with_keyword_fallback(
+                full_text, session_id, debug)
+        
+        # Ensure arrays exist
+        if 'bills_found' not in data:
+            data['bills_found'] = []
+        if 'newly_discovered' not in data:
+            data['newly_discovered'] = []
 
         # Merge the two arrays into one flat list, tagging each entry
         all_segments = []
@@ -3153,7 +3222,17 @@ I already know about the following bills. You MUST find the discussion for these
             start = segment.get("start_index", 0)
             end = segment.get("end_index", 0)
 
+            # Validate segment data
             if not bill_name or end <= start:
+                logger.warning(f"Invalid segment data: bill_name='{bill_name}', start={start}, end={end}")
+                continue
+                
+            # Ensure indices are within text bounds
+            start = max(0, min(start, len(full_text)))
+            end = max(start, min(end, len(full_text)))
+            
+            if end - start < 50:  # Skip very short segments
+                logger.warning(f"Skipping very short segment for bill '{bill_name}': {end - start} chars")
                 continue
 
             # Update policy data for known bills as well
