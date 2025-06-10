@@ -200,10 +200,8 @@ def initialize_gemini():
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
             # Perform a simple status check
             model_name = "gemini-2.0-flash"
-            response = client.models.generate_content(
-                model=model_name,
-                contents=["Hello"]
-            )
+            response = client.models.generate_content(model=model_name,
+                                                      contents=["Hello"])
             logger.info(
                 f"✅ Gemini API configured successfully with '{model_name}'. Status check succeeded. Preview: {response.text[:100]}"
             )
@@ -256,9 +254,9 @@ def _call_gemini_api(prompt: str,
     # Construct generation configuration
     config = types.GenerateContentConfig(
         response_mime_type=response_mime_type,
-        temperature=0.2,  # Lower temperature for more deterministic/factual output
-        max_output_tokens=8192
-    )
+        temperature=
+        0.2,  # Lower temperature for more deterministic/factual output
+        max_output_tokens=8192)
 
     # Add system instruction if provided
     if system_instruction:
@@ -267,11 +265,9 @@ def _call_gemini_api(prompt: str,
     for attempt in range(max_retries + 1):
         try:
             # Make the API call using new structure
-            response = client.models.generate_content(
-                model=model_name,
-                contents=[prompt],
-                config=config
-            )
+            response = client.models.generate_content(model=model_name,
+                                                      contents=[prompt],
+                                                      config=config)
 
             # Record successful request
             gemini_rate_limiter.record_request(estimated_tokens, success=True)
@@ -402,65 +398,6 @@ if not logger.handlers or not any(
 # Configuration flags
 ENABLE_VOTING_DATA_COLLECTION = getattr(settings,
                                         'ENABLE_VOTING_DATA_COLLECTION', False)
-
-
-# Configure Gemini API with error handling
-def initialize_gemini():
-    """Initialize Gemini API with proper error handling using new google.genai library"""
-    try:
-        from google import genai
-        from google.genai import types
-        if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-            client = genai.Client(api_key=settings.GEMINI_API_KEY)
-            # Check Gemini API status immediately after configuration
-            try:
-                model = "gemini-2.5-flash-preview-05-20"
-                contents = [
-                    types.Content(
-                        role="user",
-                        parts=[types.Part.from_text(text="Hello")],
-                    ),
-                ]
-
-                config = types.GenerateContentConfig(
-                    response_mime_type="text/plain", )
-
-                response_text = ""
-                for chunk in client.models.generate_content_stream(
-                        model=model,
-                        contents=contents,
-                        config=config,
-                ):
-                    response_text += chunk.text
-                    break  # Just get first chunk for test
-
-                logger.info(
-                    f"✅ Gemini API configured successfully and status check succeeded. Preview: {response_text[:100]}"
-                )
-                return genai, client
-            except Exception as status_exc:
-                logger.warning(
-                    f"⚠️ Gemini API configured but status check failed: {status_exc}"
-                )
-                return None, None
-        else:
-            logger.error(
-                "❌ GEMINI_API_KEY not found or empty in settings. LLM features will be disabled."
-            )
-            return None, None
-    except ImportError as e:
-        logger.error(
-            f"❌ google.genai library not available: {e}. LLM features will be disabled."
-        )
-        return None, None
-    except Exception as e:
-        logger.error(
-            f"❌ Error configuring Gemini API: {e}. LLM features will be disabled."
-        )
-        return None, None
-
-
-# Initialize Gemini
 initialize_gemini()
 
 
@@ -485,10 +422,8 @@ def check_gemini_api_status():
 
     try:
         # Test with a minimal prompt using new structure
-        response = client.models.generate_content(
-            model="gemini-2.0-flash", 
-            contents=["Hello"]
-        )
+        response = client.models.generate_content(model="gemini-2.0-flash",
+                                                  contents=["Hello"])
         return "success", f"API is responding. Response: {response.text[:50]}..."
     except Exception as e:
         return "error", f"API Error: {str(e)}"
@@ -2303,7 +2238,7 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
                                           debug=False):
     """Batch analyze multiple speech segments with LLM - 20 statements per request using new google.genai structure."""
     global client
-    
+
     if not client:
         logger.warning(
             "❌ Gemini not available. Cannot analyze speech segments.")
@@ -2345,8 +2280,8 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
         # Create batch prompt for 20 statements
         try:
             batch_results = analyze_batch_statements_single_request(
-                batch_segments, bill_name, assembly_members,
-                estimated_tokens, batch_start)
+                batch_segments, bill_name, assembly_members, estimated_tokens,
+                batch_start)
             results.extend(batch_results)
 
             # Record successful API usage
@@ -2371,9 +2306,8 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
     return sorted(results, key=lambda x: x.get('segment_index', 0))
 
 
-def analyze_batch_statements_single_request(batch_segments,
-                                            bill_name, assembly_members,
-                                            estimated_tokens,
+def analyze_batch_statements_single_request(batch_segments, bill_name,
+                                            assembly_members, estimated_tokens,
                                             batch_start_index):
     """Analyze up to 20 statements in a single API request with improved batching using new google.genai structure."""
     if not batch_segments:
@@ -2433,8 +2367,8 @@ def analyze_batch_statements_single_request(batch_segments,
     max_prompt_length = 15000  # Conservative limit
     if len(segments_text) > max_prompt_length:
         # Process in smaller sub-batches
-        return _process_large_batch_in_chunks(cleaned_segments,
-                                              bill_name, assembly_members,
+        return _process_large_batch_in_chunks(cleaned_segments, bill_name,
+                                              assembly_members,
                                               estimated_tokens,
                                               batch_start_index)
 
@@ -2506,7 +2440,7 @@ def _execute_batch_analysis(prompt,
                             max_retries=3):
     """Execute the actual batch analysis request with retry logic for API errors using new google.genai structure."""
     global client
-    
+
     if not client:
         logger.error("Gemini client not initialized for batch analysis.")
         return []
@@ -2521,9 +2455,7 @@ def _execute_batch_analysis(prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="text/plain",
                     temperature=0.2,
-                    max_output_tokens=8192
-                )
-            )
+                    max_output_tokens=8192))
 
             processing_time = time.time() - start_time
             logger.info(
@@ -3009,7 +2941,7 @@ I already know about the following bills. You MUST find the discussion for these
         if not client:
             logger.error("Gemini client not initialized for LLM discovery.")
             return []
-            
+
         estimated_tokens = len(prompt) // 3
 
         if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
@@ -3020,12 +2952,9 @@ I already know about the following bills. You MUST find the discussion for these
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[prompt],
-            config=types.GenerateContentConfig(
-                response_mime_type="text/plain",
-                temperature=0.2,
-                max_output_tokens=8192
-            )
-        )
+            config=types.GenerateContentConfig(response_mime_type="text/plain",
+                                               temperature=0.2,
+                                               max_output_tokens=8192))
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
         # Strip markdown fences if present
