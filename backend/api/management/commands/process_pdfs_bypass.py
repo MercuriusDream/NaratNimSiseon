@@ -228,11 +228,35 @@ class Command(BaseCommand):
                 from api.tasks import clean_pdf_text
                 cleaned_text = clean_pdf_text(full_text)
                 
-                self.stdout.write('🧹 CLEANED TEXT THAT WOULD BE SENT TO LLM:')
+                # Get bill names to show complete LLM context
+                bill_names = list(session.bills.values_list('bill_nm', flat=True))
+                bills_context_str = ", ".join(bill_names) if bill_names else "General Discussion"
+                
+                # Show the exact text that would be sent to LLM discovery function
+                self.stdout.write('🤖 COMPLETE TEXT THAT WOULD BE SENT TO LLM DISCOVERY:')
                 self.stdout.write('=' * 100)
+                self.stdout.write(f'📋 Known bills context: {bills_context_str}')
+                self.stdout.write('-' * 50)
+                self.stdout.write('📄 FULL CLEANED TEXT:')
                 self.stdout.write(cleaned_text)
                 self.stdout.write('=' * 100)
-                self.stdout.write(f'📏 Cleaned text length: {len(cleaned_text)} characters')
+                self.stdout.write(f'📏 Total text length: {len(cleaned_text)} characters')
+                self.stdout.write(f'📊 Known bills count: {len(bill_names)}')
+                
+                # Show text statistics
+                line_count = cleaned_text.count('\n')
+                speaker_markers = cleaned_text.count('◯')
+                self.stdout.write(f'📈 Text statistics:')
+                self.stdout.write(f'   - Lines: {line_count}')
+                self.stdout.write(f'   - Speaker markers (◯): {speaker_markers}')
+                self.stdout.write(f'   - Estimated words: {len(cleaned_text.split())}')
+                
+                # Show sample sections
+                if '◯' in cleaned_text:
+                    first_speaker_pos = cleaned_text.find('◯')
+                    sample_section = cleaned_text[first_speaker_pos:first_speaker_pos+500] if first_speaker_pos != -1 else cleaned_text[:500]
+                    self.stdout.write(f'📝 Sample section (first 500 chars from first speaker):')
+                    self.stdout.write(f'"{sample_section}..."')
                 
                 return True
 
