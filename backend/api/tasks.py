@@ -2915,18 +2915,25 @@ I already know about the following bills. You MUST find the discussion for these
             logger.error("Rate limit timeout for LLM discovery. Falling back to keyword extraction.")
             return extract_statements_with_keyword_fallback(full_text, session_id, debug)
 
-        # Use new google.genai structure
+        # Use new google.genai structure with more conservative settings
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[prompt],
             config=types.GenerateContentConfig(response_mime_type="text/plain",
-                                               temperature=0.2,
-                                               max_output_tokens=8192))
+                                               temperature=0.1,  # Lower temperature for more reliability
+                                               max_output_tokens=4096))  # Reduced tokens to prevent timeout
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
+
+        # Check if response exists and has text
+        if not response or not hasattr(response, 'text') or not response.text:
+            logger.error("❌ No response or empty response from LLM discovery. Falling back to keyword extraction.")
+            return extract_statements_with_keyword_fallback(full_text, session_id, debug)
 
         # Strip markdown fences if present
         response_text = response.text.strip()
-        if response_text.startswith("```"):
+        if response_text.startswith("```json"):
+            response_text = response_text.replace("```json", "").replace("```", "").strip()
+        elif response_text.startswith("```"):
             response_text = response_text.split("```", 2)[-1].strip()
 
         # Print/log the raw LLM response for debugging
@@ -2936,8 +2943,8 @@ I already know about the following bills. You MUST find the discussion for these
             logger.info(f"🐛 DEBUG: Raw LLM response (last 500 chars): {response_text[-500:]}")
 
         # Check if response is empty or invalid
-        if not response_text:
-            logger.error("❌ Empty response from LLM discovery. Falling back to keyword extraction.")
+        if not response_text or len(response_text) < 10:
+            logger.error(f"❌ Empty or too short response from LLM discovery ({len(response_text)} chars). Falling back to keyword extraction.")
             return extract_statements_with_keyword_fallback(full_text, session_id, debug)
 
         try:
@@ -3344,40 +3351,75 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
     logger.info(
         f"🔍 Using keyword-based fallback extraction for session {session_id}")
 
-    # Find bill discussion sections using common patterns
+    # Procedural text patterns to ignore (these are not bills)
+    procedural_patterns = [
+        r'의장\s+\w+',  # "의장 우원식" etc.
+        r'의사일정\s+제\d+항',  # "의사일정 제1항" etc.
+        r'국회본회의\s+회의록',  # Meeting records
+        r'제\d+회-제\d+차',  # Session numbers
+        r'개의|산회|폐회',  # Opening/closing session words
+    ]
+
+    def is_procedural_text(text_to_check):
+        """Check if text is procedural rather than a bill name"""
+        for pattern in procedural_patterns:
+            if re.search(pattern, text_to_check):
+                return True
+        return False
+
+    # Find bill discussion sections using improved patterns
     bill_patterns = [
-        r'○\s*(\d+)\.\s*([^○]+?)(?=○|\Z)',  # "○ 1. 법안명" pattern
-        r'(\d+)\.\s*([^○\n]{20,100}법률안[^○\n]*)',  # "번호. ...법률안" pattern
-        r'의안번호\s*(\d+)[^○]*?([^○\n]{10,80})',  # "의안번호 XXXX" pattern
+        r'(?:^|\n)\s*(\d+)\.\s*([^○\n]{15,150}법률안[^○\n]*)',  # "번호. ...법률안" pattern
+        r'의안번호\s*(\d+)[^○]*?([^○\n]{10,80}법률안[^○\n]*)',  # "의안번호 XXXX ...법률안" pattern
+        r'(?:^|\n)\s*(\d+)\.\s*([^○\n]{15,150}(?:특별검사|특검)[^○\n]*)',  # Special prosecutor bills
     ]
 
     bill_segments = []
     for pattern in bill_patterns:
-        matches = list(re.finditer(pattern, text, re.DOTALL))
+        matches = list(re.finditer(pattern, text, re.DOTALL | re.MULTILINE))
         for match in matches:
             start_pos = match.start()
             bill_name = match.group(2).strip() if len(
                 match.groups()) > 1 else match.group(1).strip()
-            if len(bill_name) > 10:  # Only meaningful bill names
-                bill_segments.append({
-                    'start_pos': start_pos,
-                    'bill_name': bill_name[:100]  # Limit length
-                })
+            
+            # Filter out procedural text and very short names
+            if (len(bill_name) > 15 and 
+                not is_procedural_text(bill_name) and
+                ('법률안' in bill_name or '특별검사' in bill_name or '특검' in bill_name)):
+                
+                # Clean up the bill name
+                bill_name = re.sub(r'^[\d\.\s]+', '', bill_name)  # Remove leading numbers
+                bill_name = bill_name.strip()
+                
+                if len(bill_name) > 10:  # Final length check
+                    bill_segments.append({
+                        'start_pos': start_pos,
+                        'bill_name': bill_name[:100]  # Limit length
+                    })
 
     # Sort by position and remove overlaps
     bill_segments.sort(key=lambda x: x['start_pos'])
 
+    # Remove duplicate or very similar bill names
+    unique_segments = []
+    seen_names = set()
+    for segment in bill_segments:
+        bill_name_key = segment['bill_name'][:50].lower()  # Use first 50 chars for comparison
+        if bill_name_key not in seen_names:
+            seen_names.add(bill_name_key)
+            unique_segments.append(segment)
+
     all_statements = []
 
-    if bill_segments:
+    if unique_segments:
         logger.info(
-            f"Found {len(bill_segments)} potential bill sections using keywords"
+            f"Found {len(unique_segments)} valid bill sections using keywords (filtered from {len(bill_segments)} candidates)"
         )
 
-        for i, segment in enumerate(bill_segments):
+        for i, segment in enumerate(unique_segments):
             start_pos = segment['start_pos']
-            end_pos = bill_segments[i + 1]['start_pos'] if i + 1 < len(
-                bill_segments) else len(text)
+            end_pos = unique_segments[i + 1]['start_pos'] if i + 1 < len(
+                unique_segments) else len(text)
 
             segment_text = text[start_pos:end_pos]
             bill_name = segment['bill_name']
@@ -3391,15 +3433,20 @@ def extract_statements_with_keyword_fallback(text, session_id, debug=False):
 
             all_statements.extend(statements_in_segment)
     else:
-        # Process entire text as one segment
-        logger.info("No bill patterns found, processing entire text")
-        statements_from_full = process_single_segment_for_statements_with_splitting(
-            text, session_id, "General Discussion", debug)
+        # Process entire text as one segment with improved splitting
+        logger.info("No valid bill patterns found, processing with general discussion approach")
+        
+        # Try to find at least the discussion sections with ◯ markers
+        if '◯' in text:
+            statements_from_full = process_single_segment_for_statements_with_splitting(
+                text, session_id, "General Discussion", debug)
 
-        for stmt_data in statements_from_full:
-            stmt_data['associated_bill_name'] = "General Discussion"
+            for stmt_data in statements_from_full:
+                stmt_data['associated_bill_name'] = "General Discussion"
 
-        all_statements.extend(statements_from_full)
+            all_statements.extend(statements_from_full)
+        else:
+            logger.warning(f"No ◯ markers found in text for session {session_id}, cannot extract statements")
 
     logger.info(
         f"✅ Keyword-based extraction completed: {len(all_statements)} statements"
