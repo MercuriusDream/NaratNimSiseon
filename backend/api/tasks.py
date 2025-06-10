@@ -2067,9 +2067,6 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
 def _process_single_segmentation_batch(text_segment, bill_name, offset):
     """Process a single text segment for speech segmentation indices."""
     try:
-        segmentation_llm = genai.GenerativeModel(
-            'gemini-2.5-flash-preview-04-17')
-
         # Create basic indices by splitting at ◯ markers as fallback
         speech_indices = []
         current_pos = 0
