@@ -6,8 +6,8 @@ channel = "stable-24_05"
 packages = ["redis", "xcodebuild", "zlib"]
 
 [deployment]
-run = ["sh", "-c", "cd backend && python manage.py migrate && python manage.py collectstatic --noinput && python manage.py runserver 0.0.0.0:3000"]
-build = ["sh", "-c", "cd frontend && npm install && npm run build && cd .. && python update_template.py"]
+run = ["sh", "-c", "cd backend && python manage.py migrate && python manage.py runserver 0.0.0.0:3000"]
+build = ["sh", "-c", "cd frontend && npm install && npm run build && cd ../backend && python manage.py collectstatic --noinput"]
 
 [workflows]
 runButton = "Restart Django Server"
