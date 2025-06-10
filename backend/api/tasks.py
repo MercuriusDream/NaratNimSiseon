@@ -133,9 +133,24 @@ class GeminiRateLimiter:
             self.consecutive_errors += 1
             self.last_error_time = datetime.now()
             backoff_time = self._calculate_backoff_time()
+            
+            # Get current usage for context
+            current_usage = self.get_usage_stats()
+            
             logger.warning(
-                f"API error ({error_type}). Consecutive errors: {self.consecutive_errors}, backoff: {backoff_time}s"
+                f"🚨 API error recorded ({error_type}). "
+                f"Consecutive errors: {self.consecutive_errors}, "
+                f"backoff: {backoff_time}s"
             )
+            logger.warning(f"📊 Current usage at error time: {current_usage}")
+            
+            # Log specific guidance based on error type
+            if error_type == "llm_discovery_error":
+                logger.warning("💡 This error occurred during LLM discovery - check JSON parsing and API response format")
+            elif "timeout" in error_type:
+                logger.warning("💡 Consider reducing prompt size or text length for timeout errors")
+            elif "quota" in error_type or "rate" in error_type:
+                logger.warning("💡 Consider implementing longer delays between requests")
 
     def wait_if_needed(self, estimated_tokens=1000, max_wait_time=120):
         """Wait if necessary to respect rate limits with enhanced backoff"""
@@ -3036,6 +3051,21 @@ def extract_statements_with_llm_discovery(full_text,
         logger.error("❌ Gemini not available. Cannot perform LLM discovery.")
         return []
 
+    # Double-check that genai and model are properly initialized
+    if not genai:
+        logger.error("❌ genai module is None after reinitialize_gemini()")
+        return []
+
+    # Test a simple model creation to ensure API is accessible
+    try:
+        test_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        logger.info("✅ Gemini model creation test passed")
+    except Exception as model_test_error:
+        logger.error(f"❌ Gemini model creation test failed: {model_test_error}")
+        logger.error(f"   Error type: {type(model_test_error).__name__}")
+        gemini_rate_limiter.record_error("model_creation_failed")
+        return []
+
     # Load policy categories from database for enhanced analysis
     from .models import Category, Subcategory
 
@@ -3150,21 +3180,96 @@ I already know about the following bills. You MUST find the discussion for these
         segmentation_model = genai.GenerativeModel('gemini-2.0-flash-lite')
         estimated_tokens = len(prompt) // 3
 
+        logger.info(f"🎯 LLM Discovery - Estimated tokens: {estimated_tokens}")
+        logger.info(f"🎯 LLM Discovery - Prompt length: {len(prompt)} chars")
+
         if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
             logger.error("Rate limit timeout for LLM discovery. Aborting.")
             return []
 
+        logger.info("🎯 LLM Discovery - Sending request to Gemini...")
         response = segmentation_model.generate_content(prompt)
+        logger.info("🎯 LLM Discovery - Received response from Gemini")
+
+        # Debug response object
+        if not response:
+            logger.error("❌ LLM Discovery - Response object is None")
+            gemini_rate_limiter.record_request(estimated_tokens, success=False)
+            return []
+
+        logger.info(f"🎯 LLM Discovery - Response type: {type(response)}")
+        logger.info(f"🎯 LLM Discovery - Response attributes: {dir(response)}")
+
+        if not hasattr(response, 'text'):
+            logger.error("❌ LLM Discovery - Response has no 'text' attribute")
+            gemini_rate_limiter.record_request(estimated_tokens, success=False)
+            return []
+
+        response_text_raw = response.text
+        logger.info(f"🎯 LLM Discovery - Raw response text type: {type(response_text_raw)}")
+        logger.info(f"🎯 LLM Discovery - Raw response text length: {len(response_text_raw) if response_text_raw else 'None'}")
+
+        if not response_text_raw:
+            logger.error("❌ LLM Discovery - Response text is empty or None")
+            gemini_rate_limiter.record_request(estimated_tokens, success=False)
+            return []
+
+        # Log first 500 chars of raw response for debugging
+        logger.info(f"🎯 LLM Discovery - Raw response preview: {repr(response_text_raw[:500])}")
+
         gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
         # Strip markdown fences if present
-        response_text = response.text.strip()
+        response_text = response_text_raw.strip()
+        logger.info(f"🎯 LLM Discovery - After strip length: {len(response_text)}")
+
         if response_text.startswith("```"):
-            response_text = response_text.split("```", 2)[-1].strip()
-        print(response_text)
-        data = json.loads(response_text)
+            logger.info("🎯 LLM Discovery - Removing markdown fences")
+            parts = response_text.split("```", 2)
+            logger.info(f"🎯 LLM Discovery - Split into {len(parts)} parts")
+            if len(parts) >= 3:
+                response_text = parts[2].strip()
+            elif len(parts) >= 2:
+                response_text = parts[1].strip()
+            logger.info(f"🎯 LLM Discovery - After fence removal length: {len(response_text)}")
+
+        # Additional cleaning for common LLM response patterns
+        if response_text.startswith("json"):
+            logger.info("🎯 LLM Discovery - Removing 'json' prefix")
+            response_text = response_text[4:].strip()
+
+        # Log cleaned response for debugging
+        logger.info(f"🎯 LLM Discovery - Cleaned response preview: {repr(response_text[:500])}")
+        logger.info(f"🎯 LLM Discovery - Final response length: {len(response_text)}")
+
+        if not response_text:
+            logger.error("❌ LLM Discovery - Response text is empty after cleaning")
+            return []
+
+        try:
+            data = json.loads(response_text)
+            logger.info(f"✅ LLM Discovery - Successfully parsed JSON, type: {type(data)}")
+        except json.JSONDecodeError as json_err:
+            logger.error(f"❌ LLM Discovery - JSON decode error: {json_err}")
+            logger.error(f"❌ LLM Discovery - JSON error position: line {json_err.lineno}, column {json_err.colno}")
+            logger.error(f"❌ LLM Discovery - JSON error message: {json_err.msg}")
+            logger.error(f"❌ LLM Discovery - Problematic text around error:")
+            
+            # Show context around the error position
+            if hasattr(json_err, 'pos') and json_err.pos is not None:
+                start_pos = max(0, json_err.pos - 100)
+                end_pos = min(len(response_text), json_err.pos + 100)
+                context = response_text[start_pos:end_pos]
+                logger.error(f"❌ Context: {repr(context)}")
+            else:
+                # Show first 1000 chars if no position info
+                logger.error(f"❌ Full response text: {repr(response_text[:1000])}")
+            
+            return []
+
         if not isinstance(data, dict):
-            logger.error("LLM discovery did not return a JSON object.")
+            logger.error(f"❌ LLM discovery did not return a JSON object. Got type: {type(data)}")
+            logger.error(f"❌ Data content: {data}")
             return []
 
         # Merge the two arrays into one flat list, tagging each entry
@@ -3237,8 +3342,32 @@ I already know about the following bills. You MUST find the discussion for these
 
     except Exception as e:
         gemini_rate_limiter.record_error("llm_discovery_error")
-        logger.error(
-            f"❌ Critical error during LLM discovery and segmentation: {e}")
+        
+        # Detailed error logging
+        error_type = type(e).__name__
+        logger.error(f"❌ Critical error during LLM discovery and segmentation:")
+        logger.error(f"   Error type: {error_type}")
+        logger.error(f"   Error message: {str(e)}")
+        
+        # Check if this is a specific API error
+        if "quota" in str(e).lower() or "rate" in str(e).lower():
+            logger.error("   🚫 This appears to be a rate limiting or quota error")
+        elif "timeout" in str(e).lower() or "deadline" in str(e).lower():
+            logger.error("   ⏰ This appears to be a timeout error")
+        elif "json" in str(e).lower() or "expecting value" in str(e).lower():
+            logger.error("   📄 This appears to be a JSON parsing error")
+        elif "connection" in str(e).lower() or "network" in str(e).lower():
+            logger.error("   🌐 This appears to be a network/connection error")
+        
+        # Log current rate limiter status
+        rate_stats = gemini_rate_limiter.get_usage_stats()
+        logger.error(f"   📊 Rate limiter status: {rate_stats}")
+        
+        # Log session and text info
+        logger.error(f"   📋 Session ID: {session_id}")
+        logger.error(f"   📝 Text length: {len(full_text)} chars")
+        logger.error(f"   📚 Known bills: {len(known_bill_names) if known_bill_names else 0}")
+        
         logger.exception("Full traceback for LLM discovery:")
         return []
 
