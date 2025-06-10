@@ -3257,7 +3257,32 @@ def process_extracted_statements_data(statements_data_list,
         new_statement.save()
         return new_statement
 
+    def _is_valid_statement_content(text):
+        """Validate that extracted text is actual statement content, not headers/metadata."""
+        if not text or len(text) < 20:
+            return False
+            
+        # Check for header patterns that indicate this is not actual speech
+        invalid_patterns = [
+            r'^제\d+회-제\d+차',  # Session headers
+            r'^국\s*회\s*본\s*회\s*의\s*회\s*의\s*록',  # Meeting record headers
+            r'^\d{1,4}\s*$',  # Just page numbers
+            r'^회의록\s*$',  # Just "record" label
+            r'^국회사무처',  # Administrative text
+        ]
+        
+        for pattern in invalid_patterns:
+            if re.match(pattern, text.strip(), re.IGNORECASE):
+                return False
+                
+        # Must contain speaker marker or be substantial content
+        if not ('◯' in text or len(text) > 100):
+            return False
+            
+        return True
+
     created_count = 0
+    skipped_invalid_count = 0
     logger.info(
         f"Attempting to save {len(statements_data_list)} statements for session {session_obj.conf_id}."
     )
@@ -3280,6 +3305,14 @@ def process_extracted_statements_data(statements_data_list,
             else:
                 # Fallback to provided text field
                 statement_text = stmt_data.get('text', '').strip()
+
+            # Validate statement content
+            if not _is_valid_statement_content(statement_text):
+                logger.debug(
+                    f"Skipping invalid statement content: {statement_text[:100]}..."
+                )
+                skipped_invalid_count += 1
+                continue
 
             if not speaker_name or not statement_text:
                 logger.warning(
@@ -3410,7 +3443,7 @@ def process_extracted_statements_data(statements_data_list,
             continue  # Continue with the next statement
 
     logger.info(
-        f"🎉 Saved {created_count} new statements for session {session_obj.conf_id}."
+        f"🎉 Saved {created_count} new statements for session {session_obj.conf_id}. Skipped {skipped_invalid_count} invalid content items."
     )
 
 
@@ -4266,15 +4299,18 @@ def clean_pdf_text(text: str) -> str:
         return ""
 
     original_len = len(text)
+    
+    # Find meeting start marker
     start_marker_match = re.search(r'\(\d{1,2}시\s*\d{1,2}분\s+개의\)', text)
-
     if not start_marker_match:
         logger.warning(
-            "⚠️ No meeting start marker '(xx시xx분 개의)' found. Unable to isolate discussion. Returning raw text."
+            "⚠️ No meeting start marker '(xx시xx분 개의)' found. Using fallback cleaning."
         )
-        return text
-
-    start_pos = start_marker_match.start()
+        start_pos = 0
+    else:
+        start_pos = start_marker_match.end()  # Start AFTER the opening marker
+    
+    # Find meeting end markers
     end_marker_patterns = [
         r'\(\d{1,2}시\s*\d{1,2}분\s+산회\)',
         r'\(\d{1,2}시\s*\d{1,2}분\s+폐회\)',
@@ -4282,39 +4318,80 @@ def clean_pdf_text(text: str) -> str:
 
     end_pos = len(text)
     for pattern in end_marker_patterns:
-        end_marker_match = re.search(
-            pattern, text[start_pos:])  # Search *after* the start
+        end_marker_match = re.search(pattern, text[start_pos:])
         if end_marker_match:
-            end_pos = start_pos + end_marker_match.end()
+            end_pos = start_pos + end_marker_match.start()  # End BEFORE the closing marker
             break
 
     discussion_block = text[start_pos:end_pos]
-    logger.info(
-        f"📖 Isolated discussion block of {len(discussion_block)} chars (from original {original_len})."
-    )
+    logger.info(f"📖 Isolated discussion block of {len(discussion_block)} chars (from original {original_len}).")
 
-    # Step 2
-    header_pattern = re.compile(r'^제\d+회-제\d+차\s*\(.+?\)\s*\d+\s*$')
-    report_note_pattern = re.compile(r'\(보고사항은\s*끝에\s*실음\)')
-
+    # Enhanced cleaning patterns
+    patterns_to_remove = [
+        r'^제\d+회-제\d+차\s*\(.+?\)\s*\d*\s*$',  # Session headers
+        r'^국\s*회\s*본\s*회\s*의\s*회\s*의\s*록\s*$',  # Meeting record headers
+        r'^제\d+\s*$',  # Page numbers
+        r'^\d{4}\s*$',  # Year numbers
+        r'^\s*-\s*\d+\s*-\s*$',  # Page separators
+        r'\(보고사항은\s*끝에\s*실음\)',  # Report notes
+        r'^의사일정\s+제\d+항',  # Agenda items at start
+        r'^국회사무처\s*$',  # Administrative notes
+        r'^회의록\s*$',  # Record labels
+    ]
+    
     cleaned_lines = []
     lines = discussion_block.split('\n')
-
+    
+    # Skip initial header/metadata section until we find first speaker
+    found_first_speaker = False
+    
     for line in lines:
-        # First, remove the report note from the line content
-        line = report_note_pattern.sub('', line)
         stripped_line = line.strip()
-
-        # Skip empty lines or lines that are just headers
-        if not stripped_line or header_pattern.match(stripped_line):
+        
+        # Skip empty lines
+        if not stripped_line:
             continue
-
+            
+        # Remove patterns
+        skip_line = False
+        for pattern in patterns_to_remove:
+            if re.match(pattern, stripped_line, re.IGNORECASE):
+                skip_line = True
+                break
+                
+        if skip_line:
+            continue
+            
+        # Look for first speaker marker (◯) to start actual content
+        if not found_first_speaker:
+            if stripped_line.startswith('◯'):
+                found_first_speaker = True
+            else:
+                continue  # Skip everything before first speaker
+        
         cleaned_lines.append(stripped_line)
+    
     final_text = "\n".join(cleaned_lines)
-    final_text = re.sub(r'\n{2,}', '\n',
-                        final_text)  # Collapse multiple newlines
-
-    logger.info(f"🧹 Text cleaning complete. Final length: {len(final_text)}")
+    final_text = re.sub(r'\n{2,}', '\n', final_text)  # Collapse multiple newlines
+    
+    logger.info(f"🧹 Text cleaning complete. Final length: {len(final_text)} chars. Found first speaker: {found_first_speaker}")
+    
+    # Additional validation - ensure we have actual content
+    if not found_first_speaker or len(final_text) < 100:
+        logger.warning("⚠️ Cleaned text appears to have no valid speaker content. Using less aggressive cleaning.")
+        # Fallback: just remove obvious headers but keep more content
+        fallback_lines = []
+        for line in discussion_block.split('\n'):
+            stripped = line.strip()
+            if (stripped and 
+                not re.match(r'^제\d+회-제\d+차', stripped) and
+                not re.match(r'^국\s*회\s*본\s*회\s*의', stripped) and
+                not re.match(r'^\d{1,4}\s*$', stripped)):
+                fallback_lines.append(stripped)
+        final_text = "\n".join(fallback_lines)
+        final_text = re.sub(r'\n{2,}', '\n', final_text)
+        logger.info(f"🔄 Using fallback cleaning. Length: {len(final_text)} chars")
+    
     return final_text
 
 
