@@ -998,7 +998,7 @@ def category_analytics(request):
         # Base queryset for statements
 
 
-from django.http import JsonResponse
+
 from django.views.decorators.http import require_POST
 from django.core.management import call_command
 import io
