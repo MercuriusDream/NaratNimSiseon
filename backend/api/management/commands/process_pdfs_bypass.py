@@ -1,10 +1,14 @@
 
 from django.core.management.base import BaseCommand
 from api.models import Session, Statement
-from api.tasks import process_session_pdf, client, genai
+from api.tasks import process_session_pdf, client
 import requests
 import pdfplumber
 import tempfile
+try:
+    import google.genai as genai
+except ImportError:
+    genai = None
 import os
 from pathlib import Path
 import logging
