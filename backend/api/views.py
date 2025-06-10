@@ -26,10 +26,8 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Count, Q, Avg
 from datetime import datetime, timedelta
 from .models import Session, Bill, Speaker, Statement, Party, Category
-from .serializers import (
-    SessionSerializer, BillSerializer, SpeakerSerializer, 
-    StatementSerializer, PartySerializer
-)
+from .serializers import (SessionSerializer, BillSerializer, SpeakerSerializer,
+                          StatementSerializer, PartySerializer)
 from .tasks import is_celery_available
 from django.db.models import Count, Avg
 from datetime import datetime, timedelta
@@ -1065,13 +1063,12 @@ def category_analytics(request):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
 from django.views.decorators.http import require_POST
 from django.core.management import call_command
 from django.http import JsonResponse
 import io
 import sys
+
 
 @require_POST
 def trigger_force_collection(request):
@@ -1080,30 +1077,19 @@ def trigger_force_collection(request):
         # Capture output
         out = io.StringIO()
         call_command('force_collection', stdout=out)
-        return JsonResponse({
-            'status': 'success',
-            'output': out.getvalue()
-        })
+        return JsonResponse({'status': 'success', 'output': out.getvalue()})
     except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'error': str(e)
-        }, status=500)
+        return JsonResponse({'status': 'error', 'error': str(e)}, status=500)
+
 
 def check_data_status(request):
     """Check data status via API"""
     try:
         out = io.StringIO()
         call_command('check_data_status', stdout=out)
-        return JsonResponse({
-            'status': 'success',
-            'output': out.getvalue()
-        })
+        return JsonResponse({'status': 'success', 'output': out.getvalue()})
     except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'error': str(e)
-        }, status=500)
+        return JsonResponse({'status': 'error', 'error': str(e)}, status=500)
 
         statements_qs = Statement.objects.all()
 
@@ -1770,7 +1756,6 @@ def party_policy_comparison(request):
                         category_statements.count(),
                         'avg_sentiment':
                         round(
-                            ```python
                             category_statements.aggregate(
                                 avg=Avg('sentiment_score'))['avg'], 3),
                         'stance':
@@ -2626,8 +2611,7 @@ def home_data(request):
                 era = session.era_co or '22'
                 sess = session.sess or '1'
                 dgr = session.dgr or '1'
-                title```python
- = f'제{era}대 제{sess}회 제{dgr}차'
+                title = f'제{era}대 제{sess}회 제{dgr}차'
 
             sessions_data.append({
                 'id':
@@ -2794,12 +2778,13 @@ def start_collection(request):
                     'status': 'completed'
                 })
             except Exception as e:
-                return JsonResponse({
-                    'message': f'Collection failed: {str(e)}',
-                    'status': 'failed'
-                }, status=500)
+                return JsonResponse(
+                    {
+                        'message': f'Collection failed: {str(e)}',
+                        'status': 'failed'
+                    },
+                    status=500)
 
     except Exception as e:
-        return JsonResponse({
-            'error': f'Failed to start collection: {str(e)}'
-        }, status=500)
+        return JsonResponse({'error': f'Failed to start collection: {str(e)}'},
+                            status=500)
