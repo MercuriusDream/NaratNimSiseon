@@ -90,44 +90,27 @@ class Command(BaseCommand):
                         debug=debug,
                         start_date=start_date.isoformat() if start_date else None)
                 else:
-                    raise ImportError("Celery not available")
-            except (ImportError, Exception):
-                self.stdout.write(
-                    self.style.WARNING(
-                        "🔄 Calling 'fetch_continuous_sessions' synchronously.")
-                )
-                # Call the function directly without accessing Celery task attributes
-                try:
-                    import importlib
-                    tasks_module = importlib.import_module('api.tasks')
+                    self.stdout.write(
+                        self.style.WARNING(
+                            "🔄 Calling 'fetch_continuous_sessions' synchronously.")
+                    )
+                    # Call the function directly - the task function can handle being called without self
+                    from api.tasks import fetch_continuous_sessions
                     
-                    func_name = 'fetch_continuous_sessions'
-                    if hasattr(tasks_module, func_name):
-                        func = getattr(tasks_module, func_name)
-                        # If it's a Celery task, try to get the original function
-                        if hasattr(func, 'func'):
-                            func = func.func
-                        elif hasattr(func, '__wrapped__'):
-                            func = func.__wrapped__
-                        
-                        # Call directly (bound tasks don't need self when called directly)
-                        func(
+                    # For bound tasks, we need to call with self=None when running synchronously
+                    if hasattr(fetch_continuous_sessions, '__wrapped__'):
+                        # This is a Celery task, call the wrapped function
+                        fetch_continuous_sessions.__wrapped__(
+                            self=None,  # Pass None for self since we're not running in Celery
                             force=True,
                             debug=debug,
                             start_date=start_date.isoformat() if start_date else None)
                     else:
-                        logger.error(f"Function {func_name} not found in tasks module")
-                except Exception as e_fallback:
-                    logger.error(f"Failed to call fetch_continuous_sessions directly: {e_fallback}")
-                    # Last resort - try importing and calling synchronously
-                    try:
-                        from api import tasks
-                        tasks.fetch_continuous_sessions(
+                        # Call directly
+                        fetch_continuous_sessions(
                             force=True,
                             debug=debug,
                             start_date=start_date.isoformat() if start_date else None)
-                    except Exception as e_final:
-                        logger.error(f"Final fallback for fetch_continuous_sessions failed: {e_final}")
 
             self.stdout.write(
                 self.style.SUCCESS(
