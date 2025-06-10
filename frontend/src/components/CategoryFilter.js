@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
@@ -15,16 +14,16 @@ const CategoryFilter = ({ onCategoryChange, selectedCategories = [] }) => {
     try {
       const response = await api.get('/categories/');
       let categoriesData = response.data;
-      
+
       // Handle different response formats
       if (categoriesData && categoriesData.results) {
         categoriesData = categoriesData.results;
       }
-      
+
       // Ensure we always have an array
       const finalCategories = Array.isArray(categoriesData) ? categoriesData : [];
       setCategories(finalCategories);
-      
+
       console.log('Categories loaded:', finalCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -47,14 +46,14 @@ const CategoryFilter = ({ onCategoryChange, selectedCategories = [] }) => {
   const handleCategorySelect = (categoryId, subcategoryId = null) => {
     const newSelection = [...selectedCategories];
     const selectionKey = subcategoryId ? `${categoryId}-${subcategoryId}` : categoryId.toString();
-    
+
     if (newSelection.includes(selectionKey)) {
       const index = newSelection.indexOf(selectionKey);
       newSelection.splice(index, 1);
     } else {
       newSelection.push(selectionKey);
     }
-    
+
     onCategoryChange(newSelection);
   };
 
@@ -74,7 +73,7 @@ const CategoryFilter = ({ onCategoryChange, selectedCategories = [] }) => {
     <div className="bg-white rounded-lg shadow p-4">
       <h3 className="text-lg font-semibold mb-4">카테고리 필터</h3>
       <div className="space-y-2 max-h-96 overflow-y-auto">
-        {Array.isArray(categories) && categories.length > 0 && categories.map(category => (
+        {(categories || []).map(category => (
           <div key={category.id} className="border rounded-lg">
             <div className="flex items-center justify-between p-3">
               <label className="flex items-center space-x-2 flex-1">
@@ -93,7 +92,7 @@ const CategoryFilter = ({ onCategoryChange, selectedCategories = [] }) => {
                 {expandedCategories.has(category.id) ? '−' : '+'}
               </button>
             </div>
-            
+
             {expandedCategories.has(category.id) && category.subcategories && (
               <div className="px-6 pb-3 space-y-2">
                 {category.subcategories.map(subcategory => (
@@ -112,7 +111,7 @@ const CategoryFilter = ({ onCategoryChange, selectedCategories = [] }) => {
           </div>
         ))}
       </div>
-      
+
       {selectedCategories.length > 0 && (
         <div className="mt-4 pt-4 border-t">
           <button

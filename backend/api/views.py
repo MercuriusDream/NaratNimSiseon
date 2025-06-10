@@ -584,33 +584,40 @@ class SpeakerViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         try:
-            # Filter to only show 22nd Assembly speakers
+            # Filter to only show 22nd Assembly speakers - handle missing/null fields safely
             queryset = super().get_queryset().filter(
-                models.Q(gtelt_eraco__contains=22)
-                | models.Q(plpt_nm__icontains='22'))
+                models.Q(gtelt_eraco__icontains='22') |
+                models.Q(plpt_nm__icontains='22') |
+                models.Q(era_int=22)
+            ).exclude(
+                models.Q(naas_nm__isnull=True) |
+                models.Q(naas_nm='') |
+                models.Q(naas_nm='정보없음')
+            )
             
             name = self.request.query_params.get('name')
             party = self.request.query_params.get('party')
             constituency = self.request.query_params.get('constituency')
             era_co = self.request.query_params.get('era_co')
 
-            if name:
-                queryset = queryset.filter(naas_nm__icontains=name)
-            if party:
-                queryset = queryset.filter(plpt_nm__icontains=party)
-            if constituency:
-                # Handle both string and list fields for constituency
+            if name and name.strip():
+                queryset = queryset.filter(naas_nm__icontains=name.strip())
+            if party and party.strip():
+                queryset = queryset.filter(plpt_nm__icontains=party.strip())
+            if constituency and constituency.strip():
+                # Handle constituency filtering more safely
                 queryset = queryset.filter(
-                    models.Q(elecd_nm__icontains=constituency) |
-                    models.Q(elecd_nm__contains=[constituency])
+                    models.Q(elecd_nm__icontains=constituency.strip())
                 )
-            if era_co and era_co != '22':
+            if era_co and era_co.strip() and era_co.strip() != '22':
                 # Only allow 22nd assembly
                 return Speaker.objects.none()
 
             return queryset.order_by('naas_nm')
         except Exception as e:
             logger.error(f"Error in SpeakerViewSet get_queryset: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return Speaker.objects.none()
 
     @action(detail=True, methods=['get'])
