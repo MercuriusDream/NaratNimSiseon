@@ -2725,7 +2725,7 @@ def analyze_batch_statements_single_request(batch_segments, bill_name,
         segments_text += f"\n--- 구간 {item['index']+1} ---\n{item['text']}\n"
 
     prompt = f"""
-당신은 국회 속기록 전문 분석가입니다. ◯ 표시로 시작하는 각 발언 구간을 분석하여 정확한 발언자와 내용을 추출해주세요.
+당신은 국회 속기록 전문 분석가입니다. ◯ 표시로 시작하는 각 발언 구간을 분석하여 정확한 발언자와 인덱스를 추출해주세요.
 
 의안: {safe_bill_name}
 
@@ -2737,7 +2737,8 @@ def analyze_batch_statements_single_request(batch_segments, bill_name,
   {{
     "segment_index": 1,
     "speaker_name": "발언자명 (직책 제거)",
-    "full_text": "전체 발언 내용",
+    "start_idx": 발언 시작 정확한 파이썬 텍스트 시작 인덱스(정수),
+    "end_idx": 발언 끝 정확한 파이썬 텍스트 끝 인덱스(정수),
     "is_valid_member": true,
     "is_substantial": true,
     "sentiment_score": 0.0,
@@ -2749,7 +2750,7 @@ def analyze_batch_statements_single_request(batch_segments, bill_name,
 - ◯ 다음에 나오는 이름이 발언자
 - 발언자명에서 "의원", "위원장", "장관" 등 직책 제거
 - 실제 의원 발언만 포함 (의사진행, 보고 제외)
-- 발언 내용은 전체를 포함
+- start_idx와 end_idx는 전체 문서에서의 정확한 문자 위치
 - sentiment_score: -1(매우 부정) ~ 1(매우 긍정)
 - bill_relevance_score: 0(무관) ~ 1(매우 관련)
 - JSON 배열만 응답, 다른 텍스트 없이"""
@@ -2851,9 +2852,18 @@ def _execute_batch_analysis(prompt,
                     continue
 
                 speaker_name = analysis_json.get('speaker_name', '').strip()
-                full_text = analysis_json.get('full_text', '').strip()
+                start_idx = analysis_json.get('start_idx')
+                end_idx = analysis_json.get('end_idx')
                 is_valid_member = analysis_json.get('is_valid_member', False)
                 is_substantial = analysis_json.get('is_substantial', False)
+
+                # Extract text locally using the indices provided by LLM
+                extracted_text = ""
+                if start_idx is not None and end_idx is not None and i < len(original_segments):
+                    segment_text = original_segments[i]
+                    start_idx = max(0, min(start_idx, len(segment_text)))
+                    end_idx = max(start_idx, min(end_idx, len(segment_text)))
+                    extracted_text = segment_text[start_idx:end_idx].strip()
 
                 # Clean speaker name from titles (LLM should have done this, but double-check)
                 if speaker_name:
@@ -2873,15 +2883,17 @@ def _execute_batch_analysis(prompt,
                     for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
                 # Only include valid, substantial statements from real members
-                if (speaker_name and full_text and is_valid_member
+                if (speaker_name and extracted_text and is_valid_member
                         and is_substantial and not should_ignore
-                        and is_real_member and len(full_text) > 50):
+                        and is_real_member and len(extracted_text) > 50):
 
                     results.append({
                         'speaker_name':
                         speaker_name,
                         'text':
-                        full_text,  # Use the full text extracted by LLM
+                        extracted_text,  # Use the locally extracted text
+                        'start_idx': start_idx,  # Include indices for further processing
+                        'end_idx': end_idx,
                         'sentiment_score':
                         analysis_json.get('sentiment_score', 0.0),
                         'sentiment_reason':
@@ -2896,11 +2908,11 @@ def _execute_batch_analysis(prompt,
                     })
 
                     logger.info(
-                        f"✅ Extracted statement from {speaker_name}: {full_text[:100]}..."
+                        f"✅ Extracted statement from {speaker_name}: {extracted_text[:100]}..."
                     )
                 else:
                     logger.debug(
-                        f"⚠️ Skipped statement - speaker: '{speaker_name}', valid: {is_valid_member}, substantial: {is_substantial}, real_member: {is_real_member}, text_len: {len(full_text) if full_text else 0}"
+                        f"⚠️ Skipped statement - speaker: '{speaker_name}', valid: {is_valid_member}, substantial: {is_substantial}, real_member: {is_real_member}, text_len: {len(extracted_text) if extracted_text else 0}"
                     )
 
             logger.info(
