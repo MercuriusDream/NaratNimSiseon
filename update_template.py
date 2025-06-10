@@ -1,56 +1,63 @@
-
-import json
 import os
 import re
+from pathlib import Path
 
 def update_template():
-    # Path to the asset manifest
-    manifest_path = 'frontend/build/asset-manifest.json'
-    template_path = 'backend/templates/index.html'
-    
-    if not os.path.exists(manifest_path):
-        print("Asset manifest not found. Make sure to build the frontend first.")
+    # Path to the built React app
+    build_dir = Path('frontend/build')
+    static_dir = build_dir / 'static'
+
+    # Path to Django template
+    template_path = Path('backend/templates/index.html')
+
+    if not build_dir.exists():
+        print("❌ Build directory not found. Run 'npm run build' first.")
         return
-    
-    if not os.path.exists(template_path):
-        print("Template file not found.")
+
+    # Read the original index.html from React build
+    original_html = (build_dir / 'index.html').read_text()
+
+    # Find CSS and JS files
+    css_files = list((static_dir / 'css').glob('main.*.css'))
+    js_files = list((static_dir / 'js').glob('main.*.js'))
+
+    if not css_files or not js_files:
+        print("❌ CSS or JS files not found in build/static")
         return
-    
-    # Read the asset manifest
-    with open(manifest_path, 'r') as f:
-        manifest = json.load(f)
-    
-    # Extract CSS and JS file names
-    css_file = manifest['files'].get('main.css', '').replace('/static/', '')
-    js_file = manifest['files'].get('main.js', '').replace('/static/', '')
-    
-    if not css_file or not js_file:
-        print("Could not find main CSS or JS files in manifest")
-        return
-    
+
+    # Get the latest files (sorted by modification time)
+    latest_css = max(css_files, key=os.path.getmtime)
+    latest_js = max(js_files, key=os.path.getmtime)
+
+    css_filename = latest_css.name
+    js_filename = latest_js.name
+
+    print(f"📁 Found CSS: {css_filename}")
+    print(f"📁 Found JS: {js_filename}")
+
     # Read the current template
     with open(template_path, 'r') as f:
         template_content = f.read()
-    
+
     # Update CSS reference
     template_content = re.sub(
         r'<link href="[^"]*main\.[^"]*\.css[^"]*" rel="stylesheet">',
-        f'<link href="{{% static \'{css_file}\' %}}" rel="stylesheet">',
+        f'<link href="{{% static \'static/css/{css_filename}\' %}}" rel="stylesheet">',
         template_content
     )
-    
+
     # Update JS reference
     template_content = re.sub(
         r'<script src="[^"]*main\.[^"]*\.js[^"]*"></script>',
-        f'<script src="{{% static \'{js_file}\' %}}"></script>',
+        f'<script src="{{% static \'static/js/{js_filename}\' %}}"></script>',
         template_content
     )
-    
+
     # Write the updated template
     with open(template_path, 'w') as f:
         f.write(template_content)
-    
-    print(f"Updated template with CSS: {css_file}, JS: {js_file}")
+
+    print(f"✅ Updated template with CSS: static/css/{css_filename}, JS: static/js/{js_filename}")
 
 if __name__ == '__main__':
     update_template()

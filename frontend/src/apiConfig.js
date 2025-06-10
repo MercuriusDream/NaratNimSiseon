@@ -1,5 +1,5 @@
 // frontend/src/apiConfig.js
-export const API_BASE_URL = window.location.origin;
+export const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
 export const ENDPOINTS = {
   HOME_DATA: `${API_BASE_URL}/api/home-data/`,
