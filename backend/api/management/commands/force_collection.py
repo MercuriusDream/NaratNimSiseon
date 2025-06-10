@@ -11,9 +11,6 @@ from api.models import Session
 logger = logging.getLogger(__name__)
 
 
-
-
-
 class Command(BaseCommand):
     help = 'Fetches new assembly sessions or re-processes existing PDFs.'
 
@@ -97,19 +94,11 @@ class Command(BaseCommand):
                     self.style.WARNING(
                         "🔄 Calling 'fetch_continuous_sessions' synchronously (Celery not available)."
                     ))
-                # **FIX: Import and call the function directly**
-                from api.tasks import fetch_continuous_sessions
-                # Get the actual function, not the Celery wrapper
-                if hasattr(fetch_continuous_sessions, '__wrapped__'):
-                    actual_func = fetch_continuous_sessions.__wrapped__
-                else:
-                    actual_func = fetch_continuous_sessions
-                
-                # Call the function directly - pass None as first positional argument for 'self'
-                actual_func(None,
-                           force=True,
-                           debug=debug,
-                           start_date=start_date_iso)
+                # Import the actual function implementation directly
+                from api.tasks import fetch_continuous_sessions_impl
+                fetch_continuous_sessions_impl(force=True,
+                                               debug=debug,
+                                               start_date=start_date_iso)
 
             self.stdout.write(
                 self.style.SUCCESS(
@@ -164,12 +153,8 @@ class Command(BaseCommand):
         else:
             self.stdout.write(
                 self.style.WARNING("🔄 Running tasks synchronously."))
-            # **FIX: Import the function directly and get the unwrapped version**
-            from api.tasks import process_session_pdf
-            if hasattr(process_session_pdf, '__wrapped__'):
-                raw_pdf_processor = process_session_pdf.__wrapped__
-            else:
-                raw_pdf_processor = process_session_pdf
+            # Import the actual implementation function directly
+            from api.tasks import process_session_pdf_impl
 
         for i, session in enumerate(sessions_to_process):
             self.stdout.write(
@@ -185,11 +170,10 @@ class Command(BaseCommand):
                         f"✅ Queued PDF processing task for session {session.conf_id}"
                     )
                 else:
-                    # **FIX: Call the unwrapped function directly**
-                    raw_pdf_processor(None,
-                                      session_id=session.conf_id,
-                                      force=True,
-                                      debug=debug)
+                    # Call the implementation function directly
+                    process_session_pdf_impl(session_id=session.conf_id,
+                                             force=True,
+                                             debug=debug)
                     logger.info(
                         f"✅ Successfully processed PDF for session {session.conf_id} synchronously"
                     )
