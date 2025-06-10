@@ -1838,7 +1838,7 @@ def extract_statements_for_bill_segment(bill_text_segment,
 
 def process_single_segment_for_statements_with_splitting(
         bill_text_segment, session_id, bill_name, debug=False):
-    """Process a single text segment by splitting at various speech markers and analyzing each speech."""
+    """Process a single text segment by splitting at ◯ markers and analyzing each speech with LLM."""
     if not bill_text_segment:
         return []
 
@@ -1847,7 +1847,22 @@ def process_single_segment_for_statements_with_splitting(
     )
 
     # Find all ◯ markers to determine individual speeches
-    speaker_markers = ['◯']
+    speaker_markers = []
+    current_pos = 0
+    
+    while True:
+        marker_pos = bill_text_segment.find('◯', current_pos)
+        if marker_pos == -1:
+            break
+        speaker_markers.append((marker_pos, '◯'))
+        current_pos = marker_pos + 1
+    
+    if not speaker_markers:
+        logger.info("No ◯ markers found, treating entire segment as one speech")
+        if len(bill_text_segment) > 100:
+            return analyze_speech_segment_with_llm_batch([bill_text_segment], session_id, bill_name, debug)
+        return []
+
     speech_segments = []
     total_chars = 0
     min_segment_length = 30
@@ -1874,12 +1889,12 @@ def process_single_segment_for_statements_with_splitting(
         f"Split text into {len(speech_segments)} segments with {total_chars} total characters "
         f"(avg {total_chars//max(1, len(speech_segments))} chars/segment)")
 
-    if len(speech_segments) == 0 and len(bill_text_segment) > 100:
-        logger.info("No valid segments found with markers, trying fallback")
-        return _fallback_segmentation(bill_text_segment, session_id, bill_name,
-                                      debug)
+    if len(speech_segments) == 0:
+        logger.info("No valid segments found with ◯ markers")
+        return []
 
-    return speech_segments
+    # Process segments with LLM for analysis
+    return analyze_speech_segment_with_llm_batch(speech_segments, session_id, bill_name, debug)
 
 
 def _fallback_segmentation(text, session_id, bill_name, debug=False):
@@ -2665,101 +2680,77 @@ def analyze_speech_segment_with_llm_batch(speech_segments,
 def analyze_batch_statements_single_request(batch_segments, bill_name,
                                             assembly_members, estimated_tokens,
                                             batch_start_index):
-    """Analyze up to 20 statements in a single API request with improved batching using new google.genai structure."""
+    """Analyze ◯ segments to extract speaker statements using LLM."""
     if not batch_segments:
         return []
 
-    # Process large segments by chunking them
-    processed_segments = []
-    for segment in batch_segments:
-        if len(segment) > 2000:  # If segment is too large, split it
-            # Split at ◯ markers to preserve speech boundaries
-            sub_segments = segment.split('◯')
-            for i, sub_seg in enumerate(sub_segments):
-                if sub_seg.strip() and len(sub_seg.strip()) > 50:
-                    # Add back the ◯ marker except for first segment
-                    final_seg = ('◯' + sub_seg) if i > 0 else sub_seg
-                    processed_segments.append(final_seg.strip())
-        else:
-            processed_segments.append(segment)
-
-    # Limit to manageable batch size
-    max_segments_per_batch = 15  # Reduced for better reliability
-    if len(processed_segments) > max_segments_per_batch:
-        processed_segments = processed_segments[:max_segments_per_batch]
-
-    # Clean and prepare segments
+    # Clean and prepare ◯ segments for LLM analysis
     cleaned_segments = []
-    for segment in processed_segments:
-        # Remove newlines and clean text
+    for i, segment in enumerate(batch_segments):
+        # Clean the segment
         cleaned_segment = segment.replace('\n', ' ').replace('\r', '').strip()
-
-        # Stop at reporting end marker
+        
+        # Remove reporting markers
         report_end_marker = "(보고사항은 끝에 실음)"
         if report_end_marker in cleaned_segment:
-            cleaned_segment = cleaned_segment.split(
-                report_end_marker)[0].strip()
+            cleaned_segment = cleaned_segment.split(report_end_marker)[0].strip()
 
-        # Limit segment length but be more generous
-        if len(cleaned_segment) > 1000:
-            cleaned_segment = cleaned_segment[:1000] + "..."
-
-        if cleaned_segment and len(cleaned_segment.strip()) > 20:
-            cleaned_segments.append(cleaned_segment)
+        if cleaned_segment and len(cleaned_segment.strip()) > 30:
+            cleaned_segments.append({
+                'index': i,
+                'text': cleaned_segment,
+                'original_length': len(segment)
+            })
 
     if not cleaned_segments:
-        logger.warning("No valid segments after cleaning and processing")
+        logger.warning("No valid ◯ segments after cleaning")
         return []
+
+    # Limit batch size for reliable processing
+    max_segments_per_batch = 10
+    if len(cleaned_segments) > max_segments_per_batch:
+        cleaned_segments = cleaned_segments[:max_segments_per_batch]
 
     # Create safe bill name
     safe_bill_name = str(bill_name)[:100] if bill_name else "알 수 없는 의안"
 
-    # Create batch prompt for multiple segments
+    # Create batch prompt for ◯ segment analysis
     segments_text = ""
-    for i, segment in enumerate(cleaned_segments):
-        segments_text += f"\n--- 구간 {i+1} ---\n{segment}\n"
-
-    # Split prompt if too large
-    max_prompt_length = 15000  # Conservative limit
-    if len(segments_text) > max_prompt_length:
-        # Process in smaller sub-batches
-        return _process_large_batch_in_chunks(cleaned_segments, bill_name,
-                                              assembly_members,
-                                              estimated_tokens,
-                                              batch_start_index)
+    for item in cleaned_segments:
+        segments_text += f"\n--- 구간 {item['index']+1} ---\n{item['text']}\n"
 
     prompt = f"""
-당신은 역사에 길이 남을 기록가입니다. 당신의 기록과 분류, 그리고 정확도는 미래에 사람들을 살릴 것입니다. 당신이 정확하게 기록을 해야만 사람들은 그 정확한 기록에 의존하여 살아갈 수 있을 것입니다. 따라서, 다음 명령을 아주 자세히, 엄밀히, 수행해 주십시오.
-국회 발언 분석 요청:
+당신은 국회 속기록 전문 분석가입니다. ◯ 표시로 시작하는 각 발언 구간을 분석하여 정확한 발언자와 내용을 추출해주세요.
 
 의안: {safe_bill_name}
 
-발언 구간들:
+발언 구간들 (◯로 구분됨):
 {segments_text}
 
-다음 JSON 배열로 응답하세요:
+각 구간에서 다음을 정확히 추출하여 JSON 배열로 응답하세요:
 [
   {{
     "segment_index": 1,
-    "speaker_name": "발언자명",
-    "start_idx": 0,
-    "end_idx": 100,
+    "speaker_name": "발언자명 (직책 제거)",
+    "full_text": "전체 발언 내용",
     "is_valid_member": true,
     "is_substantial": true,
     "sentiment_score": 0.0,
-    "bill_relevance_score": 0.5
+    "bill_relevance_score": 0.8
   }}
 ]
 
-규칙:
-- ◯로 시작하는 실제 의원 발언만 포함
-- 의사진행 발언자 제외
-- 발언자명에서 직책 제거
-- JSON 배열만 응답"""
+중요한 규칙:
+- ◯ 다음에 나오는 이름이 발언자
+- 발언자명에서 "의원", "위원장", "장관" 등 직책 제거
+- 실제 의원 발언만 포함 (의사진행, 보고 제외)
+- 발언 내용은 전체를 포함
+- sentiment_score: -1(매우 부정) ~ 1(매우 긍정)
+- bill_relevance_score: 0(무관) ~ 1(매우 관련)
+- JSON 배열만 응답, 다른 텍스트 없이"""
 
-    return _execute_batch_analysis(prompt, cleaned_segments,
-                                   processed_segments, assembly_members,
-                                   batch_start_index, bill_name)
+    return _execute_batch_analysis(prompt, cleaned_segments, batch_segments, 
+                                   assembly_members, batch_start_index, bill_name)
 
 
 def _process_large_batch_in_chunks(batch_model, segments, bill_name,
@@ -2848,104 +2839,53 @@ def _execute_batch_analysis(prompt,
                 return []
 
             results = []
-            # --- BEGIN: DB Policy Category Attachment ---
-            # Try to fetch the Bill object for bill_name (if available)
-            bill_obj = None
-            main_policy_category = None
-            policy_subcategories = []
-            if bill_name:
-                try:
-                    from .models import Bill
-                    bill_obj = Bill.objects.filter(
-                        bill_nm__icontains=bill_name).order_by(
-                            '-created_at').first()
-                    if bill_obj:
-                        # Main policy category (list of names, highest confidence first)
-                        main_policy_category = list(
-                            bill_obj.category_mappings.filter(is_primary=True).
-                            order_by('-confidence_score').values_list(
-                                'category__name', flat=True))
-                        # Policy subcategories (list of names, highest relevance first)
-                        policy_subcategories = list(
-                            bill_obj.subcategory_mappings.order_by(
-                                '-relevance_score').values_list(
-                                    'subcategory__name', flat=True))
-                except Exception as cat_exc:
-                    logger.warning(
-                        f"Could not fetch policy categories for bill '{bill_name}': {cat_exc}"
-                    )
-            # --- END: DB Policy Category Attachment ---
+            
             for i, analysis_json in enumerate(analysis_array):
                 if not isinstance(analysis_json, dict):
                     continue
 
                 speaker_name = analysis_json.get('speaker_name', '').strip()
-                start_idx = analysis_json.get('start_idx', 0)
-                end_idx = analysis_json.get('end_idx', 0)
+                full_text = analysis_json.get('full_text', '').strip()
                 is_valid_member = analysis_json.get('is_valid_member', False)
                 is_substantial = analysis_json.get('is_substantial', False)
 
-                # Store indices instead of extracting text here
-                # The text will be extracted later in process_extracted_statements_data
-                speech_start_idx = start_idx
-                speech_end_idx = end_idx
-
-                # Clean speaker name from titles
+                # Clean speaker name from titles (LLM should have done this, but double-check)
                 if speaker_name:
                     titles_to_remove = [
-                        '위원장', '부위원장', '의원', '장관', '차관', '의장', '부의장', '의사국장',
-                        '사무관', '국장', '서기관', '실장', '청장', '원장', '대변인', '비서관',
-                        '수석', '정무위원', '간사'
+                        '위원장', '부위원장', '의원', '장관', '차관', '의장', '부의장', 
+                        '의사국장', '사무관', '국장', '서기관', '실장', '청장', '원장', 
+                        '대변인', '비서관', '수석', '정무위원', '간사'
                     ]
-
                     for title in titles_to_remove:
                         speaker_name = speaker_name.replace(title, '').strip()
 
-                # --- Attach DB categories/subcategories to result ---
-                result = {
-                    **analysis_json,
-                    'speaker_name': speaker_name,
-                    'start_idx': speech_start_idx,
-                    'end_idx': speech_end_idx,
-                    'segment_index': batch_start_index + i,
-                }
-                if main_policy_category is not None:
-                    result['main_policy_category'] = main_policy_category
-                if policy_subcategories:
-                    result['policy_subcategories'] = policy_subcategories
-                results.append(result)
-
-                # Validate speaker
+                # Validate speaker against assembly members
                 is_real_member = speaker_name in assembly_members if assembly_members and speaker_name else is_valid_member
 
                 should_ignore = any(
                     ignored in speaker_name
                     for ignored in IGNORED_SPEAKERS) if speaker_name else True
 
-                if (speaker_name and speech_start_idx is not None
-                        and speech_end_idx is not None and is_valid_member
+                # Only include valid, substantial statements from real members
+                if (speaker_name and full_text and is_valid_member
                         and is_substantial and not should_ignore
-                        and is_real_member):
+                        and is_real_member and len(full_text) > 50):
 
                     results.append({
-                        'speaker_name':
-                        speaker_name,
-                        'start_idx':
-                        speech_start_idx,
-                        'end_idx':
-                        speech_end_idx,
-                        'sentiment_score':
-                        analysis_json.get('sentiment_score', 0.0),
-                        'sentiment_reason':
-                        'LLM 배치 분석 완료',
-                        'bill_relevance_score':
-                        analysis_json.get('bill_relevance_score', 0.0),
+                        'speaker_name': speaker_name,
+                        'text': full_text,  # Use the full text extracted by LLM
+                        'sentiment_score': analysis_json.get('sentiment_score', 0.0),
+                        'sentiment_reason': '◯ 구간 LLM 분석',
+                        'bill_relevance_score': analysis_json.get('bill_relevance_score', 0.0),
                         'policy_categories': [],
                         'policy_keywords': [],
                         'bill_specific_keywords': [],
-                        'segment_index':
-                        batch_start_index + i
+                        'segment_index': batch_start_index + i
                     })
+                    
+                    logger.info(f"✅ Extracted statement from {speaker_name}: {full_text[:100]}...")
+                else:
+                    logger.debug(f"⚠️ Skipped statement - speaker: '{speaker_name}', valid: {is_valid_member}, substantial: {is_substantial}, real_member: {is_real_member}, text_len: {len(full_text) if full_text else 0}")
 
             logger.info(
                 f"✅ Batch processed {len(results)} valid statements from {len(cleaned_segments)} segments"
