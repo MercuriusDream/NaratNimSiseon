@@ -299,20 +299,39 @@ ENABLE_VOTING_DATA_COLLECTION = getattr(settings,
 
 # Configure Gemini API with error handling
 def initialize_gemini():
-    """Initialize Gemini API with proper error handling"""
+    """Initialize Gemini API with proper error handling using new google.genai library"""
     try:
-        import google.generativeai as genai_module
+        from google import genai
+        from google.genai import types
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-            genai_module.configure(api_key=settings.GEMINI_API_KEY)
-            model_instance = genai_module.GenerativeModel(
-                'gemini-2.5-flash-preview-04-17')
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
             # Check Gemini API status immediately after configuration
             try:
-                prompt = "Hello"
-                response = model_instance.generate_content(prompt)
-                preview = getattr(response, 'text', str(response))
-                logger.info(f"✅ Gemini API configured successfully and status check succeeded. Preview: {preview[:100]}")
-                return genai_module, model_instance
+                model = "gemini-2.5-flash-preview-05-20"
+                contents = [
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part.from_text(text="Hello")
+                        ],
+                    ),
+                ]
+                
+                config = types.GenerateContentConfig(
+                    response_mime_type="text/plain",
+                )
+                
+                response_text = ""
+                for chunk in client.models.generate_content_stream(
+                    model=model,
+                    contents=contents,
+                    config=config,
+                ):
+                    response_text += chunk.text
+                    break  # Just get first chunk for test
+                
+                logger.info(f"✅ Gemini API configured successfully and status check succeeded. Preview: {response_text[:100]}")
+                return genai, client
             except Exception as status_exc:
                 logger.warning(f"⚠️ Gemini API configured but status check failed: {status_exc}")
                 return None, None
@@ -323,7 +342,7 @@ def initialize_gemini():
             return None, None
     except ImportError as e:
         logger.error(
-            f"❌ google.generativeai library not available: {e}. LLM features will be disabled."
+            f"❌ google.genai library not available: {e}. LLM features will be disabled."
         )
         return None, None
     except Exception as e:
@@ -334,7 +353,7 @@ def initialize_gemini():
 
 
 # Initialize Gemini
-genai, model = initialize_gemini()
+genai, client = initialize_gemini()
 
 
 def reinitialize_gemini():
