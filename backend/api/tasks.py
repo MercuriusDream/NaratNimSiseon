@@ -295,23 +295,40 @@ if not logger.handlers or not any(
 
 # Configuration flags
 # Configure Gemini API with error handling
+from google.genai import types as genai_types
+
 def initialize_gemini():
     """Initialize Gemini API with proper error handling using google.genai"""
     try:
         import google.genai as genai_module
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
-            model_instance = genai_module.GenerativeModel(
-                model_name='gemini-2.5-flash-preview-04-17',
-                api_key=settings.GEMINI_API_KEY)
-            # Check Gemini API status immediately after configuration
             try:
-                prompt = "Hello"
-                response = model_instance.generate_content(prompt)
-                preview = getattr(response, 'text', str(response))
-                logger.info(
-                    f"✅ Gemini API configured successfully and status check succeeded. Preview: {preview[:100]}"
+                client = genai_module.Client(api_key=settings.GEMINI_API_KEY)
+                model_name = 'gemini-2.5-flash-preview-05-20'
+                # Minimal status check with a basic prompt
+                contents = [
+                    genai_types.Content(
+                        role="user",
+                        parts=[genai_types.Part.from_text(text="Hello")],
+                    ),
+                ]
+                generate_content_config = genai_types.GenerateContentConfig(
+                    thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+                    response_mime_type="text/plain",
+                    system_instruction=[genai_types.Part.from_text(text="Status check")],
                 )
-                return genai_module, model_instance
+                # Stream one chunk to verify connectivity
+                stream = client.models.generate_content_stream(
+                    model=model_name,
+                    contents=contents,
+                    config=generate_content_config,
+                )
+                preview = next(stream).text
+                logger.info(f"✅ Gemini API (google.genai.Client) configured successfully and status check succeeded. Preview: {preview[:100]}")
+                return client, model_name
+            except Exception as status_exc:
+                logger.warning(f"⚠️ Gemini API (google.genai.Client) configured but status check failed: {status_exc}")
+                return None, None
             except Exception as status_exc:
                 logger.warning(
                     f"⚠️ Gemini API configured but status check failed: {status_exc}"
@@ -334,17 +351,17 @@ def initialize_gemini():
         return None, None
 
 
-# Initialize Gemini
-genai, model = initialize_gemini()
+# Initialize Gemini (new google.genai.Client)
+client, model_name = initialize_gemini()
 
 
 def reinitialize_gemini():
-    """Reinitialize Gemini if it failed initially"""
-    global genai, model
-    if not genai or not model:
+    """Reinitialize Gemini if it failed initially (new google.genai.Client)"""
+    global client, model_name
+    if not client or not model_name:
         logger.info("🔄 Attempting to reinitialize Gemini API...")
-        genai, model = initialize_gemini()
-    return genai is not None and model is not None
+        client, model_name = initialize_gemini()
+    return client is not None and model_name is not None
 
 
 def check_gemini_api_status():
@@ -352,19 +369,28 @@ def check_gemini_api_status():
     Check Gemini API status by sending a minimal prompt and returning the response or error.
     Returns a tuple: (status: str, info: str)
     """
-    global genai, model
+    if not client or not model_name:
+        return ("error", "Gemini API not initialized")
     try:
-        # Always perform (re)init and check
-        reinitialize_gemini()
-        if not genai or not model:
-            return ("error", "Gemini API not initialized.")
-        # Use a minimal, safe prompt
-        prompt = "Hello"
-        response = model.generate_content(prompt)
-        # Try to extract a short preview of the response
-        preview = getattr(response, 'text', str(response))
-        logger.info(
-            f"✅ Gemini API status check succeeded. Preview: {preview[:100]}")
+        from google.genai import types as genai_types
+        contents = [
+            genai_types.Content(
+                role="user",
+                parts=[genai_types.Part.from_text(text="Hello")],
+            ),
+        ]
+        generate_content_config = genai_types.GenerateContentConfig(
+            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+            response_mime_type="text/plain",
+            system_instruction=[genai_types.Part.from_text(text="Status check")],
+        )
+        stream = client.models.generate_content_stream(
+            model=model_name,
+            contents=contents,
+            config=generate_content_config,
+        )
+        preview = next(stream).text
+        logger.info(f"✅ Gemini API status check succeeded. Preview: {preview[:100]}")
         return ("ok", preview[:200])
     except Exception as e:
         logger.error(f"❌ Gemini API status check failed: {e}")
@@ -404,10 +430,6 @@ def celery_or_sync(func):
             logger.info(
                 f"🔄 Running {func.__name__} synchronously (Celery not available)"
             )
-            # Remove 'self' if it's the first arg and the function is a bound task
-            # This is tricky; usually, for bound tasks, direct call should not include 'self' unless it's a method
-            # If func is a @shared_task(bind=True), its __wrapped__ won't expect 'self' directly
-            # A direct call to a Celery task function `func(*args, **kwargs)` should work as expected.
             if hasattr(func, '__wrapped__') and 'bind' in func.__dict__.get(
                     '__header__', {}):
                 # Call the original function without 'self' if it's a bound task being run synchronously
