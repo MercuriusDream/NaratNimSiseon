@@ -1887,7 +1887,7 @@ def extract_statements_for_bill_segment(bill_text_segment,
                                         session_id,
                                         bill_name,
                                         debug=False):
-    """Extract statements using LLM for index-based segmentation, then batch process."""
+    """Extract statements using ◯ marker-based segmentation and batch processing."""
     if not bill_text_segment:
         return []
 
@@ -1895,45 +1895,9 @@ def extract_statements_for_bill_segment(bill_text_segment,
         f"🔍 Processing bill segment: '{bill_name}' (session: {session_id}) - {len(bill_text_segment)} chars"
     )
 
-    # Step 1: Get speech segment indices from LLM
-    speech_indices = get_speech_segment_indices_from_llm(
-        bill_text_segment, bill_name, debug)
-
-    if not speech_indices:
-        logger.info(
-            f"No speech segments found for bill '{bill_name}', trying ◯ fallback"
-        )
-        return process_single_segment_for_statements_with_splitting(
-            bill_text_segment, session_id, bill_name, debug)
-
-    # Step 2: Extract speech segments using indices
-    speech_segments = []
-    for idx_pair in speech_indices:
-        start_idx = idx_pair.get('start', 0)
-        end_idx = idx_pair.get('end', len(bill_text_segment))
-
-        # Validate indices
-        start_idx = max(0, min(start_idx, len(bill_text_segment)))
-        end_idx = max(start_idx, min(end_idx, len(bill_text_segment)))
-
-        if end_idx > start_idx:
-            segment_text = bill_text_segment[start_idx:end_idx].strip()
-            if segment_text and len(
-                    segment_text) > 50:  # Minimum meaningful content
-                speech_segments.append(segment_text)
-
-    logger.info(
-        f"Extracted {len(speech_segments)} speech segments using LLM indices")
-
-    # Step 3: Batch process the extracted segments
-    if speech_segments:
-        return process_speech_segments_multithreaded(speech_segments,
-                                                     session_id, bill_name,
-                                                     debug)
-    else:
-        logger.info(f"No valid speech segments extracted, using fallback")
-        return process_single_segment_for_statements_with_splitting(
-            bill_text_segment, session_id, bill_name, debug)
+    # Use the improved ◯ marker-based segmentation directly
+    return process_single_segment_for_statements_with_splitting(
+        bill_text_segment, session_id, bill_name, debug)
 
 
 def process_single_segment_for_statements_with_splitting(
@@ -2025,20 +1989,15 @@ def process_single_segment_for_statements(bill_text_segment,
 
 
 def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
-    """Simple fallback to marker-based segmentation since LLM discovery handles everything now."""
-    if debug:
-        logger.debug(f"🐛 DEBUG: Would get speech indices for '{bill_name}' (skipping)")
-        return []
+    """Deprecated - use extract_statements_with_llm_discovery instead."""
+    logger.warning(f"⚠️ get_speech_segment_indices_from_llm is deprecated. Use extract_statements_with_llm_discovery instead.")
     
-    logger.info(
-        f"🎯 Using marker-based segmentation for bill '{bill_name[:50]}...' ({len(text_segment)} chars)"
-    )
-    
-    # Use the fallback marker-based approach directly
+    # Simple fallback to marker-based segmentation
     return _fallback_segmentation_with_markers(text_segment, 0)
 
 
-# Function removed - now using extract_statements_with_llm_discovery for comprehensive processing
+# Legacy segmentation functions have been removed in favor of extract_statements_with_llm_discovery
+# which handles bill discovery, segmentation, and statement extraction in one comprehensive pass.
 
 
 def _fallback_segmentation_with_markers(text_segment, offset):
