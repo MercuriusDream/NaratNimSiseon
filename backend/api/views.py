@@ -1324,10 +1324,23 @@ def sentiment_by_party_and_topic(request):
                     # Remove raw sentiment scores to reduce response size
                     del data['sentiment_scores']
                     results.append(data)
+
+        # Sort by average sentiment
+        results.sort(key=lambda x: x['avg_sentiment'], reverse=True)
+
+        return Response({
+            'time_range': time_range,
+            'category_filter': category_filter,
+            'party_filter': party_filter,
+            'stance_filter': stance_filter,
+            'results': results,
+            'total_categories_analyzed': len(results)
+        })
+
     except Exception as e:
         logger.error(f"Error in policy_sentiment_by_category: {e}")
-    return Response({'error': 'Failed to analyze policy sentiment'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Failed to analyze policy sentiment'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
