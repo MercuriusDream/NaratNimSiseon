@@ -25,7 +25,10 @@ import os
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
-    re_path(r'^(?!api/).*$', TemplateView.as_view(template_name='index.html'), name='home'),
+    # Serve static files for React build
+    re_path(r'^static/(?P<path>.*)$', serve, {'document_root': settings.STATIC_ROOT}),
+    # Catch-all for React routes (but exclude admin and api)
+    re_path(r'^(?!admin|api|static).*$', TemplateView.as_view(template_name='index.html'), name='home'),
 ]
 
 if settings.DEBUG:
