@@ -192,41 +192,34 @@ model = None  # Deprecated - use client instead
 
 
 def initialize_gemini():
-    """Initializes the `google.genai` client and performs a status check."""
+    """Initializes the `google.genai` client without redundant status checks."""
     global client
+    
+    # Skip if already initialized
+    if client is not None:
+        return True
+        
     try:
         if hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY:
             # Use the new genai.Client structure
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
-            # Perform a simple status check
-            model_name = "gemini-2.0-flash"
-            response = client.models.generate_content(model=model_name,
-                                                      contents=["Hello"])
-            logger.info(
-                f"✅ Gemini API configured successfully with '{model_name}'. Status check succeeded. Preview: {response.text[:100]}"
-            )
+            logger.info("✅ Gemini API client initialized successfully")
             return True
         else:
-            logger.error(
-                "❌ GEMINI_API_KEY not found or empty. LLM features will be disabled."
-            )
+            logger.warning("⚠️ GEMINI_API_KEY not found. LLM features will be disabled.")
             client = None
             return False
     except ImportError as e:
-        logger.error(
-            f"❌ google.genai library not available: {e}. LLM features will be disabled."
-        )
+        logger.warning(f"⚠️ google.genai library not available: {e}. LLM features will be disabled.")
         client = None
         return False
     except Exception as e:
-        logger.error(
-            f"❌ Error configuring Gemini API: {e}. LLM features will be disabled."
-        )
+        logger.error(f"❌ Error configuring Gemini API: {e}. LLM features will be disabled.")
         client = None
         return False
 
 
-# Initialize on module load
+# Initialize on module load (only once)
 initialize_gemini()
 
 

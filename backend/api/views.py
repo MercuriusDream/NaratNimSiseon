@@ -1058,6 +1058,7 @@ def category_analytics(request):
 
 from django.views.decorators.http import require_POST
 from django.core.management import call_command
+from django.http import JsonResponse
 import io
 import sys
 
