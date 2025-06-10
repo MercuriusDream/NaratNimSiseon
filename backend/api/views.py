@@ -994,6 +994,64 @@ def category_analytics(request):
     try:
         time_range = request.query_params.get('time_range', 'all')
         categories_param = request.query_params.get('categories')
+
+        statements_qs = Statement.objects.all()
+
+        # Apply time filter
+        now = timezone.now()
+        if time_range == 'year':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=365))
+        elif time_range == 'month':
+            statements_qs = statements_qs.filter(
+                session__conf_dt__gte=now.date() - timedelta(days=30))
+
+        # Apply category filter if provided
+        if categories_param:
+            category_ids = [
+                int(id.strip()) for id in categories_param.split(',')
+                if id.strip()
+            ]
+            statements_qs = statements_qs.filter(
+                categories__category_id__in=category_ids)
+
+        # Get category analytics
+        category_data = []
+        for category in Category.objects.all():
+            category_statements = statements_qs.filter(
+                categories__category=category).distinct()
+
+            if category_statements.exists():
+                avg_sentiment = category_statements.aggregate(
+                    avg_sentiment=Avg('sentiment_score'))['avg_sentiment'] or 0
+
+                statement_count = category_statements.count()
+
+                # Get party breakdown for this category
+                party_breakdown = category_statements.values(
+                    'speaker__plpt_nm').annotate(
+                        count=Count('id'),
+                        avg_sentiment=Avg('sentiment_score')).order_by(
+                            '-count')[:5]
+
+                category_data.append({
+                    'category_id': category.id,
+                    'category_name': category.name,
+                    'statement_count': statement_count,
+                    'avg_sentiment': round(avg_sentiment, 3),
+                    'party_breakdown': list(party_breakdown)
+                })
+
+        return Response({
+            'results': category_data,
+            'total_categories': len(category_data),
+            'time_range': time_range
+        })
+
+    except Exception as e:
+        logger.error(f"Error in category analytics: {e}")
+        return Response({'error': 'Failed to fetch category analytics'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 
 
