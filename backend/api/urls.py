@@ -32,7 +32,7 @@ urlpatterns = [
 
     # Analytics endpoints
     path('analytics/sentiment/',
-         views.overall_sentiment_stats,
+         views.sentiment_analysis_list,
          name='overall-sentiment-stats'),
     path('analytics/categories/',
          views.category_analytics,
@@ -50,6 +50,7 @@ urlpatterns = [
     path('analytics/categories/<int:category_id>/trends/',
          views.category_trend_analysis,
          name='category-trend-analysis'),
+    path('stats/', views.stats_overview, name='stats-overview'),
 
     # Utility endpoints
     path('categories/', views.CategoryListView.as_view(),

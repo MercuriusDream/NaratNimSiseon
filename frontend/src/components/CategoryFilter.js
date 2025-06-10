@@ -14,9 +14,18 @@ const CategoryFilter = ({ onCategoryChange, selectedCategories = [] }) => {
   const fetchCategories = async () => {
     try {
       const response = await api.get('/categories/');
-      const categoriesData = response.data.results || response.data || [];
+      let categoriesData = response.data;
+      
+      // Handle different response formats
+      if (categoriesData && categoriesData.results) {
+        categoriesData = categoriesData.results;
+      }
+      
       // Ensure we always have an array
-      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+      const finalCategories = Array.isArray(categoriesData) ? categoriesData : [];
+      setCategories(finalCategories);
+      
+      console.log('Categories loaded:', finalCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
       setCategories([]); // Set empty array on error
@@ -65,7 +74,7 @@ const CategoryFilter = ({ onCategoryChange, selectedCategories = [] }) => {
     <div className="bg-white rounded-lg shadow p-4">
       <h3 className="text-lg font-semibold mb-4">카테고리 필터</h3>
       <div className="space-y-2 max-h-96 overflow-y-auto">
-        {Array.isArray(categories) && categories.map(category => (
+        {Array.isArray(categories) && categories.length > 0 && categories.map(category => (
           <div key={category.id} className="border rounded-lg">
             <div className="flex items-center justify-between p-3">
               <label className="flex items-center space-x-2 flex-1">

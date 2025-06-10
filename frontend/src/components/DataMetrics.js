@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
@@ -56,7 +55,7 @@ const DataMetrics = () => {
           <h2 className="text-3xl font-bold text-gray-900 mb-4">데이터 통계</h2>
           <p className="text-xl text-gray-600">현재까지 수집된 데이터 현황</p>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           <div className="bg-white rounded-lg shadow-md p-6 text-center">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
@@ -69,7 +68,7 @@ const DataMetrics = () => {
             </h3>
             <p className="text-gray-600">총 의안 수</p>
           </div>
-          
+
           <div className="bg-white rounded-lg shadow-md p-6 text-center">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4">
               <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,7 +80,7 @@ const DataMetrics = () => {
             </h3>
             <p className="text-gray-600">총 정당 수</p>
           </div>
-          
+
           <div className="bg-white rounded-lg shadow-md p-6 text-center">
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-4">
               <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -93,7 +92,7 @@ const DataMetrics = () => {
             </h3>
             <p className="text-gray-600">총 회의 수</p>
           </div>
-          
+
           <div className="bg-white rounded-lg shadow-md p-6 text-center">
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-4">
               <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

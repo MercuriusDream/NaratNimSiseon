@@ -583,26 +583,35 @@ class SpeakerViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        # Filter to only show 22nd Assembly speakers
-        queryset = super().get_queryset().filter(
-            models.Q(gtelt_eraco__icontains='22')
-            | models.Q(gtelt_eraco__icontains='제22대'))
-        name = self.request.query_params.get('name')
-        party = self.request.query_params.get('party')
-        elecd_nm_param = self.request.query_params.get('elecd_nm')
-        era_co = self.request.query_params.get('era_co')
+        try:
+            # Filter to only show 22nd Assembly speakers
+            queryset = super().get_queryset().filter(
+                models.Q(gtelt_eraco__contains=22)
+                | models.Q(plpt_nm__icontains='22'))
+            
+            name = self.request.query_params.get('name')
+            party = self.request.query_params.get('party')
+            constituency = self.request.query_params.get('constituency')
+            era_co = self.request.query_params.get('era_co')
 
-        if name:
-            queryset = queryset.filter(naas_nm__icontains=name)
-        if party:
-            queryset = queryset.filter(plpt_nm__icontains=party)
-        if elecd_nm_param:
-            queryset = queryset.filter(elecd_nm__icontains=elecd_nm_param)
-        if era_co and era_co != '22':
-            # Only allow 22nd assembly
+            if name:
+                queryset = queryset.filter(naas_nm__icontains=name)
+            if party:
+                queryset = queryset.filter(plpt_nm__icontains=party)
+            if constituency:
+                # Handle both string and list fields for constituency
+                queryset = queryset.filter(
+                    models.Q(elecd_nm__icontains=constituency) |
+                    models.Q(elecd_nm__contains=[constituency])
+                )
+            if era_co and era_co != '22':
+                # Only allow 22nd assembly
+                return Speaker.objects.none()
+
+            return queryset.order_by('naas_nm')
+        except Exception as e:
+            logger.error(f"Error in SpeakerViewSet get_queryset: {e}")
             return Speaker.objects.none()
-
-        return queryset.order_by('naas_nm')
 
     @action(detail=True, methods=['get'])
     @api_action_wrapper(log_prefix="Fetching statements for speaker",
@@ -995,6 +1004,21 @@ class CategoryListView(generics.ListAPIView):
     """List all categories with their subcategories"""
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'results': serializer.data,
+                'count': len(serializer.data)
+            })
+        except Exception as e:
+            logger.error(f"Error in CategoryListView: {e}")
+            return Response({
+                'results': [],
+                'count': 0
+            })
 
 
 @api_view(['GET'])
