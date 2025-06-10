@@ -2107,54 +2107,143 @@ def get_speech_segment_indices_from_llm(text_segment, bill_name, debug=False):
 
 
 def _process_single_segmentation_batch(text_segment, bill_name, offset):
-    """Process a single text segment for speech segmentation indices."""
+    """Process a single text segment for speech segmentation indices using LLM."""
+    global client
+    
+    if not client:
+        logger.warning("Gemini client not available, using fallback segmentation")
+        return _fallback_segmentation_with_markers(text_segment, offset)
+    
+    # Estimate tokens for rate limiting
+    estimated_tokens = len(text_segment) // 3 + 500  # Conservative estimate
+    
+    # Check rate limits before making the call
+    if not gemini_rate_limiter.wait_if_needed(estimated_tokens):
+        logger.warning("Rate limit exceeded, using fallback segmentation")
+        return _fallback_segmentation_with_markers(text_segment, offset)
+    
     try:
-        # Initialize the Gemini client if available
-        if client:
-            try:
-                # Use the new google.genai client approach
-                response = client.models.generate_content(
-                    model='gemini-2.0-flash',
-                    contents=f"Analyze this legislative text and identify speech segments: {text_segment[:1000]}"
+        # Create a focused prompt for speech segmentation
+        prompt = f"""
+당신은 국회 회의록 전문가입니다. 다음 텍스트에서 개별 발언자의 발언 구간을 정확히 식별해주세요.
+
+텍스트:
+{text_segment}
+
+각 발언 구간의 시작과 끝 위치(문자 인덱스)를 JSON 배열로 반환해주세요:
+[
+  {{"start": 시작_인덱스, "end": 끝_인덱스}},
+  {{"start": 시작_인덱스, "end": 끝_인덱스}}
+]
+
+규칙:
+- ◯로 시작하는 발언자 구간만 식별
+- 각 구간은 최소 50자 이상이어야 함
+- 의사진행 발언은 제외
+- JSON만 반환, 다른 설명 없음
+"""
+
+        # Make the API call
+        if GENAI_AVAILABLE and hasattr(client, 'models'):
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=[prompt],
+                config=types.GenerateContentConfig(
+                    response_mime_type="text/plain",
+                    temperature=0.1,
+                    max_output_tokens=2000
                 )
-                # Process LLM response if successful
-                if response and hasattr(response, 'text'):
-                    logger.info(f"LLM segmentation successful for segment")
-            except Exception as llm_error:
-                logger.warning(f"LLM segmentation failed, using fallback: {llm_error}")
+            )
+            response_text = response.text
+        elif GENAI_LEGACY_AVAILABLE:
+            model = client.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+            response_text = response.text
+        else:
+            logger.error("No available Gemini API client")
+            return _fallback_segmentation_with_markers(text_segment, offset)
 
-        # Create basic indices by splitting at ◯ markers as fallback
-        speech_indices = []
-        current_pos = 0
+        # Record successful API usage
+        gemini_rate_limiter.record_request(estimated_tokens, success=True)
 
-        while True:
-            marker_pos = text_segment.find('◯', current_pos)
-            if marker_pos == -1:
-                break
+        # Parse the response
+        if not response_text:
+            logger.warning("Empty response from LLM, using fallback")
+            return _fallback_segmentation_with_markers(text_segment, offset)
 
-            # Look for next marker to determine end
-            next_marker_pos = text_segment.find('◯', marker_pos + 1)
-            end_pos = next_marker_pos if next_marker_pos != -1 else len(
-                text_segment)
+        # Clean JSON response
+        response_text = response_text.strip()
+        if response_text.startswith("```json"):
+            response_text = response_text.replace("```json", "").replace("```", "").strip()
+        elif response_text.startswith("```"):
+            response_text = response_text.split("```", 2)[-1].strip()
 
-            # Only include segments with meaningful content
-            segment_length = end_pos - marker_pos
-            if segment_length > 100:  # Minimum segment size
-                speech_indices.append({
-                    'start': marker_pos + offset,
-                    'end': end_pos + offset
-                })
+        try:
+            indices_data = json.loads(response_text)
+            
+            if not isinstance(indices_data, list):
+                logger.warning("LLM response is not a list, using fallback")
+                return _fallback_segmentation_with_markers(text_segment, offset)
 
-            current_pos = marker_pos + 1
+            # Process and validate indices
+            speech_indices = []
+            for item in indices_data:
+                if isinstance(item, dict) and 'start' in item and 'end' in item:
+                    start_idx = int(item['start']) + offset
+                    end_idx = int(item['end']) + offset
+                    
+                    # Validate indices
+                    if (0 <= start_idx < end_idx <= len(text_segment) + offset and 
+                        end_idx - start_idx >= 50):  # Minimum segment size
+                        speech_indices.append({
+                            'start': start_idx,
+                            'end': end_idx
+                        })
 
-        logger.info(
-            f"Found {len(speech_indices)} speech segments using ◯ marker fallback"
-        )
-        return speech_indices
+            if speech_indices:
+                logger.info(f"✅ LLM found {len(speech_indices)} speech segments")
+                return speech_indices
+            else:
+                logger.warning("No valid segments from LLM, using fallback")
+                return _fallback_segmentation_with_markers(text_segment, offset)
+
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Failed to parse LLM response: {e}, using fallback")
+            return _fallback_segmentation_with_markers(text_segment, offset)
 
     except Exception as e:
-        logger.error(f"Error in single segmentation batch: {e}")
-        return []
+        # Record failed API usage
+        gemini_rate_limiter.record_error("segmentation_error")
+        logger.error(f"LLM segmentation error: {e}, using fallback")
+        return _fallback_segmentation_with_markers(text_segment, offset)
+
+
+def _fallback_segmentation_with_markers(text_segment, offset):
+    """Fallback segmentation using ◯ markers when LLM is unavailable."""
+    speech_indices = []
+    current_pos = 0
+
+    while True:
+        marker_pos = text_segment.find('◯', current_pos)
+        if marker_pos == -1:
+            break
+
+        # Look for next marker to determine end
+        next_marker_pos = text_segment.find('◯', marker_pos + 1)
+        end_pos = next_marker_pos if next_marker_pos != -1 else len(text_segment)
+
+        # Only include segments with meaningful content
+        segment_length = end_pos - marker_pos
+        if segment_length > 100:  # Minimum segment size
+            speech_indices.append({
+                'start': marker_pos + offset,
+                'end': end_pos + offset
+            })
+
+        current_pos = marker_pos + 1
+
+    logger.info(f"Fallback segmentation found {len(speech_indices)} speech segments using ◯ markers")
+    return speech_indices
 
 
 def fetch_continuous_sessions_direct(force=False,
